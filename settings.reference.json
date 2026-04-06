@@ -37,6 +37,12 @@
     "defaultMode": "acceptEdits"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit:*)",
+        "command": "echo '[Pre-commit] Running validation...' && if [ -f package.json ]; then npx tsc --noEmit 2>&1 | tail -5; fi"
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash(git commit:*)",

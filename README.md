@@ -4,6 +4,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 
 ## Commands
 
+### Workflow
 | Command | When to use |
 |---------|-------------|
 | `/task <description>` | Any task — auto-classifies complexity (simple/medium/complex), runs full pipeline |
@@ -14,6 +15,10 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 | `/task-continue` | Resume a paused pipeline (after Human Gate feedback) |
 | `/task-status` | Show current pipeline state |
 | `/done` | Post-task: validate, update KB, clean working files |
+
+### Utilities
+| Command | When to use |
+|---------|-------------|
 | `/validate` | Run typecheck + build + lint |
 | `/new-feature <name>` | Scaffold a feature module (project-specific) |
 | `/init-claudemd` | Generate CLAUDE.md for a new project |
@@ -21,7 +26,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 | `/check-translations` | Verify i18n locale files have same keys |
 | `/check-imports` | Check for import boundary violations |
 
-## Agents (22)
+## Agents (20)
 
 ### Enrichment
 - **cost-estimator** — classify task complexity
@@ -62,6 +67,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 ```
 /task "add user settings page"
   │
+  ├─ STEP 0: Brainstorming (if scope unclear)
   ├─ STEP 1: Complexity classification (simple/medium/complex)
   ├─ STEP 2: Gate 0 — human confirms classification
   ├─ STEP 3: Context enrichment (agents read codebase)
@@ -72,29 +78,93 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
   └─ Gate 2 — human accepts result → /done
 ```
 
+### What runs at each complexity level
+
+| Step | SIMPLE | MEDIUM | COMPLEX |
+|------|--------|--------|---------|
+| Context | Inline (orchestrator reads files) | Dependency Auditor + Code Analyzer | + Architect |
+| Planning | 1 Planner, no review | 1 Planner + 2 reviewers | 3 competing Planners + 4 reviewers |
+| Implementation | 1 Implementer, no checkpoints | 1 Implementer + checkpoints | Parallel implementers per module |
+| Code Review | Logic + Style | Logic + Style + Security + Perf | Logic + Style + Security + Perf |
+| Validation | Acceptance only | + Test + UI/API if changed | + Playwright |
+| Post | Skip | Skip | Skip |
+| Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 |
+
+## Model Routing
+
+Adaptive routing: cheaper model for mechanical work, expensive model for reasoning. Complex tasks upgrade borderline agents.
+
+| Agent | simple/medium | complex |
+|-------|:------------:|:-------:|
+| Planner, Implementer, Logic Reviewer | opus | opus |
+| Architect, Research, Migration | opus | opus |
+| Code Analyzer | sonnet | **opus** |
+| Security Agent | sonnet | **opus** |
+| Performance Agent | sonnet | **opus** |
+| Dependency Auditor | sonnet | sonnet |
+| Style Reviewer | sonnet | sonnet |
+| Acceptance Agent | sonnet | sonnet |
+| Test, Playwright, UI, API Contract | sonnet | sonnet |
+
+**Always sonnet (7 agents):** Dependency Auditor, Style Reviewer, Acceptance, Test, UI Consistency, API Contract, Playwright — all checklist/grep/pattern-matching tasks.
+
+**Always opus (6 agents):** Planner, Implementer, Logic Reviewer, Architect, Research, Migration — require deep reasoning.
+
+**Adaptive (3 agents):** Code Analyzer, Security, Performance — sonnet for simple/medium, opus for complex where subtle issues matter.
+
 ## Setup
 
 ```bash
-# Clone
 git clone git@github.com:teaarte/claude-pipeline.git
+cd claude-pipeline
 
 # Symlink into ~/.claude/
-ln -sf $(pwd)/claude-pipeline/agents ~/.claude/agents
-ln -sf $(pwd)/claude-pipeline/commands ~/.claude/commands
-ln -sf $(pwd)/claude-pipeline/pipelines ~/.claude/pipelines
-ln -sf $(pwd)/claude-pipeline/templates ~/.claude/templates
-cp claude-pipeline/CLAUDE.md ~/.claude/CLAUDE.md
+ln -sf "$(pwd)/agents" ~/.claude/agents
+ln -sf "$(pwd)/commands" ~/.claude/commands
+ln -sf "$(pwd)/pipelines" ~/.claude/pipelines
+ln -sf "$(pwd)/templates" ~/.claude/templates
+cp CLAUDE.md ~/.claude/CLAUDE.md
 ```
 
 ## Project Setup
 
 Each project needs a `CLAUDE.md` with at minimum:
-- **Validation Commands** — what to run for typecheck/build/lint/test
-- **Architecture** — directory structure and patterns
-- **What NOT to Do** — project-specific anti-patterns
 
-Run `/init-claudemd` in any project to generate one automatically.
+```markdown
+## Validation Commands          ← REQUIRED: pipeline reads these
+- Typecheck: `npx tsc --noEmit`
+- Build: `npm run build`
+- Lint: `npm run lint`
+- Test: `npm run test`
+
+## Architecture                 ← REQUIRED: agents use this to place files
+src/
+  modules/
+  shared/
+
+## What NOT to Do               ← REQUIRED: prevents repeated mistakes
+- Don't use any types
+- Don't import across modules
+```
+
+Run `/init-claudemd` in any project to auto-generate from project files.
+Run `/validate-claudemd` to audit an existing one.
+
+## File Structure
+
+```
+claude-pipeline/
+  agents/              ← 20 specialized agents with machine-parseable output
+  commands/            ← 14 slash commands (workflow + utilities)
+  pipelines/           ← complexity-specific flows (simple/medium/complex)
+    simple.md          ← 1 Planner, 2 reviewers, no enrichment agents
+    medium.md          ← full enrichment, 1 Planner + 2 reviewers, 4 code reviewers
+    complex.md         ← competing planners, 4 plan reviewers, parallel implementers
+  templates/           ← pipeline-state.md scaffold, output format standards
+  CLAUDE.md            ← global instructions (commit format, agent triggers, KB workflow)
+  settings.reference.json ← reference settings (permissions, hooks, plugins)
+```
 
 ## Requirements
 - Claude Code CLI
-- `context7` and `typescript-lsp` plugins (recommended)
+- Recommended plugins: `context7` (library docs), `typescript-lsp` (type diagnostics)

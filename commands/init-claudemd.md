@@ -67,9 +67,16 @@ Generate a CLAUDE.md for the current project. Read project files to auto-detect 
 - **Import / Module Rules** — Style Reviewer checks these
 - **Key Patterns** — Implementer follows these instead of inventing new ones
 
+### Recommended for projects with tests:
+- **Testing** section in CLAUDE.md. Include:
+  - Framework name
+  - Test file location convention (`colocated`, `__tests__/`, `tests/`)
+  - Test naming convention (`*.test.ts`, `*.spec.ts`, `test_*.py`)
+  - Mocking approach (MSW, jest.mock, pytest fixtures, unittest.mock)
+  - What to test and what not to test
+
 ### Optional (add when relevant):
 - **API / Backend** — base URL, auth pattern, codegen setup
-- **Testing** — framework, what to test, where tests live
 - **i18n** — if the project uses internationalization
 - **Performance** — specific targets or constraints
 - **Deployment** — how code reaches production

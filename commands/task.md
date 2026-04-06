@@ -80,6 +80,31 @@ After acceptance, ask: *"Run `/done` to update KB and clean working files?"*
 
 ---
 
+## Model Routing
+
+Use the cheapest model that can do the job. Pass `model` parameter when spawning agents.
+
+| Agent | Model | Reasoning |
+|-------|-------|-----------|
+| Planner | opus | Deep reasoning, architecture decisions |
+| Implementer | opus | Writes production code |
+| Logic Reviewer | opus | Catches non-obvious bugs |
+| Architect | opus | Structural decisions |
+| Code Analyzer | sonnet | Pattern extraction, file reading |
+| Dependency Auditor | sonnet | Grep + import tracing |
+| Style Reviewer | sonnet | Checklist against CLAUDE.md |
+| Security Agent | sonnet | Known vulnerability checklist |
+| Performance Agent | sonnet | Performance pattern checklist |
+| Acceptance Agent | sonnet | Run commands + grep |
+| Test Agent | sonnet | Write tests from plan criteria |
+| UI Consistency | sonnet | Design system checklist |
+| API Contract | sonnet | Type matching |
+| Research Agent | opus | Evaluates trade-offs |
+| Migration Agent | opus | Breaking change strategy |
+| Playwright Agent | sonnet | Write E2E from plan steps |
+
+---
+
 ## Global Rules
 1. Update `.claude/pipeline-state.md` after every completed step
 2. Never skip Human Gates — always wait for explicit response

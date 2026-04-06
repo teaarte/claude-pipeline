@@ -3,20 +3,20 @@
 ## STEP 3 — Context Enrichment
 
 **Phase A** (sequential):
-Spawn Dependency Auditor → `~/.claude/agents/dependency-auditor.md`
+Spawn Dependency Auditor (model: **sonnet**) → `~/.claude/agents/dependency-auditor.md`
 Wait for `.claude/dependency-audit.md`.
 
 **Phase B** (parallel, after Phase A):
-- Code Analyzer → `~/.claude/agents/code-analyzer.md` (Input: task + dependency-audit)
-- Research Agent → `~/.claude/agents/research.md` (if new lib/API/pattern needed)
+- Code Analyzer (model: **sonnet**) → `~/.claude/agents/code-analyzer.md` (Input: task + dependency-audit)
+- Research Agent (model: **opus**) → `~/.claude/agents/research.md` (if new lib/API/pattern needed)
 
 **Phase C** (after Phase B):
-Spawn Architect → `~/.claude/agents/architect.md`
+Spawn Architect (model: **opus**) → `~/.claude/agents/architect.md`
 Input: task + `.claude/context-doc.md` + `.claude/dependency-audit.md`
 
 ## STEP 4 — Planning
 
-**4a: Competing Planners** — spawn 3 parallel subagents, each reading `~/.claude/agents/planner.md`:
+**4a: Competing Planners** — spawn 3 parallel subagents (model: **opus**), each reading `~/.claude/agents/planner.md`:
 
 - **Minimalist**: simplest plan satisfying all criteria. Prefer existing patterns, reuse everything.
 - **Robust**: most reliable plan. Prioritize error handling, edge cases, resilience.
@@ -32,12 +32,12 @@ Each writes to `.claude/plan-[minimalist|robust|reuse].md`.
 - Synthesis note at top
 
 **4b: Plan Review** — spawn 4 parallel reviewers:
-- Logic Reviewer → `~/.claude/agents/logic-reviewer.md`
-- Style Reviewer → `~/.claude/agents/style-reviewer.md`
-- Security Agent → `~/.claude/agents/security.md`
-- Performance Agent → `~/.claude/agents/performance.md`
+- Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
+- Style Reviewer (model: **sonnet**) → `~/.claude/agents/style-reviewer.md`
+- Security Agent (model: **sonnet**) → `~/.claude/agents/security.md`
+- Performance Agent (model: **sonnet**) → `~/.claude/agents/performance.md`
 
-Any BLOCKER = NEEDS_REVISION. Spawn Planner with feedback to revise.
+Any BLOCKER = NEEDS_REVISION. Spawn Planner (model: **opus**) with feedback to revise.
 Max 2 revision cycles. If still blocked → escalate to human.
 
 ### ⛔ HUMAN GATE 1
@@ -48,24 +48,24 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 ## STEP 5 — Implementation
 
 **If independent modules exist** (from `.claude/architecture-decisions.md`):
-Spawn parallel implementers, each owning a module with no file overlap.
+Spawn parallel implementers (model: **opus**), each owning a module with no file overlap.
 Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md`.
 
-**Otherwise:** single Implementer with checkpoints every 3-5 steps.
+**Otherwise:** single Implementer (model: **opus**) with checkpoints every 3-5 steps.
 
 After implementation, spawn 2 parallel reviewers:
-- Logic Reviewer (on all changed code)
-- Style Reviewer (on all changed code)
+- Logic Reviewer (model: **opus**) on all changed code
+- Style Reviewer (model: **sonnet**) on all changed code
 
 If BLOCKING → one more iteration per module (max 2 total). Non-blocking → log.
 
-If API/DB/type changes → spawn Migration Agent → `~/.claude/agents/migration.md`
+If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
 ## STEP 6 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
 If not defined, detect from project and run: typecheck → build → lint.
 
-Spawn in parallel:
+Spawn in parallel (model: **sonnet**):
 - Acceptance Agent → `~/.claude/agents/acceptance.md`
 - Test Agent → `~/.claude/agents/test.md`
 - Playwright Agent → `~/.claude/agents/playwright.md`

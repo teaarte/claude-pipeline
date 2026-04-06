@@ -5,7 +5,7 @@ Post-task checklist. Run through all steps.
 ---
 
 ## 1. Validate
-Run validation commands from CLAUDE.md. Fix any errors before proceeding.
+Run validation commands from CLAUDE.md (look for "Validation Commands" section). Fix any errors before proceeding.
 
 ## 2. Pipeline Metrics
 If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metrics and append to `~/.claude/metrics/pipeline.md`:
@@ -15,6 +15,7 @@ If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metric
 ```
 
 Parse from pipeline-state.md:
+- **project** — name from CLAUDE.md or directory name
 - **plan_iters** — count of "Plan — Iteration N" checked items
 - **impl_iters** — count of "Implementation — Iteration N" checked items
 - **blockers_found** — count of blocking issues across all reviewer verdicts
@@ -22,6 +23,22 @@ Parse from pipeline-state.md:
 - **verdict** — Gate 2 result (accepted/rejected)
 
 If `~/.claude/metrics/pipeline.md` doesn't exist, create it with the header row.
+
+**Print metrics to console after saving:**
+```
+┌─────────────────────────────────────────────────────┐
+│ Pipeline Metrics                                     │
+├──────────────┬──────────────────────────────────────┤
+│ Project      │ {project}                            │
+│ Task         │ {task short description}              │
+│ Complexity   │ {simple/medium/complex}               │
+│ Plan Iters   │ {N}                                   │
+│ Impl Iters   │ {N}                                   │
+│ Blockers     │ {N}                                   │
+│ Reviewers    │ {Logic:X Style:X Security:X Perf:X}   │
+│ Verdict      │ {accepted/rejected}                   │
+└──────────────┴──────────────────────────────────────┘
+```
 
 ## 3. Knowledge Base Updates
 If CLAUDE.md references a Knowledge Base:
@@ -35,8 +52,14 @@ If CLAUDE.md references a Knowledge Base:
 - Delete `PLANNING.md` in project root if it exists (debug agent artifact)
 
 ## 5. Summary
-Show:
-- Validation results
-- Metrics row added (if pipeline was used)
-- KB files updated
-- Working files cleaned
+Print final summary:
+```
+┌─────────────────────────────────────────────────────┐
+│ Task Complete                                        │
+├──────────────┬──────────────────────────────────────┤
+│ Validation   │ {pass/fail}                           │
+│ Metrics      │ {saved / skipped (no pipeline)}       │
+│ KB Updated   │ {files list / skipped (no KB)}        │
+│ Cleaned      │ {N files removed}                     │
+└──────────────┴──────────────────────────────────────┘
+```

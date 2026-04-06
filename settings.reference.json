@@ -40,7 +40,7 @@
     "PreToolUse": [
       {
         "matcher": "Bash(git commit:*)",
-        "command": "echo '[Pre-commit] Running validation...' && if [ -f package.json ]; then npx tsc --noEmit 2>&1 | tail -5; fi"
+        "command": "if [ -f CLAUDE.md ]; then cmd=$(grep -A1 'Typecheck:' CLAUDE.md | grep '`' | head -1 | sed 's/.*`\\(.*\\)`.*/\\1/'); if [ -n \"$cmd\" ]; then echo \"[Pre-commit] Running: $cmd\" && eval \"$cmd\" 2>&1 | tail -10; fi; fi"
       }
     ],
     "PostToolUse": [

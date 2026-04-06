@@ -7,7 +7,7 @@ Spawn Dependency Auditor (model: **sonnet**) → `~/.claude/agents/dependency-au
 Wait for `.claude/dependency-audit.md`.
 
 **Phase B** (parallel, after Phase A):
-- Code Analyzer (model: **sonnet**) → `~/.claude/agents/code-analyzer.md` (Input: task + dependency-audit)
+- Code Analyzer (model: **opus**) → `~/.claude/agents/code-analyzer.md` (Input: task + dependency-audit)
 - Research Agent (model: **opus**) → `~/.claude/agents/research.md` (if new lib/API/pattern needed)
 
 **Phase C** (after Phase B):
@@ -34,8 +34,8 @@ Each writes to `.claude/plan-[minimalist|robust|reuse].md`.
 **4b: Plan Review** — spawn 4 parallel reviewers:
 - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
 - Style Reviewer (model: **sonnet**) → `~/.claude/agents/style-reviewer.md`
-- Security Agent (model: **sonnet**) → `~/.claude/agents/security.md`
-- Performance Agent (model: **sonnet**) → `~/.claude/agents/performance.md`
+- Security Agent (model: **opus**) → `~/.claude/agents/security.md`
+- Performance Agent (model: **opus**) → `~/.claude/agents/performance.md`
 
 Any BLOCKER = NEEDS_REVISION. Spawn Planner (model: **opus**) with feedback to revise.
 Max 2 revision cycles. If still blocked → escalate to human.

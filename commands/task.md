@@ -83,25 +83,26 @@ After acceptance, ask: *"Run `/done` to update KB and clean working files?"*
 ## Model Routing
 
 Use the cheapest model that can do the job. Pass `model` parameter when spawning agents.
+For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 
-| Agent | Model | Reasoning |
-|-------|-------|-----------|
-| Planner | opus | Deep reasoning, architecture decisions |
-| Implementer | opus | Writes production code |
-| Logic Reviewer | opus | Catches non-obvious bugs |
-| Architect | opus | Structural decisions |
-| Code Analyzer | sonnet | Pattern extraction, file reading |
-| Dependency Auditor | sonnet | Grep + import tracing |
-| Style Reviewer | sonnet | Checklist against CLAUDE.md |
-| Security Agent | sonnet | Known vulnerability checklist |
-| Performance Agent | sonnet | Performance pattern checklist |
-| Acceptance Agent | sonnet | Run commands + grep |
-| Test Agent | sonnet | Write tests from plan criteria |
-| UI Consistency | sonnet | Design system checklist |
-| API Contract | sonnet | Type matching |
-| Research Agent | opus | Evaluates trade-offs |
-| Migration Agent | opus | Breaking change strategy |
-| Playwright Agent | sonnet | Write E2E from plan steps |
+| Agent | simple/medium | complex | Reasoning |
+|-------|:------------:|:-------:|-----------|
+| Planner | opus | opus | Deep reasoning |
+| Implementer | opus | opus | Writes production code |
+| Logic Reviewer | opus | opus | Catches non-obvious bugs |
+| Architect | — | opus | Structural decisions |
+| Research Agent | opus | opus | Evaluates trade-offs |
+| Migration Agent | opus | opus | Breaking change strategy |
+| Code Analyzer | sonnet | *opus | Complex codebases need deeper analysis |
+| Security Agent | sonnet | *opus | Complex auth/data flows need reasoning |
+| Performance Agent | sonnet | *opus | Subtle perf issues need reasoning |
+| Dependency Auditor | sonnet | sonnet | Mechanical: grep + import tracing |
+| Style Reviewer | sonnet | sonnet | Checklist against CLAUDE.md |
+| Acceptance Agent | sonnet | sonnet | Run commands + grep |
+| Test Agent | sonnet | sonnet | Write tests from plan criteria |
+| UI Consistency | sonnet | sonnet | Design system checklist |
+| API Contract | sonnet | sonnet | Type matching |
+| Playwright Agent | sonnet | sonnet | Write E2E from plan steps |
 
 ---
 

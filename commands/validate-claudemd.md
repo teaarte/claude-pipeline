@@ -28,7 +28,13 @@ Mark each: PRESENT / MISSING / EMPTY.
 Mark each: PRESENT / MISSING.
 
 ### 4. Validation Commands verification
-For each command listed in "Validation Commands":
+Check that these specific keys exist in the "Validation Commands" section (pre-commit hook parses `Typecheck:`):
+- `Typecheck:` — required (pre-commit hook reads this)
+- `Build:` — required (pipeline validation step)
+- `Lint:` — required (pipeline validation step)
+- `Test:` — recommended (Test Agent needs this)
+
+For each command found:
 - Try running it (dry-run if possible, or just check the command exists)
 - Verify it matches actual project setup (e.g. `npx tsc` but no `typescript` in deps = broken)
 

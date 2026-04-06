@@ -16,13 +16,19 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 | `/task-status` | Show current pipeline state |
 | `/done` | Post-task: validate, update KB, clean working files |
 
+### Project Bootstrap
+| Command | When to use |
+|---------|-------------|
+| `/init-claudemd` | Generate CLAUDE.md for a new project |
+| `/validate-claudemd` | Audit existing CLAUDE.md for completeness |
+| `/init-kb <path>` | Scan current repo, generate Knowledge Base entries (project card, tech debt) |
+| `/init-kb-contracts <path>` | Generate cross-project contracts from all project cards in KB |
+
 ### Utilities
 | Command | When to use |
 |---------|-------------|
 | `/validate` | Run typecheck + build + lint |
 | `/new-feature <name>` | Scaffold a feature module (project-specific) |
-| `/init-claudemd` | Generate CLAUDE.md for a new project |
-| `/validate-claudemd` | Audit existing CLAUDE.md for completeness |
 | `/check-translations` | Verify i18n locale files have same keys |
 | `/check-imports` | Check for import boundary violations |
 
@@ -66,16 +72,16 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 
 ```
 /task "add user settings page"
-  │
-  ├─ STEP 0: Brainstorming (if scope unclear)
-  ├─ STEP 1: Complexity classification (simple/medium/complex)
-  ├─ STEP 2: Gate 0 — human confirms classification
-  ├─ STEP 3: Context enrichment (agents read codebase)
-  ├─ STEP 4: Planning (competing planners for complex)
-  ├─ Gate 1 — human reviews plan
-  ├─ STEP 5: Implementation + code review
-  ├─ STEP 6: Validation (typecheck, build, lint, acceptance)
-  └─ Gate 2 — human accepts result → /done
+  |
+  +- STEP 0: Brainstorming (if scope unclear)
+  +- STEP 1: Complexity classification (simple/medium/complex)
+  +- STEP 2: Gate 0 — human confirms classification
+  +- STEP 3: Context enrichment (agents read codebase)
+  +- STEP 4: Planning (competing planners for complex)
+  +- Gate 1 — human reviews plan
+  +- STEP 5: Implementation + code review
+  +- STEP 6: Validation (typecheck, build, lint, acceptance)
+  +- Gate 2 — human accepts result -> /done
 ```
 
 ### What runs at each complexity level
@@ -87,7 +93,6 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 | Implementation | 1 Implementer, no checkpoints | 1 Implementer + checkpoints | Parallel implementers per module |
 | Code Review | Logic + Style | Logic + Style + Security + Perf | Logic + Style + Security + Perf |
 | Validation | Acceptance only | + Test + UI/API if changed | + Playwright |
-| Post | Skip | Skip | Skip |
 | Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 |
 
 ## Model Routing
@@ -106,11 +111,11 @@ Adaptive routing: cheaper model for mechanical work, expensive model for reasoni
 | Acceptance Agent | sonnet | sonnet |
 | Test, Playwright, UI, API Contract | sonnet | sonnet |
 
-**Always sonnet (7 agents):** Dependency Auditor, Style Reviewer, Acceptance, Test, UI Consistency, API Contract, Playwright — all checklist/grep/pattern-matching tasks.
+**Always sonnet (7):** Dependency Auditor, Style Reviewer, Acceptance, Test, UI Consistency, API Contract, Playwright — checklist/grep/pattern-matching tasks.
 
-**Always opus (6 agents):** Planner, Implementer, Logic Reviewer, Architect, Research, Migration — require deep reasoning.
+**Always opus (6):** Planner, Implementer, Logic Reviewer, Architect, Research, Migration — require deep reasoning.
 
-**Adaptive (3 agents):** Code Analyzer, Security, Performance — sonnet for simple/medium, opus for complex where subtle issues matter.
+**Adaptive (3):** Code Analyzer, Security, Performance — sonnet for simple/medium, opus for complex.
 
 ## Setup
 
@@ -126,43 +131,70 @@ ln -sf "$(pwd)/templates" ~/.claude/templates
 cp CLAUDE.md ~/.claude/CLAUDE.md
 ```
 
-## Project Setup
+## New Project Setup
 
-Each project needs a `CLAUDE.md` with at minimum:
+### 1. Generate CLAUDE.md
+```
+cd your-project/
+/init-claudemd
+```
+Creates project-specific CLAUDE.md with validation commands, architecture, anti-patterns. Each project needs one — pipeline reads it to know what to run.
 
-```markdown
-## Validation Commands          ← REQUIRED: pipeline reads these
-- Typecheck: `npx tsc --noEmit`
-- Build: `npm run build`
-- Lint: `npm run lint`
-- Test: `npm run test`
+**Required sections** (without these, agents guess):
+- **Validation Commands** — typecheck, build, lint, test commands
+- **Architecture** — directory structure and patterns
+- **What NOT to Do** — project-specific anti-patterns
 
-## Architecture                 ← REQUIRED: agents use this to place files
-src/
-  modules/
-  shared/
+### 2. Set up Knowledge Base (for multi-repo projects)
+```bash
+# In each repo — scan and create project card + tech debt
+cd repo-1/
+/init-kb /path/to/knowledge-base
 
-## What NOT to Do               ← REQUIRED: prevents repeated mistakes
-- Don't use any types
-- Don't import across modules
+cd repo-2/
+/init-kb /path/to/knowledge-base
+
+cd repo-3/
+/init-kb /path/to/knowledge-base
+
+# In any repo — generate cross-project contracts
+/init-kb-contracts /path/to/knowledge-base
 ```
 
-Run `/init-claudemd` in any project to auto-generate from project files.
-Run `/validate-claudemd` to audit an existing one.
+Creates:
+```
+knowledge-base/
+  HOME.md                       <- system diagram + links
+  cross-project-contracts.md    <- API contracts between services
+  tech-debt.md                  <- issues across all projects
+  projects/
+    repo-1.md                   <- project card
+    repo-2.md
+    repo-3.md
+  status/sprints.md             <- sprint tracker
+  decisions/                    <- ADRs (suggested during scan)
+  changelog/                    <- fills as you work via /done
+```
+
+### 3. Validate
+```
+/validate-claudemd    # audit CLAUDE.md for completeness
+/validate             # run typecheck + build + lint
+```
 
 ## File Structure
 
 ```
 claude-pipeline/
-  agents/              ← 20 specialized agents with machine-parseable output
-  commands/            ← 14 slash commands (workflow + utilities)
-  pipelines/           ← complexity-specific flows (simple/medium/complex)
-    simple.md          ← 1 Planner, 2 reviewers, no enrichment agents
-    medium.md          ← full enrichment, 1 Planner + 2 reviewers, 4 code reviewers
-    complex.md         ← competing planners, 4 plan reviewers, parallel implementers
-  templates/           ← pipeline-state.md scaffold, output format standards
-  CLAUDE.md            ← global instructions (commit format, agent triggers, KB workflow)
-  settings.reference.json ← reference settings (permissions, hooks, plugins)
+  agents/              <- 20 specialized agents with machine-parseable output
+  commands/            <- 18 slash commands (workflow + bootstrap + utilities)
+  pipelines/           <- complexity-specific flows
+    simple.md          <- 1 Planner, 2 reviewers, no enrichment agents
+    medium.md          <- full enrichment, 1 Planner + 2 reviewers, 4 code reviewers
+    complex.md         <- competing planners, 4 plan reviewers, parallel implementers
+  templates/           <- pipeline-state.md scaffold, output format standards
+  CLAUDE.md            <- global instructions (commit format, agent triggers, KB workflow)
+  settings.reference.json <- reference settings (permissions, hooks, plugins)
 ```
 
 ## Requirements

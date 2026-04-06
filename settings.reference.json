@@ -1,0 +1,51 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm *:*)",
+      "Bash(npx *:*)",
+      "Bash(node *:*)",
+      "Bash(git *:*)",
+      "Bash(python3:*)",
+      "Bash(python3 *:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(tree:*)",
+      "Bash(du:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(echo:*)",
+      "Bash(sed:*)",
+      "Bash(lsof:*)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git commit:*)",
+        "command": "echo '[Reminder] Run /done to update KB changelog and clean working files.'"
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  }
+}

@@ -34,11 +34,18 @@ Read systematically — do NOT skim:
 - `Dockerfile`, `docker-compose.yml` — deployment setup
 - `.env.example`, `.env` patterns — configuration
 
+**Existing documentation:**
+- `docs/` directory — read all `.md` files (specs, API references, architecture docs)
+- Any `.md` files in project root (README, CONTRIBUTING, ARCHITECTURE, etc.)
+- `CLAUDE.md` — extract architecture, patterns, anti-patterns, validation commands
+- `.claude/` — check for existing pipeline state, plans, context docs from previous work
+
 **Architecture:**
 - `ls -R` the top 2 levels of source directory
 - Read 3-5 key files to understand patterns (entry point, a route/controller, a service, a model/type)
 - Identify: directory structure, layering, module boundaries
 - Identify: state management, data fetching, error handling patterns
+- Cross-reference with docs/ findings — docs may describe intended architecture, code shows actual
 
 **API surface (if backend):**
 - Swagger/OpenAPI spec if exists

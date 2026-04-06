@@ -39,14 +39,24 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(git commit:*)",
-        "command": "if [ -f CLAUDE.md ]; then cmd=$(grep -A1 'Typecheck:' CLAUDE.md | grep '`' | head -1 | sed 's/.*`\\(.*\\)`.*/\\1/'); if [ -n \"$cmd\" ]; then echo \"[Pre-commit] Running: $cmd\" && eval \"$cmd\" 2>&1 | tail -10; fi; fi"
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -q 'git commit'; then if [ -f CLAUDE.md ]; then cmd=$(grep -A1 'Typecheck:' CLAUDE.md | grep '`' | head -1 | sed 's/.*`\\(.*\\)`.*/\\1/'); if [ -n \"$cmd\" ]; then echo \"[Pre-commit] Running: $cmd\" && eval \"$cmd\" 2>&1 | tail -10; fi; fi; fi"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(git commit:*)",
-        "command": "echo '[Reminder] Run /done to update KB changelog and clean working files.'"
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -q 'git commit'; then echo '[Reminder] Run /done to update KB changelog and clean working files.'; fi"
+          }
+        ]
       }
     ]
   },

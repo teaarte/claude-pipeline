@@ -16,9 +16,9 @@ Check that the KB path exists and has the expected structure. If not, create it:
 {kb_path}/
   projects/
   changelog/
+  backlog/
   decisions/
   research/
-  status/
   HOME.md
   cross-project-contracts.md
   tech-debt.md
@@ -97,7 +97,7 @@ Tags: #{backend|frontend|service}
 - **Fix:** {how to fix}
 ```
 
-**Sprint/status** → Append to `{kb_path}/status/sprints.md` (if not exists, create)
+**Changelog** → Create `{kb_path}/changelog/{project-name}/YYYY-MM-DD-<slug>.md` for work found during scan
 
 ### 4. Suggest ADRs
 List architectural decisions found during scan that should be documented:

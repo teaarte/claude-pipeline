@@ -54,7 +54,7 @@ Cross-reference CLAUDE.md claims against actual project:
 ### 7. Staleness check
 - Any references to features/files/patterns that no longer exist
 - Any TODO/placeholder text left in
-- Sprint status or dates that are outdated
+- References to removed KB sections (e.g. `status/sprints.md`)
 
 ---
 

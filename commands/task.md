@@ -76,7 +76,9 @@ Present:
 
 Ask: *"Task complete. Accept or reject with feedback?"*
 
-After acceptance, ask: *"Run `/done` to update KB and clean working files?"*
+After acceptance:
+- If the task was based on a spec file in KB `specs/`, move it to `specs/done/`
+- Ask: *"Run `/code-review` before finishing? Then `/done` to update KB and clean up."*
 
 ---
 

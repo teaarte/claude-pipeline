@@ -14,6 +14,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework â€
 | `/debug-team <bug>` | Bug with unclear root cause â€” competing hypotheses investigation |
 | `/task-continue` | Resume a paused pipeline (after Human Gate feedback) |
 | `/task-status` | Show current pipeline state |
+| `/code-review` | Multi-agent code review (Logic + Style + Performance + Dependency) |
 | `/done` | Post-task: validate, update KB, clean working files |
 
 ### Project Bootstrap
@@ -33,6 +34,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework â€
 | `/check-imports` | Check for import boundary violations |
 
 ## Agents (20)
+
 
 ### Enrichment
 - **cost-estimator** â€” classify task complexity
@@ -81,7 +83,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework â€
   +- Gate 1 â€” human reviews plan
   +- STEP 5: Implementation + code review
   +- STEP 6: Validation (typecheck, build, lint, acceptance)
-  +- Gate 2 â€” human accepts result -> /done
+  +- Gate 2 â€” human accepts result -> /code-review -> /done
 ```
 
 ### What runs at each complexity level
@@ -171,9 +173,11 @@ knowledge-base/
     repo-1.md                   <- project card
     repo-2.md
     repo-3.md
-  status/sprints.md             <- sprint tracker
+  backlog/                      <- feature ideas and tasks
+  specs/                        <- active task specs
+    done/                       <- completed specs (moved by /done)
   decisions/                    <- ADRs (suggested during scan)
-  changelog/                    <- fills as you work via /done
+  changelog/                    <- YYYY-MM-DD-slug.md (filled via /done)
 ```
 
 ### 3. Validate
@@ -187,7 +191,7 @@ knowledge-base/
 ```
 claude-pipeline/
   agents/              <- 20 specialized agents with machine-parseable output
-  commands/            <- 18 slash commands (workflow + bootstrap + utilities)
+  commands/            <- 19 slash commands (workflow + bootstrap + utilities)
   pipelines/           <- complexity-specific flows
     simple.md          <- 1 Planner, 2 reviewers, no enrichment agents
     medium.md          <- full enrichment, 1 Planner + 2 reviewers, 4 code reviewers

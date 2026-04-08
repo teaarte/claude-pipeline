@@ -108,6 +108,7 @@ Working on feature:
   /task <description>
   → review plan at Gate 1
   → review result at Gate 2
+  → /code-review (optional — multi-agent review)
   → /done
 
 Quick fix:

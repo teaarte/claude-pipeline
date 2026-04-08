@@ -42,8 +42,10 @@ If `~/.claude/metrics/pipeline.md` doesn't exist, create it with the header row.
 
 ## 3. Knowledge Base Updates
 If CLAUDE.md references a Knowledge Base:
-- Update changelog entry for the work done
-- Update sprint status if changed
+- Update or create changelog entry for the work done
+  - File naming: `YYYY-MM-DD-<slug>.md` — date + concise what-was-done (e.g. `2026-04-09-continent-filter.md`, `2026-03-15-auth-pages.md`)
+  - Location: `changelog/{project-name}/`
+- If the task was based on a spec file in `specs/`, move it to `specs/done/`
 - Create ADR if an architectural choice was made
 
 ## 4. Clean Working Files

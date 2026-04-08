@@ -51,7 +51,16 @@ If CLAUDE.md references a Knowledge Base:
 - Keep only `settings.local.json` and `commands/` directory
 - Delete `PLANNING.md` in project root if it exists (debug agent artifact)
 
-## 5. Summary
+## 5. Commit Message
+Generate a conventional commit message based on all changes made during this session (`git diff` against the starting state). Follow the project's commit conventions from CLAUDE.md. Print it as plain text so the user can copy it:
+
+```
+feat: short description here
+
+Optional body explaining why, not what.
+```
+
+## 6. Summary
 Print final summary:
 ```
 ┌─────────────────────────────────────────────────────┐

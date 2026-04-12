@@ -28,6 +28,7 @@
       "Bash(echo:*)",
       "Bash(sed:*)",
       "Bash(lsof:*)",
+      "Bash(rtk *:*)",
       "WebSearch",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:github.com)"
@@ -41,6 +42,10 @@
       {
         "matcher": "Bash",
         "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/rtk-rewrite.sh"
+          },
           {
             "type": "command",
             "command": "if echo \"$TOOL_INPUT\" | grep -q 'git commit'; then if [ -f CLAUDE.md ]; then cmd=$(grep -A1 'Typecheck:' CLAUDE.md | grep '`' | head -1 | sed 's/.*`\\(.*\\)`.*/\\1/'); if [ -n \"$cmd\" ]; then echo \"[Pre-commit] Running: $cmd\" && eval \"$cmd\" 2>&1 | tail -10; fi; fi; fi"

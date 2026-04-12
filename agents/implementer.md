@@ -33,6 +33,16 @@ Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md
 
 **Context-doc shows a utility that does what you were about to write:** Use the existing one.
 
+## Self-Validation (mandatory before returning)
+
+After all plan steps are complete, run the project's validation commands (from CLAUDE.md "Validation Commands" section):
+1. **Typecheck** (e.g. `npx tsc --noEmit`)
+2. **Lint** (e.g. `npm run lint`)
+3. **Build** (e.g. `npm run build`) — only if plan touches exports or config
+
+If any fail — fix the errors inline. Do NOT return broken code to reviewers. Repeat until all pass.
+Report validation results in output under "## Validation".
+
 ## Output
 
 ```markdown
@@ -47,6 +57,11 @@ Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md
 
 ## Files Modified
 - `path/to/file.ts` — [what changed]
+
+## Validation
+- Typecheck: [PASS/FAIL — details if failed]
+- Lint: [PASS/FAIL — details if failed]
+- Build: [PASS/SKIP/FAIL — details if failed]
 
 ## Deviations from Plan
 [None | or: what deviated + why it was necessary]

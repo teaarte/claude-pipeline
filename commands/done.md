@@ -11,7 +11,7 @@ Run validation commands from CLAUDE.md (look for "Validation Commands" section).
 If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metrics and append to `~/.claude/metrics/pipeline.md`:
 
 ```
-| date | project | task (short) | complexity | plan_iters | impl_iters | blockers_found | reviewer_verdicts | verdict |
+| date | project | task (short) | complexity | plan_iters | impl_iters | blockers_found | reviewers_with_blockers | reviewer_verdicts | agents_count | verdict |
 ```
 
 Parse from pipeline-state.md:
@@ -19,25 +19,28 @@ Parse from pipeline-state.md:
 - **plan_iters** — count of "Plan — Iteration N" checked items
 - **impl_iters** — count of "Implementation — Iteration N" checked items
 - **blockers_found** — count of blocking issues across all reviewer verdicts
+- **reviewers_with_blockers** — which specific reviewers found blockers, e.g. "Logic,Security" or "none"
 - **reviewer_verdicts** — compact summary, e.g. "Logic:APPROVE Style:APPROVE Security:WARN"
+- **agents_count** — total number of subagents spawned during pipeline
 - **verdict** — Gate 2 result (accepted/rejected)
 
 If `~/.claude/metrics/pipeline.md` doesn't exist, create it with the header row.
 
 **Print metrics to console after saving:**
 ```
-┌─────────────────────────────────────────────────────┐
-│ Pipeline Metrics                                     │
-├──────────────┬──────────────────────────────────────┤
-│ Project      │ {project}                            │
-│ Task         │ {task short description}              │
-│ Complexity   │ {simple/medium/complex}               │
-│ Plan Iters   │ {N}                                   │
-│ Impl Iters   │ {N}                                   │
-│ Blockers     │ {N}                                   │
-│ Reviewers    │ {Logic:X Style:X Security:X Perf:X}   │
-│ Verdict      │ {accepted/rejected}                   │
-└──────────────┴──────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Pipeline Metrics                                      │
+├───────────────────┬──────────────────────────────────┤
+│ Project           │ {project}                        │
+│ Task              │ {task short description}          │
+│ Complexity        │ {simple/medium/complex}           │
+│ Plan Iters        │ {N}                               │
+│ Impl Iters        │ {N}                               │
+│ Blockers          │ {N} ({reviewers_with_blockers})   │
+│ Reviewers         │ {Logic:X Style:X Security:X}      │
+│ Agents Spawned    │ {N}                               │
+│ Verdict           │ {accepted/rejected}               │
+└───────────────────┴──────────────────────────────────┘
 ```
 
 ## 3. Knowledge Base Updates

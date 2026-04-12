@@ -38,6 +38,9 @@ Is it a bug with clear root cause?
 
 ## Token-Saving Rules
 
+### 0. Use RTK
+Install [RTK](https://github.com/rtk-ai/rtk) (`brew install rtk-ai/tap/rtk && rtk init -g`). It filters CLI output before it reaches the context window — 60-90% savings. No manual usage needed; it hooks into every Bash command automatically. Check savings with `rtk gain`.
+
 ### 1. Don't over-classify
 If you know the task is simple — say so. `/task fix the button color` will auto-classify as SIMPLE, but if the orchestrator hesitates, tell it: "this is simple, fast-track it."
 
@@ -89,7 +92,7 @@ The plan determines 90% of the code quality. If the plan has wrong architecture,
 Found a bug that Security Agent should have caught? Run `/agent-feedback Security missed XSS in user input`. After 3+ misses, the command suggests updating the agent definition. Agents get better over time.
 
 ### 5. Run /done after every task
-Not just for cleanup — it saves metrics. After 10-20 tasks, you'll see which reviewers find blockers and which are just burning tokens.
+Not just for cleanup — it saves metrics. After 10+ tasks, run `/metrics-report` to see which reviewers find blockers and which are burning tokens. The report suggests which reviewers to prune from SIMPLE tasks and flags over-classified complexity levels.
 
 ### 6. Keep CLAUDE.md under 150 lines
 Every line is loaded on every message. Move reference tables and endpoint lists to `docs/`. Keep only rules, patterns, and anti-patterns in CLAUDE.md.
@@ -122,6 +125,11 @@ Found a bug in existing code:
 End of day / end of feature:
   /done (if not run yet)
   Verify KB is updated
+
+Periodic (every 10+ tasks):
+  /metrics-report
+  → review recommendations
+  → prune ineffective reviewers from SIMPLE pipeline
 ```
 
 ## Anti-Patterns to Avoid

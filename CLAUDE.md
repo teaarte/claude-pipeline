@@ -29,5 +29,5 @@ Trigger when user asks to fix failing frontend tests specifically.
 ## Knowledge Base Workflow
 When a project has an Obsidian knowledge base:
 - Read knowledge base files **when relevant to the task**, not on every session start
-- After completing work: update changelog and sprint status
+- After completing work: update changelog
 - Persistent knowledge belongs in the knowledge base, not in `.claude/` working files

@@ -16,6 +16,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic framework �
 | `/task-status` | Show current pipeline state |
 | `/code-review` | Multi-agent code review (Logic + Style + Performance + Dependency) |
 | `/done` | Post-task: validate, update KB, clean working files |
+| `/metrics-report` | Analyze pipeline metrics — reviewer effectiveness, complexity accuracy, recommendations |
 
 ### Project Bootstrap
 | Command | When to use |
@@ -119,6 +120,27 @@ Adaptive routing: cheaper model for mechanical work, expensive model for reasoni
 
 **Adaptive (3):** Code Analyzer, Security, Performance — sonnet for simple/medium, opus for complex.
 
+## Token Optimization — RTK
+
+[RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) is a CLI proxy that filters terminal output before it reaches the LLM context. 60-90% token savings on CLI operations.
+
+```bash
+# Install
+brew install rtk-ai/tap/rtk   # macOS
+# or: cargo install rtk        # any platform
+
+# Initialize globally (adds PreToolUse hook)
+rtk init -g
+
+# Track savings
+rtk gain              # summary
+rtk gain --history    # per-command breakdown
+```
+
+RTK auto-rewrites commands (`git status` -> `rtk git status`) via a PreToolUse hook. No manual usage needed after init.
+
+**How it helps the pipeline:** Subagents run many CLI commands (typecheck, lint, build, git). Without RTK, raw output (passing tests, progress bars, verbose logs) fills the context window. RTK strips noise, keeps only failures and actionable info.
+
 ## Setup
 
 ```bash
@@ -131,6 +153,9 @@ ln -sf "$(pwd)/commands" ~/.claude/commands
 ln -sf "$(pwd)/pipelines" ~/.claude/pipelines
 ln -sf "$(pwd)/templates" ~/.claude/templates
 cp CLAUDE.md ~/.claude/CLAUDE.md
+
+# Install RTK (recommended)
+brew install rtk-ai/tap/rtk && rtk init -g
 ```
 
 ## New Project Setup
@@ -191,7 +216,7 @@ knowledge-base/
 ```
 claude-pipeline/
   agents/              <- 20 specialized agents with machine-parseable output
-  commands/            <- 19 slash commands (workflow + bootstrap + utilities)
+  commands/            <- 20 slash commands (workflow + bootstrap + utilities)
   pipelines/           <- complexity-specific flows
     simple.md          <- 1 Planner, 2 reviewers, no enrichment agents
     medium.md          <- full enrichment, 1 Planner + 2 reviewers, 4 code reviewers
@@ -201,6 +226,18 @@ claude-pipeline/
   settings.reference.json <- reference settings (permissions, hooks, plugins)
 ```
 
+## Self-Improvement Loop
+
+The pipeline tracks metrics via `/done` and analyzes them via `/metrics-report`:
+
+1. **Measure** — `/done` records complexity, iterations, reviewer verdicts, blockers per task
+2. **Analyze** — `/metrics-report` calculates reviewer hit rates, detects over-classification
+3. **Adapt** — recommendations suggest which reviewers to prune, which complexity levels to adjust
+4. **Feedback** — `/agent-feedback` logs when reviewers miss issues in prod, suggests agent definition updates
+
+After 10+ tasks, the metrics loop produces actionable insights. After 20+, patterns emerge (e.g., "Style Reviewer found 0 blockers in 12 SIMPLE tasks — skip it").
+
 ## Requirements
 - Claude Code CLI
+- Recommended: [RTK](https://github.com/rtk-ai/rtk) (60-90% token savings on CLI output)
 - Recommended plugins: `context7` (library docs), `typescript-lsp` (type diagnostics)

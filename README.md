@@ -1,6 +1,8 @@
 # Claude Pipeline
 
-Multi-agent development pipeline for Claude Code. Language-agnostic (Python, TypeScript, Go, etc.) — project-specific rules live in each project's CLAUDE.md.
+Multi-agent development pipeline for Claude Code. Supports **React, Next.js, NestJS, Python/FastAPI, Flutter/Dart, Go** — and extensible to any stack via reference files.
+
+Project-specific rules live in each project's CLAUDE.md. Platform-specific agent knowledge lives in `agents/references/`.
 
 ## Commands (16)
 
@@ -61,17 +63,17 @@ Multi-agent development pipeline for Claude Code. Language-agnostic (Python, Typ
 | logic-reviewer | Correctness, bugs, edge cases, race conditions |
 | style-reviewer | Naming, patterns, duplication, CLAUDE.md compliance |
 | security | Real vulnerabilities for this stack |
-| performance | Perf issues (Python/FastAPI, NestJS, frontend) |
+| performance | Perf issues — loads platform checks from `references/perf-{stack}.md` |
 
 ### Validation
 | Agent | Role |
 |-------|------|
 | acceptance | Acceptance criteria + mechanical checks + test coverage |
-| test | Write tests when Implementer didn't (fallback) |
-| playwright | E2E tests |
-| ui-consistency | Design system compliance |
+| test | Write tests — loads patterns from `references/test-{stack}.md` |
+| e2e (playwright) | E2E tests — loads from `references/e2e-{platform}.md` |
+| ui-consistency | Design system compliance — loads from `references/ui-{platform}.md` |
 | api-contract | Frontend/backend/cross-repo contract sync |
-| migration | Handle breaking changes (API, DB, proto, types) |
+| migration | Handle breaking changes (API, DB, proto, alembic, types) |
 
 ### Standalone (auto-trigger)
 | Agent | Role |
@@ -80,21 +82,46 @@ Multi-agent development pipeline for Claude Code. Language-agnostic (Python, Typ
 | test-all-agent | Fix or remove failing tests to reach 100% passing (any stack) |
 | fe-test-all-agent | Same but locates frontend directory first |
 
+## Platform Reference Files
+
+Agents are thin (role + detect stack + output format). Platform-specific knowledge lives in `agents/references/`:
+
+```
+agents/references/
+  perf-react.md         React/Next.js performance checks
+  perf-flutter.md       Widget rebuilds, lists, images, state, dispose
+  perf-python.md        FastAPI/asyncio checks
+  perf-nestjs.md        NestJS DB, API, architecture, memory
+
+  ui-web.md             Web accessibility, responsive
+  ui-flutter.md         Material/Cupertino, SafeArea, navigation, a11y
+
+  test-react.md         Vitest/Jest, component testing, MSW
+  test-flutter.md       flutter_test, widget tests, mocktail/Riverpod
+  test-python.md        pytest, fixtures, AsyncMock
+  test-nestjs.md        Jest, TestingModule, overrideProvider
+
+  e2e-playwright.md     Playwright process and rules
+  e2e-flutter.md        integration_test process and rules
+```
+
+**Adding a new platform** (e.g. Kotlin/Android): create `perf-kotlin.md`, `test-kotlin.md`, `ui-android.md`, `e2e-android.md` — no agent files need changing.
+
 ## Pipeline Flow
 
 ```
 /task "add user settings page"
   |
   +- STEP -1: Trivial detection (skip pipeline for rename/typo/config)
-  +- STEP 0: Brainstorming (if scope unclear)
-  +- STEP 1: Stack detection + complexity classification
-  +- STEP 2: Gate 0 — human confirms (skipped for SIMPLE)
-  +- STEP 3: Context enrichment (agents read codebase)
-  +- STEP 4: Planning (competing planners for complex)
+  +- STEP 0:  Brainstorming (if scope unclear)
+  +- STEP 1:  Stack detection + complexity classification
+  +- STEP 2:  Gate 0 — human confirms (skipped for SIMPLE)
+  +- STEP 3:  Context enrichment (agents read codebase)
+  +- STEP 4:  Planning (competing planners for complex)
   +- Gate 1 — human reviews plan
-  +- STEP 5: Implementation (code + tests)
+  +- STEP 5:  Implementation (code + tests)
   +- STEP 5b: Test verification
-  +- STEP 6: Validation (lint, typecheck, acceptance)
+  +- STEP 6:  Validation (lint, typecheck, acceptance)
   +- Gate 2 — human accepts → /code-review → /done
 ```
 
@@ -106,7 +133,7 @@ Multi-agent development pipeline for Claude Code. Language-agnostic (Python, Typ
 | Planning | 1 Planner, no review | 1 Planner + 2 reviewers | 3 competing Planners + 4 reviewers |
 | Implementation | 1 Implementer | 1 Implementer + checkpoints | Parallel per module |
 | Code Review | Logic + Style + Security* | Logic + Style + Security + Perf | Same |
-| Tests | Implementer writes + STEP 5b | Same + Test Agent fallback | Same + Playwright |
+| Tests | Implementer writes + STEP 5b | Same + Test Agent fallback | Same + E2E |
 | Validation | Acceptance | + UI/API if changed | Same |
 | Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Same |
 
@@ -114,23 +141,22 @@ Multi-agent development pipeline for Claude Code. Language-agnostic (Python, Typ
 
 ## Key Features
 
-### Language-Agnostic
-Orchestrator detects `project_stack` (language, package manager, test/lint commands) from CLAUDE.md and passes it to all agents. No more TypeScript commands in Python projects.
+### Multi-Platform Support
+Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart, Go.
 
 ### Mandatory Tests
 Every plan includes test steps. Implementer writes code AND tests. STEP 5b verifies they pass. Acceptance Agent checks test coverage. Metrics track `tests_written`.
 
 ### Issue Collection
-Agents find out-of-scope issues → append to `.claude/issues-found.md` → `/done` persists to KB `tech-debt.md` or `docs/tech-debt.md` → `/sweep` reviews and fixes them.
+Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persists to `tech-debt.md` → `/sweep` reviews and fixes.
 
 ### Self-Improvement Loop
 1. `/done` records metrics (complexity, iterations, blockers, tests, reviewer verdicts)
 2. `/metrics-report` calculates reviewer effectiveness, detects over-classification
 3. `/agent-feedback` logs missed issues, suggests agent definition updates
-4. After 10+ tasks → actionable recommendations emerge
 
 ### Cross-Session Recovery
-Pipeline state saved after every agent completion (not just every step). `/task-continue` resumes from exact point of interruption.
+Pipeline state saved after every agent completion. `/task-continue` resumes from exact point.
 
 ## Model Routing
 
@@ -165,7 +191,7 @@ brew install rtk-ai/tap/rtk && rtk init -g
 
 ```bash
 cd your-project/
-/init-claudemd          # Generate CLAUDE.md
+/init-claudemd          # Generate CLAUDE.md (auto-detects stack)
 /validate-claudemd      # Verify it's complete
 
 # Multi-repo Knowledge Base (optional)
@@ -177,12 +203,13 @@ cd your-project/
 
 ```
 claude-pipeline/
-  agents/           19 specialized agent definitions
-  commands/         16 slash commands
-  pipelines/        3 complexity-specific flows (simple/medium/complex)
-  templates/        pipeline-state scaffold, output format standards
-  metrics/          pipeline.md (task metrics), agent-feedback.md (missed issues)
-  settings.reference.json   reference settings (permissions, hooks, plugins)
+  agents/              19 agent definitions (thin — role + detect + output)
+    references/        14 platform-specific knowledge files
+  commands/            16 slash commands
+  pipelines/           3 complexity flows (simple/medium/complex)
+  templates/           pipeline-state scaffold, output format standards
+  metrics/             pipeline.md (task metrics), agent-feedback.md
+  settings.reference.json
 ```
 
 ## Requirements

@@ -7,7 +7,7 @@ Question or discussion?
   → Just chat. No command needed.
 
 1-line change? (typo, rename, config value)
-  → Just say it in chat.
+  → Just say it in chat. Pipeline auto-detects trivial tasks too.
 
 Small change? (1-3 files, existing patterns)
   → /quick
@@ -15,10 +15,7 @@ Small change? (1-3 files, existing patterns)
 Feature, refactor, or multi-file change?
   → /task (auto-classifies complexity)
 
-New idea without clear requirements?
-  → /brainstorm → then /task
-
-Need to pick a library or approach?
+New idea or need to pick a library?
   → /brainstorm (has built-in research mode)
 
 Bug with unknown root cause?
@@ -26,6 +23,9 @@ Bug with unknown root cause?
 
 Bug with clear root cause?
   → /task or /quick depending on scope
+
+Accumulated tech debt?
+  → /sweep
 ```
 
 ## Daily Workflow
@@ -50,13 +50,42 @@ Bug report:
   → creates PLANNING.md → implement fix → /done
 
 End of session:
-  /done (saves metrics, persists issues, cleans up)
+  /done (saves metrics, persists discovered issues, cleans up)
 
 Periodic:
   /sweep              — fix accumulated tech debt
   /metrics-report     — review pipeline effectiveness (after 10+ tasks)
   /validate-claudemd  — keep CLAUDE.md current
+  /validate-pipeline  — verify pipeline config integrity after changes
 ```
+
+## How the Pipeline Detects Your Stack
+
+STEP 1 of `/task` reads CLAUDE.md "Validation Commands" section and project files:
+
+```
+pubspec.yaml      → Flutter/Dart    → loads references/perf-flutter.md, ui-flutter.md, etc.
+package.json      → React/Next.js   → loads references/perf-react.md, ui-web.md, etc.
+@nestjs imports   → NestJS          → loads references/perf-nestjs.md, test-nestjs.md
+pyproject.toml    → Python/FastAPI  → loads references/perf-python.md, test-python.md
+go.mod            → Go              → built-in checks
+```
+
+All agents receive `project_stack` and load the correct reference files. You never need to tell agents what language you're using.
+
+## Adding a New Platform
+
+Create reference files in `agents/references/`:
+
+```bash
+# Example: adding Kotlin/Android support
+agents/references/perf-kotlin.md      # Performance checks
+agents/references/test-kotlin.md      # Test framework detection + patterns
+agents/references/ui-android.md       # Material Design compliance
+agents/references/e2e-android.md      # Espresso / UI Automator rules
+```
+
+No agent files need changing — they auto-detect and load references by stack.
 
 ## Token-Saving Tips
 
@@ -64,16 +93,11 @@ Periodic:
 Bad: `/task improve the settings page`
 Good: `/task add password change to settings — PATCH /users/me endpoint exists, need form + validation`
 
-More context = fewer clarifying questions = fewer tokens on Gate 0.
-
 ### 2. Don't restart — continue
-Session broke mid-pipeline? Use `/task-continue`, not a new `/task`. It reads pipeline-state.md and resumes from the exact point.
+Session broke mid-pipeline? Use `/task-continue`. Pipeline state is saved after every agent completion.
 
 ### 3. Bundle related changes
-Bad: 3 separate `/task` runs for 3 related fixes.
-Good: `/task fix settings page — 1) name validation, 2) email readonly, 3) success notification`
-
-One pipeline run is cheaper than three.
+One pipeline run with 3 items in the plan is cheaper than 3 separate runs.
 
 ### 4. Use /quick aggressively
 If the change follows an existing pattern and fits in one sentence — `/quick` is enough. ~70% cheaper than `/task` SIMPLE.
@@ -83,32 +107,30 @@ If the change follows an existing pattern and fits in one sentence — `/quick` 
 - Gate 1: "approved" or "change step 3 to use hook X"
 - Gate 2: "accepted" or "fix button padding, should be md not sm"
 
-Vague feedback = extra iteration = extra tokens.
-
 ### 6. Use RTK
-Install [RTK](https://github.com/rtk-ai/rtk) — 60-90% savings on CLI output. Zero config after `rtk init -g`.
+[RTK](https://github.com/rtk-ai/rtk) — 60-90% savings on CLI output. Zero config after `rtk init -g`.
 
 ## Quality Tips
 
 ### 1. Always have a CLAUDE.md
-Run `/init-claudemd` on every project. Without it, agents guess your conventions wrong.
+Run `/init-claudemd` on every project. Without it, agents guess conventions wrong.
 
 ### 2. "What NOT to Do" is the most important section
-Agents follow patterns well. They don't know your project's anti-patterns. "Don't use axiosInstance directly" prevents more bugs than any positive rule.
+Agents follow patterns well but don't know your anti-patterns. Negative rules prevent more bugs than positive ones.
 
 ### 3. Review the plan, not just the code
-The plan at Gate 1 determines the code quality. Wrong architecture in the plan = no amount of code review will fix it.
+The plan at Gate 1 determines code quality. Wrong architecture in the plan = no amount of code review will fix it.
 
 ### 4. Run /done after every task
 Not just cleanup — it saves metrics and persists issues found by agents. Without `/done`, discovered tech debt is lost.
 
 ### 5. Use /agent-feedback when reviewers miss bugs
-Found a bug that Security Agent should have caught? `/agent-feedback Security missed XSS in user input`. After 3+ misses, the command updates the agent definition.
+`/agent-feedback Security missed XSS in user input`. After 3+ misses, the command suggests updating the agent definition.
 
 ### 6. Keep CLAUDE.md under 150 lines
-Every line loads on every message. Move tables and endpoint lists to `docs/`. Keep only rules, patterns, and anti-patterns.
+Every line loads on every message. Move reference tables to `docs/`.
 
-## How Issues Flow Through the Pipeline
+## How Issues Flow
 
 ```
 Agent finds out-of-scope issue during implementation/review
@@ -126,8 +148,8 @@ No TODO comments in code. Issues live in a structured file, not scattered across
 
 ## Anti-Patterns
 
-- **Don't fight the pipeline.** If you want to skip reviews — use `/quick`, not `/task` with complaints.
+- **Don't fight the pipeline.** Want to skip reviews? Use `/quick`, not `/task` with complaints.
 - **Don't re-run /task for the same thing.** Use `/task-continue` with specific feedback.
 - **Don't write CLAUDE.md once and forget.** Run `/validate-claudemd` periodically.
-- **Don't keep stale working files.** If `.claude/` has plan.md from a previous session — run `/done` to clean up.
-- **Don't use /task for exploration.** "What would it take to add X?" → `/brainstorm`. `/task` will try to implement.
+- **Don't keep stale working files.** `.claude/` has plan.md from a previous session? Run `/done` to clean up.
+- **Don't use /task for exploration.** "What would it take to add X?" → `/brainstorm`.

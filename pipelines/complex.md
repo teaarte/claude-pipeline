@@ -49,9 +49,10 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 **If independent modules exist** (from `.claude/architecture-decisions.md`):
 Spawn parallel implementers (model: **opus**), each owning a module with no file overlap.
-Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md`.
+Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md` + `project_stack`.
 
 **Otherwise:** single Implementer (model: **opus**) with checkpoints every 3-5 steps.
+Implementer writes both code AND tests (test steps are part of the plan).
 
 After implementation, spawn 2 parallel reviewers:
 - Logic Reviewer (model: **opus**) on all changed code
@@ -61,14 +62,18 @@ If BLOCKING → one more iteration per module (max 2 total). Non-blocking → lo
 
 If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
+## STEP 5b — Test Verification
+If Implementer wrote tests → run them via the test command from `project_stack`.
+If tests fail due to bugs in implementation → send back to Implementer (counts toward STEP 5 iteration limit).
+If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
+
 ## STEP 6 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
-If not defined, detect from project and run: typecheck → build → lint.
+If not defined, detect from `project_stack` and run appropriate checks for the language.
 
 Spawn in parallel (model: **sonnet**):
 - Acceptance Agent → `~/.claude/agents/acceptance.md`
-- Test Agent → `~/.claude/agents/test.md`
-- Playwright Agent → `~/.claude/agents/playwright.md`
+- Playwright Agent → `~/.claude/agents/playwright.md` (if frontend with E2E setup)
 - UI Consistency → `~/.claude/agents/ui-consistency.md` (if UI changed)
 - API Contract → `~/.claude/agents/api-contract.md` (if API changed)
 

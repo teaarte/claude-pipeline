@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/rtk-rewrite.sh"
+            "command": "/Users/teaarte/.claude/hooks/rtk-rewrite.sh"
           },
           {
             "type": "command",
@@ -67,6 +67,15 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "caveman@caveman": true
+  },
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    }
   }
 }

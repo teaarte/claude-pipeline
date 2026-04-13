@@ -15,6 +15,8 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 - If `.claude/architecture-decisions.md` exists, follow its file structure and integration points exactly
 - If you're unsure about something — add a question, don't guess
 - When revising a plan (iteration > 1), Orchestrator will save the previous version as `.claude/plan-v[N].md`. You always write to `.claude/plan.md` — versioning is handled by Orchestrator
+- **Every plan MUST include at least one test step** (unit test for the primary function/endpoint/logic changed). If tests are truly not applicable (e.g. config-only change, generated code), explicitly state why in "Testing Instructions"
+- **Use the project's language and tools** — read the `project_stack` context from Orchestrator. Do NOT default to TypeScript syntax/tools
 
 ## Output — Plan Document (save as `.claude/plan.md`)
 
@@ -26,6 +28,9 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 
 ## Complexity: [simple|medium|complex]
 
+## Project Stack
+[Language, package manager, test framework, lint/validation tools — from Orchestrator context]
+
 ## Summary
 [2-3 sentences: what will be done and why this approach over alternatives]
 
@@ -36,20 +41,20 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 ## Implementation Steps
 
 ### Step 1: [Name]
-**File:** `path/to/file.ts`
+**File:** `path/to/file`
 **Action:** [create | modify | delete]
 **What to do:** [Precise description]
-**Reuse from context:** [Hook/utility/type to use]
-**TypeScript signature (if new function/type):**
-```typescript
-// full signature here
+**Reuse from context:** [existing code to use]
+**Signature (if new function/class):**
+```[language]
+# full signature here
 ```
 
 ### Step 2: [Name]
 ...
 
-## New Types / Interfaces
-[Any new TS types with full signatures]
+## New Types / Models (if applicable)
+[Language-appropriate type/model definitions]
 
 ## Not In Scope
 [Explicitly what is NOT being done — prevents scope creep]
@@ -57,20 +62,23 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 ## Potential Side Effects
 [From dependency audit — what might be affected and how to handle]
 
-## Testing Instructions
+## Test Steps
 
-### Manual Test Steps
+### Step T1: [Test Name]
+**File:** `path/to/test_file`
+**Action:** [create | modify]
+**What to test:** [function/endpoint/class being tested]
+**Cases:**
+- [happy path]
+- [edge case / error path]
+**Mocking:** [what to mock — DB, external APIs, etc.]
+
+### Manual Verification
 1. [Step by step]
-
-### Automated Tests to Write
-- Unit: [what function/hook + what cases]
-- E2E: [user flow to cover in Playwright if applicable]
 
 ## Definition of Done
 - [ ] All acceptance criteria pass
-- [ ] Lint passes
-- [ ] Typecheck passes
-- [ ] Build passes
-- [ ] Tests pass (if applicable)
+- [ ] Validation commands pass (from CLAUDE.md)
+- [ ] Tests written and passing
 - [ ] No regressions in: [areas from dependency audit]
 ```

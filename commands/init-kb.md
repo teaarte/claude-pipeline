@@ -63,7 +63,10 @@ Read systematically — do NOT skim:
 - Any unusual or notable deps
 
 **Known issues:**
-- `grep -r "TODO\|FIXME\|HACK\|XXX" src/ --include="*.ts" --include="*.tsx" --include="*.py" | head -30`
+- Scan for TODOs/FIXMEs in source files (adapt to project language):
+  ```bash
+  grep -r "TODO\|FIXME\|HACK\|XXX" src/ --include="*.ts" --include="*.tsx" --include="*.py" --include="*.go" --include="*.rs" --include="*.java" --include="*.js" --include="*.jsx" | head -30
+  ```
 - Any obvious anti-patterns found during scan
 
 ### 3. Generate KB entries

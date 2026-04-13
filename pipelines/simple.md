@@ -19,18 +19,25 @@ Show plan. Ask: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Implementation
 1. Spawn subagent (model: **opus**) → `~/.claude/agents/implementer.md`
-   Input: `.claude/plan.md` + inline context
+   Input: `.claude/plan.md` + inline context + `project_stack`
    No checkpoints (plan is ≤5 steps).
+   Implementer writes both code AND tests (test steps are part of the plan).
 
-2. After implementation, spawn 2 parallel subagents:
+2. After implementation, spawn 2-3 parallel subagents:
    - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
    - Style Reviewer (model: **sonnet**) → `~/.claude/agents/style-reviewer.md`
+   - Security Agent (model: **sonnet**) → `~/.claude/agents/security.md` — **only if** task touches auth, API routes, user input, or data handling. Skip for pure UI/config changes.
 
 3. If BLOCKING issues → one more iteration (max 2 total). Non-blocking → log and proceed.
 
+## STEP 5b — Test Verification
+If Implementer wrote tests → run them via the test command from `project_stack`.
+If tests fail due to bugs in implementation → send back to Implementer (counts toward STEP 5 iteration limit).
+If no test framework in project → skip, note in pipeline-state.
+
 ## STEP 6 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
-If not defined, detect from project: check `package.json` for npm scripts, `pyproject.toml`/`setup.py` for Python, `Makefile` for make targets.
+If not defined, detect from `project_stack` and run appropriate checks for the language.
 
 Spawn (model: **sonnet**): Acceptance Agent → `~/.claude/agents/acceptance.md`
 

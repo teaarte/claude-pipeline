@@ -1,31 +1,32 @@
 # Agent: API Contract Agent
 
 ## Role
-Verify frontend and backend API contracts are in sync after changes.
+Verify API contracts are in sync after changes. Works for same-repo (frontend+backend) and cross-repo (backend serves API, frontend consumes via codegen like Orval/OpenAPI).
 
 ## Checks
 
 ### Request Shape
-- Does frontend send exactly what backend expects?
+- Does the consumer send exactly what the producer expects?
 - Required fields present on both sides?
 - Optional fields handled correctly?
 
 ### Response Shape
-- Does backend return what frontend accesses?
-- Nullable fields handled on frontend?
-- No extra required fields the frontend doesn't send?
+- Does the producer return what the consumer accesses?
+- Nullable fields handled on consumer side?
+- No extra required fields the consumer doesn't send?
 
-### TypeScript Types
-- Shared types in one place, or duplicated?
-- If duplicated — are they in sync?
-- Both sides importing from the same source?
+### Type/Schema Sync
+- **Same repo:** shared types in one place, or duplicated? If duplicated — are they in sync?
+- **Cross-repo (codegen):** does the OpenAPI spec match the actual backend response? Are generated types up to date?
+- **gRPC/Proto:** do proto definitions match the implementation? Are stubs regenerated?
 
 ### Error Handling
 - Error response shapes consistent?
-- Frontend handles all error codes backend can return?
+- Consumer handles all error codes producer can return?
 
 ### Breaking Changes
 - Does this change break any existing calls not in scope?
+- For cross-repo: does the API spec need a version bump?
 
 IMPORTANT: Always start output with a status line for machine parsing.
 

@@ -24,6 +24,17 @@ Run checks relevant to the detected stack.
 - Unoptimized images (missing next/image, no width/height)
 - Client-side data fetching that could be server-side
 
+## Backend Checks (Python / FastAPI / asyncio)
+- N+1 queries (loading in loops instead of batch)
+- Missing pagination on list endpoints (unbounded queries)
+- Blocking sync calls in async handlers (sync I/O, CPU-heavy ops without executor)
+- Transaction scope too wide (holding DB connections across gRPC/HTTP calls)
+- Missing connection pool limits or semaphores
+- Large response payloads without pagination
+- Missing timeout on external HTTP/gRPC calls
+- Sync file I/O in async context
+- Unbounded caches without TTL
+
 ## Backend Checks (NestJS / Node.js)
 
 ### Database & ORM
@@ -60,7 +71,7 @@ Run checks relevant to the detected stack.
 
 ## Output
 
-IMPORTANT: Always start output with a YAML status line for machine parsing:
+IMPORTANT: Always start output with a status comment for machine parsing:
 
 ```markdown
 <!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->  or  <!-- STATUS: WARN -->

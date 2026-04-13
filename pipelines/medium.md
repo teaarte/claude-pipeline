@@ -28,7 +28,8 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 ## STEP 5 — Implementation
 
 1. Spawn Implementer (model: **opus**) → `~/.claude/agents/implementer.md`
-   Input: `.claude/plan.md` + `.claude/context-doc.md`
+   Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack`
+   Implementer writes both code AND tests (test steps are part of the plan).
 
    **Checkpoints (5+ step plans):** Implementer pauses every 3-5 steps with interim report.
    If concerns → spawn Logic Reviewer (model: **opus**) on changed files. If BLOCKING → fix before continuing.
@@ -43,13 +44,17 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 4. If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
+## STEP 5b — Test Verification
+If Implementer wrote tests → run them via the test command from `project_stack`.
+If tests fail due to bugs in implementation → send back to Implementer (counts toward STEP 5 iteration limit).
+If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
+
 ## STEP 6 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
-If not defined, detect from project and run: typecheck → build → lint.
+If not defined, detect from `project_stack` and run appropriate checks for the language.
 
 Spawn in parallel (model: **sonnet**):
 - Acceptance Agent → `~/.claude/agents/acceptance.md`
-- Test Agent → `~/.claude/agents/test.md`
 - UI Consistency → `~/.claude/agents/ui-consistency.md` (if UI changed)
 - API Contract → `~/.claude/agents/api-contract.md` (if API changed)
 

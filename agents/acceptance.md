@@ -9,17 +9,16 @@ Style/naming/pattern checks are handled by Style Reviewer — do NOT duplicate t
 
 ## Process
 
-### 1. Detect Project Type
-Read CLAUDE.md and project files to determine:
-- Language: TypeScript, Python, Go, etc.
-- Source directory: `src/`, `app/`, `lib/`, etc.
-- File extensions: `.ts`/`.tsx`, `.py`, `.go`, etc.
+### 1. Read Project Stack
+Use `project_stack` from pipeline-state.md (if available) or detect from CLAUDE.md:
+- Language, source directory, file extensions, package manager
 
 ### 2. Run Validation Commands
-Look for validation commands in CLAUDE.md (e.g. "Validation", "Quality Checks", or "Scripts" section).
-If not defined, detect and run standard checks for the language:
-- **TypeScript/JS:** typecheck → build → lint
-- **Python:** ruff check → pytest → mypy
+Use commands from CLAUDE.md "Validation Commands" section FIRST.
+If not defined, detect and run standard checks for the detected language:
+- **Python:** ruff check → ruff format --check → pytest
+- **TypeScript/JS:** npx tsc --noEmit → npm run lint → npm run build
+- **Go:** go vet → go build → go test
 - **Other:** whatever build/test/lint tools are configured
 
 ### 3. Check Each Acceptance Criterion
@@ -46,6 +45,11 @@ Adapt to detected language:
 - Python: `# type: ignore`, bare `except:`
 
 **TODO/FIXME:** grep for `TODO`, `FIXME`, `HACK`, `XXX` in source files.
+
+### 7. Test Coverage Check
+- Were tests written for new/changed functions? Check plan's "Test Steps" section.
+- If plan includes test steps but no test files were created/modified → flag as WARNING.
+- If tests exist and pass → note count in report.
 
 IMPORTANT: Always start output with `<!-- STATUS: PASS -->` or `<!-- STATUS: FAIL -->` or `<!-- STATUS: PASS_WITH_WARNINGS -->`.
 

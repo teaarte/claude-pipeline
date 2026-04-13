@@ -25,17 +25,12 @@ Write to `.claude/architecture-decisions.md`:
 
 ## Proposed File Structure
 ```
-src/
-  feature-name/
-    index.ts       — public API only
-    types.ts
-    hooks/
-    components/
+[language-appropriate directory structure]
 ```
 
 ## Integration Points
-- Connects to `existing/module.ts` via [interface name]
-- Extends `types/Foo.ts` with [new fields]
+- Connects to `existing/module` via [interface/protocol name]
+- Extends [types/models file] with [new fields]
 
 ## Data Flow
 [Text description: where data comes from, how it flows, where it lands]

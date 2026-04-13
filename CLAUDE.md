@@ -31,3 +31,5 @@ When a project has an Obsidian knowledge base:
 - Read knowledge base files **when relevant to the task**, not on every session start
 - After completing work: update changelog
 - Persistent knowledge belongs in the knowledge base, not in `.claude/` working files
+
+@RTK.md

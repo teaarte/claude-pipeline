@@ -23,6 +23,7 @@ Print:
 │ Avg Plan Iters    │ S:{n} M:{n} C:{n}                 │
 │ Avg Impl Iters    │ S:{n} M:{n} C:{n}                 │
 │ Avg Agents/Task   │ S:{n} M:{n} C:{n}                 │
+│ Tests Written     │ {total} across {N} tasks           │
 │ Accept Rate       │ {n}%                              │
 └───────────────────┴──────────────────────────────────┘
 ```

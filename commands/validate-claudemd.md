@@ -28,15 +28,17 @@ Mark each: PRESENT / MISSING / EMPTY.
 Mark each: PRESENT / MISSING.
 
 ### 4. Validation Commands verification
-Check that these specific keys exist in the "Validation Commands" section (pre-commit hook parses `Typecheck:`):
-- `Typecheck:` — required (pre-commit hook reads this)
-- `Build:` — required (pipeline validation step)
-- `Lint:` — required (pipeline validation step)
-- `Test:` — recommended (Test Agent needs this)
+Check that the "Validation Commands" section has at least 2 commands defined.
+
+Common keys (not all required — depends on language):
+- **Lint:** — required for all projects
+- **Test:** — recommended (Test Agent needs this)
+- **Typecheck/Build:** — required for compiled languages (TS, Go), optional for Python
+- **Format:** — recommended
 
 For each command found:
-- Try running it (dry-run if possible, or just check the command exists)
-- Verify it matches actual project setup (e.g. `npx tsc` but no `typescript` in deps = broken)
+- Try running it (dry-run if possible, or just check the command/binary exists)
+- Verify it matches actual project setup (e.g. `npx tsc` but no `typescript` in deps = broken; `ruff check` but no `ruff` in dev deps = broken)
 
 ### 5. Accuracy check
 Cross-reference CLAUDE.md claims against actual project:

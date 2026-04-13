@@ -1,8 +1,21 @@
-# Brainstorm — Idea to Design
+# Brainstorm — Idea to Design & Research
 
 Turn an idea into a concrete design before any code is written.
+Also covers library/approach research — no need for a separate command.
 
 **Topic:** $ARGUMENTS
+
+---
+
+## Mode Detection
+
+**Design mode** (default): topic describes a feature, change, or problem to solve.
+**Research mode**: topic asks to compare libraries, evaluate approaches, or pick a tool.
+
+For research mode → skip to Step 4 (Propose Approaches) with structured comparison format:
+- Options compared (pros, cons, size impact, type support, maintenance status)
+- Single recommendation with reasoning for this project's stack
+- Integration path (install command, key setup steps, usage example)
 
 ---
 

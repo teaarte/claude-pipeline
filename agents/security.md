@@ -16,7 +16,7 @@ Review for security vulnerabilities relevant to this stack and task. Flag real i
 
 ## Output
 
-IMPORTANT: Always start output with a YAML status line for machine parsing:
+IMPORTANT: Always start output with a status comment for machine parsing:
 
 ```markdown
 <!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->  or  <!-- STATUS: WARN -->

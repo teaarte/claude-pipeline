@@ -16,16 +16,16 @@ Task description + complexity + project structure from CLAUDE.md
 ## Output
 ```
 DIRECT_FILES:
-- path/to/file.ts — reason it changes
+- path/to/file — reason it changes
 
 INDIRECT_DEPENDENCIES:
-- path/to/other.ts — why it's affected
+- path/to/other — why it's affected
 
 SHARED_CODE_AFFECTED:
-- types/User.ts — UserProfile interface changes
+- [types/models/schemas file] — [what changes]
 
 CONSUMERS_TO_CHECK:
-- components/Header.tsx — uses UserProfile type
+- [file that imports from changed code] — [why it's affected]
 
 RISK_AREAS:
 - [high-risk spots where changes could silently break things]

@@ -9,6 +9,13 @@
 ## Complexity
 [simple | medium | complex]
 
+## Project Stack
+- **Language:** [Python | TypeScript | Go | etc.]
+- **Package manager:** [uv | npm | pnpm | pip | etc.]
+- **Test command:** [pytest | vitest | jest | go test | etc.]
+- **Lint command:** [ruff check | eslint | etc.]
+- **Build/typecheck:** [ruff format --check | npx tsc --noEmit | go build | N/A]
+
 ## Current Step
 [step name]
 
@@ -29,9 +36,11 @@
 ### Implementation Phase
 - [ ] Implementation (iteration 1)
 - [ ] Code review
+- [ ] Tests written
+- [ ] Tests passing
 
 ### Validation Phase
-- [ ] Typecheck / Build / Lint
+- [ ] Validation commands pass
 - [ ] Acceptance check
 
 ### Final

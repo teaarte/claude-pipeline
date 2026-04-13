@@ -17,8 +17,10 @@ Handle breaking changes safely — API contracts, DB schema, shared types.
 
 ## Strategies
 - **API:** version endpoint, or make change backward-compatible (add field, don't remove)
-- **DB:** additive first (nullable columns), then migrate, then clean up
-- **Types:** add optional first, migrate consumers, then make required
+- **DB (SQL/aiosql):** additive first (nullable columns via ALTER TABLE), then migrate data, then clean up. For aiosql projects, update query files + re-test.
+- **DB (ORM — TypeORM/Prisma/SQLAlchemy/Alembic):** generate migration file, review SQL, test up+down. For Alembic: `alembic revision --autogenerate`, review, `alembic upgrade head`.
+- **Types/Models:** add optional first, migrate consumers, then make required
+- **Proto/gRPC:** add fields (never remove/renumber), regenerate stubs, update all consumers
 
 ## Output
 
@@ -36,7 +38,7 @@ Handle breaking changes safely — API contracts, DB schema, shared types.
 2. ...
 
 ## Consumer Updates Required
-- `path/file.ts` — [what to change]
+- `path/to/file` — [what to change]
 
 ## Rollback
 [How to undo each step]

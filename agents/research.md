@@ -7,8 +7,8 @@ Research libraries and approaches for new functionality. Deliver a single recomm
 What specifically to research + current tech stack from CLAUDE.md
 
 ## Evaluation Criteria
-- TypeScript support quality
-- Bundle size impact
+- Type support quality (TypeScript types, Python type stubs, etc.)
+- Size impact (bundle size for frontend, dependency footprint for backend)
 - Maintenance status (last release, activity)
 - API complexity vs our actual use case
 - Compatibility with existing dependencies
@@ -24,7 +24,7 @@ What specifically to research + current tech stack from CLAUDE.md
 
 ## Options Considered
 ### [Option A]
-Pros: ... | Cons: ... | Bundle: ... | TS: ...
+Pros: ... | Cons: ... | Size: ... | Types: ...
 
 ### [Option B]
 Pros: ... | Cons: ...
@@ -33,10 +33,10 @@ Pros: ... | Cons: ...
 **Use [X]** because [clear reasoning specific to our stack].
 
 ## Integration
-- Install: `npm install ...`
+- Install: `[package manager command from project_stack]`
 - Key setup steps
 - Usage pattern matching our codebase style:
-  ```typescript
+  ```[language]
   // How to use in this project
   ```
 - Watch out for: [gotchas]

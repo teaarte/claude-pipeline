@@ -11,7 +11,7 @@ Run validation commands from CLAUDE.md (look for "Validation Commands" section).
 If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metrics and append to `~/.claude/metrics/pipeline.md`:
 
 ```
-| date | project | task (short) | complexity | plan_iters | impl_iters | blockers_found | reviewers_with_blockers | reviewer_verdicts | agents_count | verdict |
+| date | project | task (short) | complexity | plan_iters | impl_iters | blockers_found | reviewers_with_blockers | reviewer_verdicts | tests_written | agents_count | verdict |
 ```
 
 Parse from pipeline-state.md:
@@ -21,6 +21,7 @@ Parse from pipeline-state.md:
 - **blockers_found** — count of blocking issues across all reviewer verdicts
 - **reviewers_with_blockers** — which specific reviewers found blockers, e.g. "Logic,Security" or "none"
 - **reviewer_verdicts** — compact summary, e.g. "Logic:APPROVE Style:APPROVE Security:WARN"
+- **tests_written** — count of new test files/cases created, or "0" if none, or "skip" if no test framework
 - **agents_count** — total number of subagents spawned during pipeline
 - **verdict** — Gate 2 result (accepted/rejected)
 
@@ -38,6 +39,7 @@ If `~/.claude/metrics/pipeline.md` doesn't exist, create it with the header row.
 │ Impl Iters        │ {N}                               │
 │ Blockers          │ {N} ({reviewers_with_blockers})   │
 │ Reviewers         │ {Logic:X Style:X Security:X}      │
+│ Tests Written     │ {N files / N cases / skip}         │
 │ Agents Spawned    │ {N}                               │
 │ Verdict           │ {accepted/rejected}               │
 └───────────────────┴──────────────────────────────────┘
@@ -51,12 +53,26 @@ If CLAUDE.md references a Knowledge Base:
 - If the task was based on a spec file in `specs/`, move it to `specs/done/`
 - Create ADR if an architectural choice was made
 
-## 4. Clean Working Files
-- Delete all `.claude/*.md` files (plan.md, pipeline-state.md, context-doc.md, dependency-audit.md, architecture-decisions.md, plan-*.md, review files, implementation-notes*.md)
+## 4. Persist Discovered Issues
+If `.claude/issues-found.md` exists and is non-empty:
+1. Read the issues
+2. **If CLAUDE.md references a Knowledge Base** → append to `{kb_path}/tech-debt.md` under a `## {project-name}` section
+3. **If no KB** → append to `docs/tech-debt.md` in the project root (create if missing)
+4. Print to console: *"N issues found during this session → saved to [path]. Run `/sweep` to review and fix."*
+5. Delete `.claude/issues-found.md`
+
+If no issues found: skip silently.
+
+## 5. Clean Working Files
+- Delete all `.claude/*.md` files (plan.md, pipeline-state.md, context-doc.md, dependency-audit.md, architecture-decisions.md, plan-*.md, review files, implementation-notes*.md, issues-found.md)
 - Keep only `settings.local.json` and `commands/` directory
 - Delete `PLANNING.md` in project root if it exists (debug agent artifact)
 
-## 5. Commit Message
+Also scan for stale artifacts from previous crashed sessions:
+- Check other projects' `.claude/` dirs for orphaned `pipeline-state.md` files (last modified > 24h ago) — warn user
+- Check `~/.claude/metrics/agent-feedback.md` — if any agent has 3+ misses, remind: *"[Agent] has 3+ missed issues. Run `/agent-feedback` to review and update its definition."*
+
+## 6. Commit Message
 Generate a conventional commit message based on all changes made during this session (`git diff` against the starting state). Follow the project's commit conventions from CLAUDE.md. Print it as plain text so the user can copy it:
 
 ```
@@ -65,7 +81,7 @@ feat: short description here
 Optional body explaining why, not what.
 ```
 
-## 6. Summary
+## 7. Summary
 Print final summary:
 ```
 ┌─────────────────────────────────────────────────────┐

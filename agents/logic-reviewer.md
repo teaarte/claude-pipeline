@@ -25,7 +25,7 @@ Review plans and code for logical correctness, bugs, missing cases, over-enginee
 
 ## Output
 
-IMPORTANT: Always start output with a YAML status line for machine parsing:
+IMPORTANT: Always start output with a status comment for machine parsing:
 
 ```markdown
 <!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->
@@ -37,7 +37,7 @@ IMPORTANT: Always start output with a YAML status line for machine parsing:
 ## Blocking Issues (must fix)
 - [ ] [Issue + specific fix]
 
-## Non-Blocking Issues (log, don't block)
+## Non-Blocking Issues (log, don't block — Orchestrator appends these to `.claude/issues-found.md`)
 - [Issue]
 
 ## Approved

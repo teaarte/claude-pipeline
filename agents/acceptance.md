@@ -18,6 +18,7 @@ Use commands from CLAUDE.md "Validation Commands" section FIRST.
 If not defined, detect and run standard checks for the detected language:
 - **Python:** ruff check → ruff format --check → pytest
 - **TypeScript/JS:** npx tsc --noEmit → npm run lint → npm run build
+- **Flutter/Dart:** dart analyze → dart format --set-exit-if-changed . → flutter test
 - **Go:** go vet → go build → go test
 - **Other:** whatever build/test/lint tools are configured
 
@@ -38,11 +39,13 @@ Adapt to detected language:
 **Debug statements:**
 - TypeScript/JS: `console.log`, `console.debug`
 - Python: `print()`, `breakpoint()`, `pdb`
+- Dart/Flutter: `print()`, `debugPrint()` outside of debug-only blocks
 - General: any debug logging not behind a proper logger
 
 **Loose typing:**
 - TypeScript: `: any`, `as any`
 - Python: `# type: ignore`, bare `except:`
+- Dart: `dynamic` where a specific type is possible, `// ignore:` comments
 
 **TODO/FIXME:** grep for `TODO`, `FIXME`, `HACK`, `XXX` in source files.
 

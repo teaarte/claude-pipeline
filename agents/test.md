@@ -31,6 +31,11 @@ If no test command or "No tests yet" → detect framework from project files:
 **Go:**
 - Always `go test` (built-in)
 
+**Flutter/Dart:**
+- `pubspec.yaml` with `flutter_test` in dev_dependencies → `flutter test`
+- `test/` directory with `*_test.dart` files → match existing patterns
+- `integration_test/` → integration tests (run separately)
+
 If no framework at all: **stop and report** — "No test framework detected. Recommend installing [X]. Want me to set it up?" Do NOT write tests without a runner.
 
 ### 2. Determine what to test
@@ -58,9 +63,16 @@ From plan's acceptance criteria and changed files:
 - User interaction → expected outcome
 - Do NOT test: pure layout, styling, static content
 
+**Widgets (Flutter) — only if they contain logic:**
+- Widget renders correctly with given parameters
+- User interaction (tap, swipe) → expected state change
+- Conditional rendering based on state
+- Mock dependencies via `ProviderScope.overrides` (Riverpod) or `MockBloc` (BLoC)
+- Do NOT test: pure layout widgets, theme styling, static text
+
 ### 3. Write tests
 Follow project conventions exactly:
-- Same file naming (`*.test.ts`, `*.spec.ts`, `test_*.py`, `*_test.go`)
+- Same file naming (`*.test.ts`, `*.spec.ts`, `test_*.py`, `*_test.go`, `*_test.dart`)
 - Same directory structure (colocated, `__tests__/`, `tests/`)
 - Same mocking approach (project's existing mock patterns)
 - Same assertion library

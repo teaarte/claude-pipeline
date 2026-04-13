@@ -16,32 +16,18 @@ Read CLAUDE.md for `Test:` command in Validation Commands section.
 
 If test command exists → project has tests. Read 2-3 existing test files to match patterns exactly (file naming, imports, describe/it structure, mocking approach, assertion style).
 
-If no test command or "No tests yet" → detect framework from project files:
-
-**TypeScript/JavaScript:**
-- `vitest.config.*` or `vite.config.* with test` → Vitest
-- `jest.config.*` or `package.json "jest"` → Jest
-- Neither → check CLAUDE.md stack. React/Next.js → recommend Vitest. NestJS → Jest (built-in).
-
-**Python:**
-- `pytest.ini`, `pyproject.toml [tool.pytest]`, `conftest.py` → pytest
-- `unittest` imports in existing code → unittest
-- Neither → recommend pytest
-
-**Go:**
-- Always `go test` (built-in)
-
-**Flutter/Dart:**
-- `pubspec.yaml` with `flutter_test` in dev_dependencies → `flutter test`
-- `test/` directory with `*_test.dart` files → match existing patterns
-- `integration_test/` → integration tests (run separately)
+If no test command → detect framework by reading the platform-specific reference:
+- TypeScript/JavaScript → read `agents/references/test-react.md` or `agents/references/test-nestjs.md`
+- Python → read `agents/references/test-python.md`
+- Flutter/Dart → read `agents/references/test-flutter.md`
+- Go → always `go test` (built-in)
 
 If no framework at all: **stop and report** — "No test framework detected. Recommend installing [X]. Want me to set it up?" Do NOT write tests without a runner.
 
 ### 2. Determine what to test
 From plan's acceptance criteria and changed files:
 
-**Hooks / Services / Business Logic** (highest value):
+**Services / Business Logic** (highest value):
 - Input → output mapping
 - Edge cases (empty, null, boundary values)
 - Error handling paths
@@ -52,29 +38,13 @@ From plan's acceptance criteria and changed files:
 - Type edge cases
 - Invalid inputs
 
-**API Endpoints (backend):**
-- Request validation (missing fields, wrong types)
-- Success response shape
-- Error responses (401, 403, 404, 422)
-- Auth guard behavior
-
-**Components (frontend) — only if they contain logic:**
-- Conditional rendering
-- User interaction → expected outcome
-- Do NOT test: pure layout, styling, static content
-
-**Widgets (Flutter) — only if they contain logic:**
-- Widget renders correctly with given parameters
-- User interaction (tap, swipe) → expected state change
-- Conditional rendering based on state
-- Mock dependencies via `ProviderScope.overrides` (Riverpod) or `MockBloc` (BLoC)
-- Do NOT test: pure layout widgets, theme styling, static text
+For platform-specific "what to test" guidance → see loaded reference file.
 
 ### 3. Write tests
 Follow project conventions exactly:
-- Same file naming (`*.test.ts`, `*.spec.ts`, `test_*.py`, `*_test.go`, `*_test.dart`)
-- Same directory structure (colocated, `__tests__/`, `tests/`)
-- Same mocking approach (project's existing mock patterns)
+- Same file naming (from reference: `*.test.ts`, `test_*.py`, `*_test.dart`, `*_test.go`)
+- Same directory structure (colocated, `__tests__/`, `tests/`, `test/`)
+- Same mocking approach (project's existing mock patterns — see reference)
 - Same assertion library
 
 **Test structure:**
@@ -86,7 +56,7 @@ Follow project conventions exactly:
 **Mocking rules:**
 - Mock external dependencies (API calls, DB, file system)
 - Do NOT mock the thing being tested
-- Use project's existing mock patterns (MSW, jest.mock, pytest fixtures, etc.)
+- Use project's existing mock patterns (from reference)
 
 ### 4. Run tests
 Use test command from CLAUDE.md. If new test file, run just that file first, then full suite.
@@ -111,8 +81,8 @@ If tests fail because of actual bugs in implementation → report as FAIL with d
 ## DO NOT Test
 - Third-party library internals
 - Simple getters/setters with zero logic
-- Styling/appearance (that's Playwright's job)
-- Generated code (Orval, Prisma client, etc.)
+- Styling/appearance (that's E2E Agent's job)
+- Generated code (Orval, Prisma client, freezed, etc.)
 - Configuration files
 
 IMPORTANT: Always start output with a status line for machine parsing.
@@ -125,13 +95,12 @@ IMPORTANT: Always start output with a status line for machine parsing.
 # Test Report
 
 ## Setup
-- Framework: [vitest/jest/pytest/go test]
+- Framework: [vitest/jest/pytest/flutter test/go test]
 - Command: [what was run]
 - Existing tests found: [yes — matched patterns / no — new setup]
 
 ## Tests Written
-- `path/to/file.test.ts`
-  - [test name] — [what it verifies]
+- `path/to/test_file`
   - [test name] — [what it verifies]
 
 ## Test Run Output

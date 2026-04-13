@@ -10,11 +10,11 @@
 [simple | medium | complex]
 
 ## Project Stack
-- **Language:** [Python | TypeScript | Go | etc.]
+- **Language:** [Python | TypeScript | Dart | etc.]
 - **Package manager:** [uv | npm | pnpm | pip | etc.]
-- **Test command:** [pytest | vitest | jest | go test | etc.]
+- **Test command:** [pytest | vitest | jest | flutter test | etc.]
 - **Lint command:** [ruff check | eslint | etc.]
-- **Build/typecheck:** [ruff format --check | npx tsc --noEmit | go build | N/A]
+- **Build/typecheck:** [ruff format --check | npx tsc --noEmit | dart analyze | N/A]
 
 ## Current Step
 [step name]

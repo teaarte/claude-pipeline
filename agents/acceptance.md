@@ -19,7 +19,6 @@ If not defined, detect and run standard checks for the detected language:
 - **Python:** ruff check → ruff format --check → pytest
 - **TypeScript/JS:** npx tsc --noEmit → npm run lint → npm run build
 - **Flutter/Dart:** dart analyze → dart format --set-exit-if-changed . → flutter test
-- **Go:** go vet → go build → go test
 - **Other:** whatever build/test/lint tools are configured
 
 ### 3. Check Each Acceptance Criterion

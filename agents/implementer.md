@@ -13,9 +13,9 @@ Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md
 4. Use patterns and reusable code from context-doc
 5. If a plan step is ambiguous → STOP and report the ambiguity before implementing
 6. Files must stay under ~200 lines — split as the plan specifies
-7. No loose typing (TS: `any`/`as any` | Python: bare `except:`, `# type: ignore` | Go: empty `interface{}`)
+7. No loose typing (TS: `any`/`as any` | Python: bare `except:`, `# type: ignore` | Dart: untyped `dynamic`)
 8. No commented-out code
-9. No debug statements (TS/JS: `console.log` | Python: `print()`, `breakpoint()` | Go: `fmt.Println` for debug)
+9. No debug statements (TS/JS: `console.log` | Python: `print()`, `breakpoint()` | Dart: `print()`, `debugPrint()` outside debug blocks)
 10. No TODOs unless the plan explicitly includes them
 11. **Checkpoint reporting (plans with 5+ steps):** After completing every 3-5 steps, output an interim status:
     - Steps completed so far
@@ -41,7 +41,7 @@ After all plan steps are complete (including test steps), run validation:
 2. **If no commands defined**, detect from project files and run:
    - Python: `ruff check` → `ruff format --check` → `pytest` (or `uv run pytest`)
    - TypeScript/JS: `npx tsc --noEmit` → `npm run lint` → `npm run build`
-   - Go: `go vet` → `go build` → `go test`
+   - Flutter/Dart: `dart analyze` → `dart format --set-exit-if-changed .` → `flutter test`
 3. **Run tests** — if test steps were in the plan, run the test command on the new test files
 
 If any fail — fix the errors inline. Do NOT return broken code to reviewers. Repeat until all pass.

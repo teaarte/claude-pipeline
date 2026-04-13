@@ -18,12 +18,14 @@ Output: `.claude/plan.md`
 Show plan. Ask: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Implementation
+**Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer. Restore with `git stash pop` if needed.
+
 1. Spawn subagent (model: **opus**) → `~/.claude/agents/implementer.md`
    Input: `.claude/plan.md` + inline context + `project_stack`
    No checkpoints (plan is ≤5 steps).
    Implementer writes both code AND tests (test steps are part of the plan).
 
-2. After implementation, spawn 2-3 parallel subagents:
+2. After implementation, run `git diff` to capture all changes. Spawn 2-3 parallel subagents, passing the diff output + changed file list:
    - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
    - Style Reviewer (model: **sonnet**) → `~/.claude/agents/style-reviewer.md`
    - Security Agent (model: **sonnet**) → `~/.claude/agents/security.md` — **only if** task touches auth, API routes, user input, or data handling. Skip for pure UI/config changes.

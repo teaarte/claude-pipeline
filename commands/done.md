@@ -22,7 +22,7 @@ Parse from pipeline-state.md:
 - **reviewers_with_blockers** — which specific reviewers found blockers, e.g. "Logic,Security" or "none"
 - **reviewer_verdicts** — compact summary, e.g. "Logic:APPROVE Style:APPROVE Security:WARN"
 - **tests_written** — count of new test files/cases created, or "0" if none, or "skip" if no test framework
-- **agents_count** — total number of subagents spawned during pipeline
+- **agents_count** — exact total number of subagents spawned during pipeline (count from pipeline-state.md progress entries, never approximate with `~`)
 - **verdict** — Gate 2 result (accepted/rejected)
 
 If `~/.claude/metrics/pipeline.md` doesn't exist, create it with the header row.
@@ -68,9 +68,7 @@ If no issues found: skip silently.
 - Keep only `settings.local.json` and `commands/` directory
 - Delete `PLANNING.md` in project root if it exists (debug agent artifact)
 
-Also scan for stale artifacts from previous crashed sessions:
-- Check other projects' `.claude/` dirs for orphaned `pipeline-state.md` files (last modified > 24h ago) — warn user
-- Check `~/.claude/metrics/agent-feedback.md` — if any agent has 3+ misses, remind: *"[Agent] has 3+ missed issues. Run `/agent-feedback` to review and update its definition."*
+Also check `~/.claude/metrics/agent-feedback.md` — if any agent has 3+ misses, remind: *"[Agent] has 3+ missed issues. Run `/agent-feedback` to review and update its definition."*
 
 ## 6. Commit Message
 Generate a conventional commit message based on all changes made during this session (`git diff` against the starting state). Follow the project's commit conventions from CLAUDE.md. Print it as plain text so the user can copy it:

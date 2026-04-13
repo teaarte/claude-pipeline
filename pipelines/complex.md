@@ -46,6 +46,7 @@ If project uses API codegen: ask if API spec has changed.
 Otherwise: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Implementation
+**Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer(s). Restore with `git stash pop` if needed.
 
 **If independent modules exist** (from `.claude/architecture-decisions.md`):
 Spawn parallel implementers (model: **opus**), each owning a module with no file overlap.
@@ -54,9 +55,9 @@ Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md` + `project_stac
 **Otherwise:** single Implementer (model: **opus**) with checkpoints every 3-5 steps.
 Implementer writes both code AND tests (test steps are part of the plan).
 
-After implementation, spawn 2 parallel reviewers:
-- Logic Reviewer (model: **opus**) on all changed code
-- Style Reviewer (model: **sonnet**) on all changed code
+After implementation, run `git diff` to capture all changes. Spawn 2 parallel reviewers, passing the diff output + changed file list:
+- Logic Reviewer (model: **opus**) on changed code
+- Style Reviewer (model: **sonnet**) on changed code
 
 If BLOCKING → one more iteration per module (max 2 total). Non-blocking → log.
 

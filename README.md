@@ -1,6 +1,6 @@
 # Claude Pipeline
 
-Multi-agent development pipeline for Claude Code. Supports **React, Next.js, NestJS, Python/FastAPI, Flutter/Dart, Go** — and extensible to any stack via reference files.
+Multi-agent development pipeline for Claude Code. Supports **React, Next.js, NestJS, Python/FastAPI, Flutter/Dart** — and extensible to any stack via reference files.
 
 Project-specific rules live in each project's CLAUDE.md. Platform-specific agent knowledge lives in `agents/references/`.
 
@@ -105,7 +105,7 @@ agents/references/
   e2e-flutter.md        integration_test process and rules
 ```
 
-**Adding a new platform** (e.g. Kotlin/Android): create `perf-kotlin.md`, `test-kotlin.md`, `ui-android.md`, `e2e-android.md` — no agent files need changing.
+**Adding a new platform** (e.g. Go, Kotlin/Android): create `perf-go.md`, `test-go.md`, etc. — no agent files need changing.
 
 ## Pipeline Flow
 
@@ -119,9 +119,10 @@ agents/references/
   +- STEP 3:  Context enrichment (agents read codebase)
   +- STEP 4:  Planning (competing planners for complex)
   +- Gate 1 — human reviews plan
-  +- STEP 5:  Implementation (code + tests)
+  +- STEP 5:  Implementation (code + tests) — rollback stash created first
   +- STEP 5b: Test verification
   +- STEP 6:  Validation (lint, typecheck, acceptance)
+  +- STEP 7:  Final report (Orchestrator)
   +- Gate 2 — human accepts → /code-review → /done
 ```
 
@@ -142,7 +143,7 @@ agents/references/
 ## Key Features
 
 ### Multi-Platform Support
-Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart, Go.
+Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart.
 
 ### Mandatory Tests
 Every plan includes test steps. Implementer writes code AND tests. STEP 5b verifies they pass. Acceptance Agent checks test coverage. Metrics track `tests_written`.
@@ -159,6 +160,8 @@ Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persis
 Pipeline state saved after every agent completion. `/task-continue` resumes from exact point.
 
 ## Model Routing
+
+Canonical table is in `commands/task.md`. Simplified view:
 
 | Agent | simple/medium | complex |
 |-------|:------------:|:-------:|

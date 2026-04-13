@@ -18,7 +18,7 @@ Output: `.claude/plan.md`
 - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
 - Style Reviewer (model: **sonnet**) → `~/.claude/agents/style-reviewer.md`
 
-Exit when: both APPROVE — or 3 iterations reached (warn user, ask to proceed).
+Exit when: both APPROVE — or 2 iterations reached (warn user, ask to proceed).
 
 ### ⛔ HUMAN GATE 1
 Show plan.
@@ -26,6 +26,7 @@ If project uses API codegen (Orval, OpenAPI generator, etc.): ask if API spec ha
 Otherwise: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Implementation
+**Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer. Restore with `git stash pop` if needed.
 
 1. Spawn Implementer (model: **opus**) → `~/.claude/agents/implementer.md`
    Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack`
@@ -34,7 +35,7 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
    **Checkpoints (5+ step plans):** Implementer pauses every 3-5 steps with interim report.
    If concerns → spawn Logic Reviewer (model: **opus**) on changed files. If BLOCKING → fix before continuing.
 
-2. After implementation, spawn 4 parallel reviewers:
+2. After implementation, run `git diff` to capture all changes. Spawn 4 parallel reviewers, passing the diff output + changed file list:
    - Logic Reviewer (model: **opus**)
    - Style Reviewer (model: **sonnet**)
    - Security Agent (model: **sonnet**) → `~/.claude/agents/security.md`

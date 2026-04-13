@@ -11,7 +11,7 @@ Read `project_stack` from Orchestrator context or detect from code:
 - Flutter / Dart → read `agents/references/perf-flutter.md`
 - Python / FastAPI → read `agents/references/perf-python.md`
 - NestJS / Node.js → read `agents/references/perf-nestjs.md`
-- Multiple stacks (fullstack) → read all relevant references
+- Multiple stacks (fullstack) → read all relevant reference files
 
 ### 2. Review
 Apply checks from the loaded reference(s) to the changed code. Only flag things that will actually matter at realistic usage scale.

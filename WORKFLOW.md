@@ -68,7 +68,6 @@ pubspec.yaml      → Flutter/Dart    → loads references/perf-flutter.md, ui-f
 package.json      → React/Next.js   → loads references/perf-react.md, ui-web.md, etc.
 @nestjs imports   → NestJS          → loads references/perf-nestjs.md, test-nestjs.md
 pyproject.toml    → Python/FastAPI  → loads references/perf-python.md, test-python.md
-go.mod            → Go              → built-in checks
 ```
 
 All agents receive `project_stack` and load the correct reference files. You never need to tell agents what language you're using.

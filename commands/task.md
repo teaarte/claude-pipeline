@@ -47,10 +47,10 @@ If the task description is **vague, open-ended, or describes a new feature witho
 
 ### 1a. Detect Project Stack
 Read CLAUDE.md "Validation Commands" section + check project root files. Determine:
-- **Language:** Python / TypeScript / Go / etc.
+- **Language:** Python / TypeScript / Dart / etc.
 - **Package manager:** uv / npm / pnpm / pip / etc.
 - **Lint command:** ruff check / eslint / etc.
-- **Test command:** pytest / vitest / jest / go test / etc.
+- **Test command:** pytest / vitest / jest / flutter test / etc.
 - **Build/typecheck command:** (if applicable)
 
 Record this as `project_stack` in `.claude/pipeline-state.md` and pass to ALL agents as context.
@@ -89,13 +89,13 @@ Ask: *"Does this classification look right? Any corrections before I start?"*
 
 ---
 
-## STEP 3 through STEP 7
+## STEP 3 through STEP 6
 
-Follow `~/.claude/pipelines/[complexity].md` for all remaining steps.
+Follow `~/.claude/pipelines/[complexity].md` for Steps 3–6 (including sub-step 5b).
 
 ---
 
-## STEP 7 — Final Report
+## STEP 7 — Final Report (Orchestrator, not in pipeline files)
 
 ### ⛔ HUMAN GATE 2
 Present:
@@ -147,7 +147,10 @@ For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 5. Pass each subagent only what it needs — not the full conversation. Always include `project_stack`.
 6. Always record which reviewers ran and their verdicts in pipeline-state.md
 7. On plan revision: Planner gets ONLY latest review feedback + task + context-doc. No previous plan versions — feedback already captures what to fix.
-8. All reviewer/validator agents output `<!-- STATUS: X -->` on first line for machine parsing (see `~/.claude/templates/agent-output-formats.md`)
+8. All reviewer/validator agents output `<!-- STATUS: X -->` within the **first 5 lines** for machine parsing (see `~/.claude/templates/agent-output-formats.md`)
+9. **Rollback safety:** Before STEP 5 (Implementation), run `git stash push -m "pre-implementation-[task-short-name]"` to save a rollback point. If implementation fails catastrophically, restore with `git stash pop`. Do NOT create intermediate commits — the user commits when the task is done.
+10. **Diff-scoped review:** When spawning reviewers, pass `git diff` output (not just file names) so reviewers focus on actual changes, not entire files. Run `git diff` and include the output in each reviewer's context.
+11. **Exact counts in pipeline-state.md:** Record exact agent counts and iteration numbers, never approximations (no `~N`). Parse from actual spawned agent count.
 
 ## Issue Collection
 

@@ -15,7 +15,7 @@ For each agent in `~/.claude/agents/*.md`:
 ### 2. Pipeline Files
 For each pipeline in `~/.claude/pipelines/*.md`:
 - All referenced agent paths exist (e.g. `~/.claude/agents/planner.md`)
-- STEP numbers are sequential (no gaps, no duplicates)
+- STEP numbers are sequential (sub-steps like 5b are allowed, no major gaps or duplicates)
 - At least one Human Gate exists
 
 ### 3. Command Files

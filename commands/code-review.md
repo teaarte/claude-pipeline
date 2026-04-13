@@ -6,22 +6,24 @@ Run a multi-agent code review on all changes in the current session.
 
 ## Process
 
-### 1. Collect changed files
-Run `git diff --name-only` (unstaged + staged) to get the list of changed/created files.
-If no changes found, check `git diff --cached --name-only` and `git status`.
+### 1. Collect changes
+Run `git diff` (full diff, not just names) and `git diff --name-only` to get both the diff content and file list.
+If no changes found, check `git diff --cached` and `git status`.
 If still nothing — tell the user there's nothing to review.
 
 ### 2. Read CLAUDE.md
 Load project conventions — reviewers need this as context.
 
-### 3. Spawn 4 review agents in parallel
+### 3. Spawn 5 review agents in parallel
 
-All agents receive: list of changed files + CLAUDE.md conventions + instruction to read the changed files themselves.
+All agents receive: `git diff` output + list of changed files + CLAUDE.md conventions.
+Passing the diff (not just file names) focuses reviewers on actual changes.
 
 | Agent | Model | File |
 |-------|-------|------|
 | Logic Reviewer | opus | `~/.claude/agents/logic-reviewer.md` |
 | Style Reviewer | sonnet | `~/.claude/agents/style-reviewer.md` |
+| Security Agent | sonnet | `~/.claude/agents/security.md` |
 | Performance Agent | sonnet | `~/.claude/agents/performance.md` |
 | Dependency Auditor | sonnet | `~/.claude/agents/dependency-auditor.md` |
 
@@ -40,6 +42,7 @@ Parse each agent's `<!-- STATUS: X -->` line.
 |-------------|------------------|----------|--------------|
 | Logic       | APPROVE/CHANGES  | N        | N            |
 | Style       | APPROVE/CHANGES  | N        | N            |
+| Security    | APPROVE/CHANGES  | N        | N            |
 | Performance | APPROVE/CHANGES  | N        | N            |
 | Dependency  | —                | N/A      | N/A          |
 

@@ -28,7 +28,7 @@ Check that the KB path exists and has the expected structure. If not, create it:
 Read systematically — do NOT skim:
 
 **Project identity:**
-- `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml` — name, language, deps, scripts
+- `package.json`, `pyproject.toml`, `pubspec.yaml`, `Cargo.toml` — name, language, deps, scripts
 - `README.md` — project description
 - `CLAUDE.md` — if exists, extract architecture and patterns
 - `Dockerfile`, `docker-compose.yml` — deployment setup
@@ -65,7 +65,7 @@ Read systematically — do NOT skim:
 **Known issues:**
 - Scan for TODOs/FIXMEs in source files (adapt to project language):
   ```bash
-  grep -r "TODO\|FIXME\|HACK\|XXX" src/ --include="*.ts" --include="*.tsx" --include="*.py" --include="*.go" --include="*.rs" --include="*.java" --include="*.js" --include="*.jsx" | head -30
+  grep -r "TODO\|FIXME\|HACK\|XXX" src/ --include="*.ts" --include="*.tsx" --include="*.py" --include="*.dart" --include="*.rs" --include="*.java" --include="*.js" --include="*.jsx" | head -30
   ```
 - Any obvious anti-patterns found during scan
 

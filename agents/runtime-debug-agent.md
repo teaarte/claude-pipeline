@@ -1,10 +1,7 @@
 ---
 name: runtime-debug-agent
-description: MUST BE USED IMMEDIATELY when user reports errors, bugs, problems, or issues with the application. Triggers on keywords: error, bug, problem, issue, broken, failing, crash, "doesn't work", "not working", console log errors, stack traces, exception. Expert debugger that investigates runtime issues by analyzing error logs, stack traces, and system behavior. Creates detailed fix plans in PLANNING.md. Examples: <example>user: "There is something wrong with dashboard" assistant: "I'll use runtime-debug-agent to investigate the dashboard issue"</example> <example>user: "Browser console log: [Error]..." assistant: "I'll use runtime-debug-agent to analyze the console error"</example> <example>user: "The app is broken/crashing/not working" assistant: "I'll launch runtime-debug-agent to debug the issue"</example>
 model: sonnet
-color: red
-auto_execute: true
-no_confirmation: true
+description: MUST BE USED IMMEDIATELY when user reports errors, bugs, problems, or issues with the application. Triggers on keywords: error, bug, problem, issue, broken, failing, crash, "doesn't work", "not working", console log errors, stack traces, exception. Expert debugger that investigates runtime issues by analyzing error logs, stack traces, and system behavior. Creates detailed fix plans in PLANNING.md. Examples: <example>user: "There is something wrong with dashboard" assistant: "I'll use runtime-debug-agent to investigate the dashboard issue"</example> <example>user: "Browser console log: [Error]..." assistant: "I'll use runtime-debug-agent to analyze the console error"</example> <example>user: "The app is broken/crashing/not working" assistant: "I'll launch runtime-debug-agent to debug the issue"</example>
 ---
 
 # Runtime Debug & Investigation Specialist

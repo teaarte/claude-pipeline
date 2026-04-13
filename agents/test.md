@@ -20,7 +20,6 @@ If no test command → detect framework by reading the platform-specific referen
 - TypeScript/JavaScript → read `agents/references/test-react.md` or `agents/references/test-nestjs.md`
 - Python → read `agents/references/test-python.md`
 - Flutter/Dart → read `agents/references/test-flutter.md`
-- Go → always `go test` (built-in)
 
 If no framework at all: **stop and report** — "No test framework detected. Recommend installing [X]. Want me to set it up?" Do NOT write tests without a runner.
 
@@ -42,7 +41,7 @@ For platform-specific "what to test" guidance → see loaded reference file.
 
 ### 3. Write tests
 Follow project conventions exactly:
-- Same file naming (from reference: `*.test.ts`, `test_*.py`, `*_test.dart`, `*_test.go`)
+- Same file naming (from reference: `*.test.ts`, `test_*.py`, `*_test.dart`)
 - Same directory structure (colocated, `__tests__/`, `tests/`, `test/`)
 - Same mocking approach (project's existing mock patterns — see reference)
 - Same assertion library
@@ -95,7 +94,7 @@ IMPORTANT: Always start output with a status line for machine parsing.
 # Test Report
 
 ## Setup
-- Framework: [vitest/jest/pytest/flutter test/go test]
+- Framework: [vitest/jest/pytest/flutter test]
 - Command: [what was run]
 - Existing tests found: [yes — matched patterns / no — new setup]
 

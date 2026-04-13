@@ -13,23 +13,25 @@ Task description + complexity + project structure from CLAUDE.md
 4. Flag shared types, utilities, hooks, API contracts involved
 5. Identify consumers of what's being changed
 
-## Output
-```
-DIRECT_FILES:
+## Output — save as `.claude/dependency-audit.md`
+```markdown
+# Dependency Audit
+
+## Direct Files
 - path/to/file — reason it changes
 
-INDIRECT_DEPENDENCIES:
+## Indirect Dependencies
 - path/to/other — why it's affected
 
-SHARED_CODE_AFFECTED:
+## Shared Code Affected
 - [types/models/schemas file] — [what changes]
 
-CONSUMERS_TO_CHECK:
+## Consumers to Check
 - [file that imports from changed code] — [why it's affected]
 
-RISK_AREAS:
+## Risk Areas
 - [high-risk spots where changes could silently break things]
 
-PLANNER_NOTE:
+## Planner Note
 [What the planner must pay special attention to]
 ```

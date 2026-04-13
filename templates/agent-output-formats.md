@@ -36,8 +36,9 @@ These produce data documents, not verdicts:
 
 ## Parsing Rules
 
-1. Read FIRST line of agent output
-2. Extract: `<!-- STATUS: (.+) -->`
-3. REQUEST_CHANGES or FAIL → check "## Blocking Issues" section
-4. APPROVE/PASS/WARN → proceed
-5. Non-blocking issues → log in pipeline-state.md
+1. Scan the **first 5 lines** of agent output (agents may emit a blank line or preamble before status)
+2. Extract first match of: `<!-- STATUS: (.+) -->`
+3. If no match in first 5 lines → treat as agent error, log warning, ask agent to re-emit with status
+4. REQUEST_CHANGES or FAIL → check "## Blocking Issues" section
+5. APPROVE/PASS/WARN → proceed
+6. Non-blocking issues → log in pipeline-state.md

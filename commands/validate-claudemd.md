@@ -7,16 +7,17 @@ Audit the current project's CLAUDE.md for completeness, correctness, and token e
 ### 1. Check file exists
 Read `CLAUDE.md` in project root. If missing: *"No CLAUDE.md found. Run `/init-claudemd` to create one."*
 
-### 2. Required sections check
-Verify these sections exist and are non-empty:
+### 2. Required sections check (CRITICAL — pipeline quality depends on these)
+Verify these sections exist, are non-empty, AND meet quality bar:
 
-| Section | Why required |
-|---------|-------------|
-| **Validation Commands** | Pipeline reads these to run typecheck/build/lint/test |
-| **Architecture** (or directory structure) | Code Analyzer and Planner need this to place files correctly |
-| **What NOT to Do** | Prevents repeated mistakes |
+| Section | Why required | Quality check |
+|---------|-------------|---------------|
+| **Validation Commands** | Pipeline reads these to run checks | Must have 2+ real commands. Try running each — report broken ones. No placeholders like `[command]` or `TODO`. |
+| **Architecture** (or directory structure) | Code Analyzer and Planner use this | Must include a directory tree. Must describe what each directory contains. Must match actual `ls` output. |
+| **What NOT to Do** | Prevents repeated mistakes | Must have 5+ specific rules. Each must describe a concrete mistake (not generic "don't write bad code"). Must be project-specific. |
 
-Mark each: PRESENT / MISSING / EMPTY.
+Mark each: PRESENT+GOOD / PRESENT+WEAK / MISSING / EMPTY.
+**PRESENT+WEAK** = section exists but fails quality check (e.g. generic rules, placeholder commands, missing directory tree).
 
 ### 3. Recommended sections check
 | Section | Why recommended |
@@ -28,17 +29,19 @@ Mark each: PRESENT / MISSING / EMPTY.
 Mark each: PRESENT / MISSING.
 
 ### 4. Validation Commands verification
-Check that the "Validation Commands" section has at least 2 commands defined.
+Check that the "Validation Commands" section has at least 2 real commands defined.
 
 Common keys (not all required — depends on language):
 - **Lint:** — required for all projects
 - **Test:** — recommended (Test Agent needs this)
-- **Typecheck/Build:** — required for compiled languages (TS, Go), optional for Python
+- **Typecheck/Build:** — required for compiled languages (TS), optional for Python
 - **Format:** — recommended
 
 For each command found:
+- Reject placeholders: `[command]`, `TODO`, `...`, empty backticks
 - Try running it (dry-run if possible, or just check the command/binary exists)
 - Verify it matches actual project setup (e.g. `npx tsc` but no `typescript` in deps = broken; `ruff check` but no `ruff` in dev deps = broken)
+- Check command format matches what pipeline expects: commands should be inside backticks on their own line (e.g. `Lint: \`ruff check\``), not buried in prose
 
 ### 5. Accuracy check
 Cross-reference CLAUDE.md claims against actual project:
@@ -66,11 +69,11 @@ Cross-reference CLAUDE.md claims against actual project:
 # CLAUDE.md Audit
 
 ## Required Sections
-| Section | Status |
-|---------|--------|
-| Validation Commands | PRESENT/MISSING/EMPTY |
-| Architecture | PRESENT/MISSING/EMPTY |
-| What NOT to Do | PRESENT/MISSING/EMPTY |
+| Section | Status | Quality |
+|---------|--------|---------|
+| Validation Commands | PRESENT/MISSING/EMPTY | GOOD/WEAK (reason) |
+| Architecture | PRESENT/MISSING/EMPTY | GOOD/WEAK (reason) |
+| What NOT to Do | PRESENT/MISSING/EMPTY | GOOD/WEAK (reason) |
 
 ## Recommended Sections
 | Section | Status |

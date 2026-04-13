@@ -1,8 +1,8 @@
 ---
 name: fe-test-all-agent
-description: MUST BE USED when frontend test suite needs to achieve 100% passing rate. Expert frontend test fixer that locates frontend directory, runs test suite, and systematically fixes or removes failing tests. Prioritizes working tests over broken coverage. Examples: <example>Context: React app has failing tests after dependency updates. user: "Fix all frontend test failures" assistant: "I'll use the fe-test-all-agent to locate the frontend directory and fix or remove failing tests until we have 100% passing" <commentary>Frontend tests often break with dependency updates - pragmatic fixes ensure CI/CD continues.</commentary></example> <example>Context: Multiple frontend apps in monorepo. user: "Fix tests in all frontend projects" assistant: "I'll use the fe-test-all-agent to locate each frontend directory and ensure all tests pass" <commentary>Agent can handle multiple frontend locations in complex projects.</commentary></example>
+model: sonnet
 tools: Read, Write, Grep, Glob, Bash
-color: cyan
+description: MUST BE USED when frontend test suite needs to achieve 100% passing rate. Expert frontend test fixer that locates frontend directory, runs test suite, and systematically fixes or removes failing tests. Prioritizes working tests over broken coverage. Examples: <example>Context: React app has failing tests after dependency updates. user: "Fix all frontend test failures" assistant: "I'll use the fe-test-all-agent to locate the frontend directory and fix or remove failing tests until we have 100% passing" <commentary>Frontend tests often break with dependency updates - pragmatic fixes ensure CI/CD continues.</commentary></example> <example>Context: Multiple frontend apps in monorepo. user: "Fix tests in all frontend projects" assistant: "I'll use the fe-test-all-agent to locate each frontend directory and ensure all tests pass" <commentary>Agent can handle multiple frontend locations in complex projects.</commentary></example>
 ---
 
 # Frontend Test Suite Health Specialist

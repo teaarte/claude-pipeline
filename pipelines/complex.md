@@ -2,9 +2,10 @@
 
 ## STEP 3 — Context Enrichment
 
-**Phase A** (sequential):
-Spawn Dependency Auditor (model: **sonnet**) → `~/.claude/agents/dependency-auditor.md`
-Wait for `.claude/dependency-audit.md`.
+**Phase A:** Dependency Auditor was launched in background during Gate 0 (see `task.md` STEP 2).
+Collect its result (`.claude/dependency-audit.md`) now. If not yet complete, wait.
+If NOT launched (e.g. reclassified from SIMPLE/MEDIUM), spawn now:
+Dependency Auditor (model: **sonnet**) → `~/.claude/agents/dependency-auditor.md`
 
 **Phase B** (parallel, after Phase A):
 - Code Analyzer (model: **opus**) → `~/.claude/agents/code-analyzer.md` (Input: task + dependency-audit)
@@ -16,20 +17,30 @@ Input: task + `.claude/context-doc.md` + `.claude/dependency-audit.md`
 
 ## STEP 4 — Planning
 
-**4a: Competing Planners** — spawn 3 parallel subagents (model: **opus**), each reading `~/.claude/agents/planner.md`:
+**4a: Competing Planners (Agent Team)** — spawn a planning team using `TeamCreate`:
 
-- **Minimalist**: simplest plan satisfying all criteria. Prefer existing patterns, reuse everything.
-- **Robust**: most reliable plan. Prioritize error handling, edge cases, resilience.
-- **Reuse**: maximize reuse of existing code. Every step references existing hooks/utils/components.
+Create a team with a **Lead (Synthesizer)** and 3 teammates:
 
-All read: task + `.claude/context-doc.md` + `.claude/dependency-audit.md`.
-Each writes to `.claude/plan-[minimalist|robust|reuse].md`.
+> "We need an implementation plan for: **[task description]**
+>
+> Context files: `.claude/context-doc.md`, `.claude/dependency-audit.md`, `.claude/architecture-decisions.md` (if exists).
+> Each planner reads `~/.claude/agents/planner.md` for output format.
+>
+> Create 3 teammates with competing mandates:
+> - **Minimalist**: simplest plan satisfying all criteria. Prefer existing patterns, reuse everything.
+> - **Robust**: most reliable plan. Prioritize error handling, edge cases, resilience.
+> - **Reuse**: maximize reuse of existing code. Every step references existing hooks/utils/components.
+>
+> Rules:
+> 1. Each teammate writes their plan to `.claude/plan-[minimalist|robust|reuse].md`
+> 2. After all plans are written, teammates review each other's plans: challenge weak spots, flag missed edge cases, point out existing code the others missed
+> 3. Lead synthesizes into `.claude/plan.md` taking:
+>    - Structure from the clearest plan
+>    - Error handling from the robust plan
+>    - Reuse opportunities from the reuse plan
+>    - Add a synthesis note at top explaining what was taken from each"
 
-**Orchestrator synthesizes** into `.claude/plan.md`:
-- Structure from clearest plan
-- Error handling from robust plan
-- Reuse opportunities from reuse plan
-- Synthesis note at top
+**Fallback:** If team spawning fails, fall back to 3 parallel independent planners + orchestrator synthesizes (same mandates, no cross-review).
 
 **4b: Plan Review** — spawn 4 parallel reviewers:
 - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`

@@ -26,6 +26,7 @@
 
 ### Context Phase
 - [ ] Complexity Classification
+- [ ] Background enrichment launched (MEDIUM/COMPLEX only)
 - [ ] HUMAN GATE 0
 
 ### Planning Phase

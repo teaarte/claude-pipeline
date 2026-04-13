@@ -33,7 +33,12 @@ For each command in `~/.claude/commands/*.md`:
 - No agent appears in pipeline files but missing from routing table
 - No agent in routing table that doesn't exist as a file
 
-### 6. Metrics Integrity
+### 6. Feature Consistency
+- `task.md` mentions background enrichment → pipeline files (medium.md, complex.md) reference it in STEP 3
+- `complex.md` mentions TeamCreate for planners → fallback to parallel planners is documented
+- `task.md` Global Rules count matches actual rule numbers (no gaps)
+
+### 7. Metrics Integrity
 - `~/.claude/metrics/pipeline.md` — header row matches expected columns
 - `~/.claude/metrics/agent-feedback.md` — header row matches expected columns
 

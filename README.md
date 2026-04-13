@@ -17,7 +17,7 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 ### Review & Quality
 | Command | When to use |
 |---------|-------------|
-| `/code-review` | 4-agent parallel review on current changes |
+| `/code-review` | 5-agent parallel review on current changes |
 | `/sweep [filter]` | Review and fix accumulated tech debt |
 | `/validate-pipeline` | Self-test pipeline config integrity |
 | `/validate-claudemd` | Audit CLAUDE.md for completeness |
@@ -116,7 +116,8 @@ agents/references/
   +- STEP 0:  Brainstorming (if scope unclear)
   +- STEP 1:  Stack detection + complexity classification
   +- STEP 2:  Gate 0 — human confirms (skipped for SIMPLE)
-  +- STEP 3:  Context enrichment (agents read codebase)
+  |           + enrichment agents launched in background for MEDIUM/COMPLEX
+  +- STEP 3:  Context enrichment (collect background results + remaining agents)
   +- STEP 4:  Planning (competing planners for complex)
   +- Gate 1 — human reviews plan
   +- STEP 5:  Implementation (code + tests) — rollback stash created first
@@ -131,7 +132,7 @@ agents/references/
 | Step | SIMPLE | MEDIUM | COMPLEX |
 |------|--------|--------|---------|
 | Context | Inline (orchestrator) | Dep Auditor + Code Analyzer | + Architect |
-| Planning | 1 Planner, no review | 1 Planner + 2 reviewers | 3 competing Planners + 4 reviewers |
+| Planning | 1 Planner, no review | 1 Planner + 2 reviewers | Planner Team (3 competing + cross-review) + 4 reviewers |
 | Implementation | 1 Implementer | 1 Implementer + checkpoints | Parallel per module |
 | Code Review | Logic + Style + Security* | Logic + Style + Security + Perf | Same |
 | Tests | Implementer writes + STEP 5b | Same + Test Agent fallback | Same + E2E |
@@ -155,6 +156,12 @@ Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persis
 1. `/done` records metrics (complexity, iterations, blockers, tests, reviewer verdicts)
 2. `/metrics-report` calculates reviewer effectiveness, detects over-classification
 3. `/agent-feedback` logs missed issues, suggests agent definition updates
+
+### Background Enrichment
+MEDIUM/COMPLEX tasks launch enrichment agents in the background during Gate 0 — they work while you review the classification. By the time you confirm, context is already gathered.
+
+### Agent Teams for COMPLEX Planning
+COMPLEX tasks use agent teams (not independent parallel agents) for competing planners. Three planners with different mandates (minimalist/robust/reuse) see each other's work, challenge weak spots, and the lead synthesizes the final plan. Better than orchestrator synthesis because planners cross-review before the plan is finalized.
 
 ### Cross-Session Recovery
 Pipeline state saved after every agent completion. `/task-continue` resumes from exact point.

@@ -75,7 +75,7 @@ If NEEDS_REVISION → revise plan (max 1 more iteration). Then:
 Show `.claude/plan.md`. Ask: *"Fix plan ready. Confirm to proceed with implementation?"*
 **Wait for approval.**
 
-Then rejoin the main `/task` pipeline: execute **STEP 5** (Implementation), **STEP 6** (Validation), **STEP 7** (Post-Processing), and **STEP 8** (Final Report with Gate 2) from `~/.claude/commands/task.md`. `/debug-team` is an alternative entry point for bugs with unclear root cause — once the fix plan is approved, the rest of the flow is identical to `/task`.
+Then rejoin the main `/task` pipeline: execute **STEP 5** (Implementation), **STEP 5b** (Test Verification), **STEP 6** (Validation), and **STEP 7** (Final Report with Gate 2) from `~/.claude/commands/task.md`. `/debug-team` is an alternative entry point for bugs with unclear root cause — once the fix plan is approved, the rest of the flow is identical to `/task`.
 
 ---
 

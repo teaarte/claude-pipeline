@@ -80,8 +80,15 @@ Show: Complexity + what will change. *"Classified as SIMPLE. Starting immediatel
 
 ### MEDIUM/COMPLEX — standard Gate 0:
 
+**Background enrichment:** Before showing Gate 0, launch enrichment agents with `run_in_background: true` so they work while the user reviews classification:
+- **MEDIUM:** Dependency Auditor + Code Analyzer (parallel, in background)
+- **COMPLEX:** Dependency Auditor only (Phase A — later phases depend on its output)
+
+These run silently. If user rejects at Gate 0, discard their results.
+
 ### ⛔ HUMAN GATE 0
 Show: complexity + reasoning + agents involved + clarifying questions (if any).
+Mention: *"Enrichment agents are already running in the background."*
 Ask: *"Does this classification look right? Any corrections before I start?"*
 **Wait for confirmation.**
 
@@ -151,6 +158,8 @@ For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 9. **Rollback safety:** Before STEP 5 (Implementation), run `git stash push -m "pre-implementation-[task-short-name]"` to save a rollback point. If implementation fails catastrophically, restore with `git stash pop`. Do NOT create intermediate commits — the user commits when the task is done.
 10. **Diff-scoped review:** When spawning reviewers, pass `git diff` output (not just file names) so reviewers focus on actual changes, not entire files. Run `git diff` and include the output in each reviewer's context.
 11. **Exact counts in pipeline-state.md:** Record exact agent counts and iteration numbers, never approximations (no `~N`). Parse from actual spawned agent count.
+12. **Background enrichment:** For MEDIUM/COMPLEX, launch enrichment agents with `run_in_background: true` during Gate 0 wait time. If user rejects classification, discard results. If user confirms, collect results at STEP 3. Count background agents in `agents_count`.
+13. **Agent teams:** COMPLEX planning uses `TeamCreate` for competing planners (see `pipelines/complex.md`). Teams are preferred over independent parallel agents when agents benefit from seeing each other's work and challenging conclusions. Do NOT use teams for reviewers — independent perspectives are more valuable than consensus.
 
 ## Issue Collection
 

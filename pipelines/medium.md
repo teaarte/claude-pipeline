@@ -1,10 +1,15 @@
 # Pipeline: MEDIUM
 
 ## STEP 3 — Context Enrichment
-Spawn in parallel (model: **sonnet**):
+Dependency Auditor and Code Analyzer were launched in background during Gate 0 (see `task.md` STEP 2).
+Collect their results now. If not yet complete, wait.
+
+If enrichment was NOT launched (e.g. reclassified from SIMPLE), spawn now in parallel (model: **sonnet**):
 - Dependency Auditor → `~/.claude/agents/dependency-auditor.md` (Input: task + complexity)
 - Code Analyzer → `~/.claude/agents/code-analyzer.md` (Input: task)
-- Research Agent (model: **opus**) → `~/.claude/agents/research.md` (only if new lib/API/pattern needed)
+
+Additionally, if new lib/API/pattern needed:
+- Research Agent (model: **opus**) → `~/.claude/agents/research.md`
 
 Wait for all to complete.
 

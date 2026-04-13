@@ -10,8 +10,33 @@
 
 ## Rules
 - Use `IntegrationTestWidgetsFlutterBinding.ensureInitialized()`
-- Find widgets via `find.byType`, `find.byKey`, `find.text` — prefer `Key` for stability
+- Find widgets via `find.byKey`, `find.byType`, `find.text` — prefer `Key` for stability
 - Use `tester.pumpAndSettle()` after actions, not arbitrary delays
 - Mock backend via dependency injection / provider overrides, not real network
 - Group tests with `group()` per feature
 - Test on at least one platform (Android emulator or iOS simulator)
+
+## pumpAndSettle Timeout
+Default timeout is 10 seconds. Increase for screens with long animations:
+```dart
+await tester.pumpAndSettle(const Duration(seconds: 30));
+```
+If pumpAndSettle never settles (infinite animation like a progress indicator), use `pump()` with specific duration instead.
+
+## Screenshots
+Capture screenshots during tests for debugging or visual regression:
+```dart
+final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+await binding.takeScreenshot('step_name');
+```
+
+## CI Execution
+- Android: run on emulator started in CI (`flutter emulator --launch`)
+- iOS: run on simulator (`open -a Simulator`)
+- Or use Firebase Test Lab / AWS Device Farm for real devices
+- Integration tests require a running device — cannot run headless like unit tests
+
+## Platform Permissions
+- Camera, location, storage permissions need to be pre-granted in test setup
+- Android: use `adb shell pm grant` in CI before running tests
+- iOS: use `simctl privacy` to grant permissions to simulator

@@ -6,16 +6,56 @@
 - Neither → recommend pytest
 
 ## What to Test
-**API Endpoints (backend):**
+**API Endpoints:**
 - Request validation (missing fields, wrong types)
 - Success response shape
 - Error responses (401, 403, 404, 422)
 - Auth guard behavior
 
+**Services / Business Logic:**
+- Input → output mapping
+- Edge cases (empty, null, boundary values)
+- Error handling paths
+
 ## File Naming
 `test_*.py` in `tests/` directory
 
+## Fixtures
+- Use `conftest.py` for shared fixtures
+- Scope correctly: `function` (default), `module`, `session`
+- Compose fixtures — small focused fixtures combined in tests
+- Factory fixtures for creating test data with overrides
+
+## Parametrize
+Use `@pytest.mark.parametrize` for testing multiple inputs:
+```python
+@pytest.mark.parametrize("input,expected", [
+    ("valid", True),
+    ("", False),
+    (None, False),
+])
+def test_validate(input, expected):
+    assert validate(input) == expected
+```
+
+## Async Testing
+- `@pytest.mark.asyncio` for async test functions
+- `AsyncMock` for mocking async dependencies
+- `pytest-asyncio` plugin with `asyncio_mode = "auto"` in config
+
+## FastAPI-Specific
+- `httpx.AsyncClient` with `ASGITransport(app=app)` for async endpoint tests
+- Override dependencies via `app.dependency_overrides[get_db] = mock_db`
+- Test lifespan events separately if they have side effects
+
 ## Mocking
-- `pytest` fixtures
-- `unittest.mock.AsyncMock` / `MagicMock`
-- `pytest-asyncio` for async tests
+- `unittest.mock.AsyncMock` / `MagicMock` for dependencies
+- `pytest` fixtures for DB/connection setup
+- `monkeypatch` for env vars and simple attribute patches
+- `pytest.raises(ExceptionType)` for exception assertions
+
+## Do NOT
+- Use `mock.patch` on the thing being tested
+- Hardcode dates — use `freezegun` or fixture
+- Rely on test execution order
+- Leave real network calls in unit tests

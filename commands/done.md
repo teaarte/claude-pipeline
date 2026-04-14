@@ -8,7 +8,14 @@ Post-task checklist. Run through all steps.
 Run validation commands from CLAUDE.md (look for "Validation Commands" section). Fix any errors before proceeding.
 
 ## 2. Pipeline Metrics
-If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metrics and append to `~/.claude/metrics/pipeline.md`:
+If `.claude/pipeline-state.md` exists (task was run via `/task`), extract metrics and append to `~/.claude/metrics/pipeline.md`.
+
+If `.claude/pipeline-state.md` does NOT exist but the session clearly used `/task` (check conversation history for `/task` invocation), this is a **pipeline violation** — the Orchestrator forgot to create it. In this case:
+1. Print warning: *"WARNING: `/task` was invoked but `pipeline-state.md` was never created. This is a pipeline bug — metrics are incomplete. Reconstructing from conversation history."*
+2. Reconstruct metrics manually from the conversation (agent calls, reviewer verdicts, etc.) and save them.
+3. Record `pipeline_violation: missing-state-file` in the metrics row as metadata.
+
+Metrics format:
 
 ```
 | date | project | task (short) | complexity | plan_iters | impl_iters | blockers_found | reviewers_with_blockers | reviewer_verdicts | tests_written | agents_count | verdict |

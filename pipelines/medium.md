@@ -1,5 +1,7 @@
 # Pipeline: MEDIUM
 
+> **GUARD:** Verify `.claude/pipeline-state.md` exists before proceeding. If missing — STOP and create it from `~/.claude/templates/pipeline-state.md` first. This is non-negotiable.
+
 ## STEP 3 — Context Enrichment
 Dependency Auditor and Code Analyzer were launched in background during Gate 0 (see `task.md` STEP 2).
 Collect their results now. If not yet complete, wait.

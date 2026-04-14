@@ -1,5 +1,7 @@
 # Pipeline: SIMPLE
 
+> **GUARD:** Verify `.claude/pipeline-state.md` exists before proceeding. If missing — STOP and create it from `~/.claude/templates/pipeline-state.md` first. This is non-negotiable.
+
 ## STEP 3 — Context Enrichment
 Skip subagents. Orchestrator does inline analysis:
 1. Read the target file(s) and their imports

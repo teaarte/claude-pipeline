@@ -45,7 +45,13 @@ If the task description is **vague, open-ended, or describes a new feature witho
 
 ## STEP 1 — Project Stack Detection & Complexity Classification
 
-### 1a. Detect Project Stack
+### 1a. MANDATORY — Initialize pipeline-state.md
+
+**BEFORE doing anything else in this step**, create `.claude/pipeline-state.md` from `~/.claude/templates/pipeline-state.md`. This is a HARD REQUIREMENT — no exceptions, no deferring. Without this file, `/done` cannot collect metrics and cross-session recovery via `/task-continue` is broken.
+
+After creating the file, verify it exists. If it doesn't — stop and fix before continuing.
+
+### 1b. Detect Project Stack
 Read CLAUDE.md "Validation Commands" section + check project root files. Determine:
 - **Language:** Python / TypeScript / Dart / etc.
 - **Package manager:** uv / npm / pnpm / pip / etc.
@@ -55,7 +61,7 @@ Read CLAUDE.md "Validation Commands" section + check project root files. Determi
 
 Record this as `project_stack` in `.claude/pipeline-state.md` and pass to ALL agents as context.
 
-### 1b. Classify Complexity
+### 1c. Classify Complexity
 - **simple** — 1 module, no new exports/API, pattern exists. 1-3 files.
 - **medium** — 2+ modules, new hook/component/util, additive API changes. 3-10 files.
 - **complex** — breaking changes, new dependency/architecture, cross-module regression risk, unclear scope. 10+ files.
@@ -66,7 +72,7 @@ Record this as `project_stack` in `.claude/pipeline-state.md` and pass to ALL ag
 - Tasks that only add/modify data or config (no new patterns, no architectural decisions) → downgrade one level
 - If unsure between two levels → pick the lower one; can always upgrade mid-pipeline
 
-Initialize `.claude/pipeline-state.md` from `~/.claude/templates/pipeline-state.md`.
+Update `.claude/pipeline-state.md` with complexity and current step.
 
 Then read `~/.claude/pipelines/[complexity].md` and follow the steps there.
 

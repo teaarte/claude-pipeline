@@ -9,7 +9,7 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 ### Core Workflow
 | Command | When to use |
 |---------|-------------|
-| `/task <description>` | Any task — auto-classifies complexity, runs full pipeline |
+| `/task <description>` | Any task — auto-classifies complexity, runs full pipeline. `--no-tests` to skip test-first step |
 | `/quick <description>` | Obvious change, 1-3 files, no new patterns |
 | `/task-continue` | Resume after session break or Human Gate feedback |
 | `/done` | Finish: validate, save metrics, persist issues, clean up |

@@ -14,6 +14,7 @@ Small change? (1-3 files, existing patterns)
 
 Feature, refactor, or multi-file change?
   → /task (auto-classifies complexity)
+  → /task --no-tests (skip test-first step)
 
 New idea or need to pick a library?
   → /brainstorm (has built-in research mode)

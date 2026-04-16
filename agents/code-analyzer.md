@@ -14,7 +14,9 @@ Task description + list of affected/related files from Dependency Auditor (if av
 5. Flag anti-patterns not to replicate
 6. Note project-specific gotchas relevant to the task
 
-## Output — save as `.claude/context-doc.md`
+## Output
+
+**MANDATORY:** Write directly to `.claude/context-doc.md` using the Write tool. Do NOT return the full document inline — only return a 2-3 sentence summary of key findings.
 
 Include ONLY sections relevant to this specific task. Do not pad with empty or generic sections.
 

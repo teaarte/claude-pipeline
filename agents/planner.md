@@ -18,7 +18,16 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 - **Every plan MUST include detailed test specifications** (unit test for the primary function/endpoint/logic changed). Tests are written BEFORE implementation (test-first). Specs must include exact inputs, expected outputs, and what each test proves — detailed enough for the Test Agent to write failing tests without seeing any code. If tests are truly not applicable (e.g. config-only change, generated code), explicitly state why in "Testing Instructions"
 - **Use the project's language and tools** — read the `project_stack` context from Orchestrator. Do NOT default to TypeScript syntax/tools
 
-## Output — Plan Document (save as `.claude/plan.md`)
+## Output — Plan Document
+
+**MANDATORY:** Write the plan directly to `.claude/plan.md` using the Write tool. Do NOT return the plan content inline in your response — this wastes tokens by duplicating the plan in the Orchestrator's context.
+
+Your response to the Orchestrator should ONLY contain:
+1. A 2-3 sentence summary of the plan approach
+2. Count of implementation steps and test specs
+3. Any questions or concerns for the human
+
+**Template** (write to `.claude/plan.md`):
 
 ```markdown
 # Implementation Plan

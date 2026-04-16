@@ -15,7 +15,7 @@ Task + `.claude/context-doc.md` + Research Report (if exists)
 
 ## Output
 
-Write to `.claude/architecture-decisions.md`:
+**MANDATORY:** Write directly to `.claude/architecture-decisions.md` using the Write tool. Do NOT return the full document inline — only return a 2-3 sentence summary + any questions for the human.
 
 ```markdown
 # Architecture Design

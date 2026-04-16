@@ -13,7 +13,9 @@ Task description + complexity + project structure from CLAUDE.md
 4. Flag shared types, utilities, hooks, API contracts involved
 5. Identify consumers of what's being changed
 
-## Output — save as `.claude/dependency-audit.md`
+## Output
+
+**MANDATORY:** Write directly to `.claude/dependency-audit.md` using the Write tool. Do NOT return the full document inline — only return a 2-3 sentence summary + risk count.
 ```markdown
 # Dependency Audit
 

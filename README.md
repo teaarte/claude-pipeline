@@ -54,8 +54,9 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 ### Planning & Implementation
 | Agent | Role |
 |-------|------|
-| planner | Create implementation plan (3 competing mandates for complex) |
-| implementer | Write code + tests following the plan exactly |
+| planner | Create implementation plan with detailed test specifications (3 competing mandates for complex) |
+| test | Write failing tests BEFORE implementation (test-first) or after (test-after for bug fixes) |
+| implementer | Make failing tests GREEN — follows the plan exactly, does not write tests |
 
 ### Review
 | Agent | Role |
@@ -69,7 +70,6 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 | Agent | Role |
 |-------|------|
 | acceptance | Acceptance criteria + mechanical checks + test coverage |
-| test | Write tests — loads patterns from `references/test-{stack}.md` |
 | e2e (playwright) | E2E tests — loads from `references/e2e-{platform}.md` |
 | ui-consistency | Design system compliance — loads from `references/ui-{platform}.md` |
 | api-contract | Frontend/backend/cross-repo contract sync |
@@ -107,7 +107,7 @@ agents/references/
 
 **Adding a new platform** (e.g. Go, Kotlin/Android): create `perf-go.md`, `test-go.md`, etc. — no agent files need changing.
 
-## Pipeline Flow
+## Pipeline Flow (Test-First / TDD)
 
 ```
 /task "add user settings page"
@@ -118,13 +118,37 @@ agents/references/
   +- STEP 2:  Gate 0 — human confirms (skipped for SIMPLE)
   |           + enrichment agents launched in background for MEDIUM/COMPLEX
   +- STEP 3:  Context enrichment (collect background results + remaining agents)
-  +- STEP 4:  Planning (competing planners for complex)
+  +- STEP 4:  Planning (with detailed test specifications)
   +- Gate 1 — human reviews plan
-  +- STEP 5:  Implementation (code + tests) — rollback stash created first
-  +- STEP 5b: Test verification
-  +- STEP 6:  Validation (lint, typecheck, acceptance)
-  +- STEP 7:  Final report (Orchestrator)
+  +- STEP 5:  Test-First (RED) — skeletons + failing tests written before code
+  +- STEP 6:  Implementation (GREEN) — make tests pass, rollback stash created first
+  +- STEP 6b: Test verification (all GREEN)
+  +- STEP 7:  Validation (lint, typecheck, acceptance)
+  +- STEP 8:  Final report (Orchestrator)
   +- Gate 2 — human accepts → /code-review → /done
+```
+
+### Test-First flow in detail
+
+```
+Planner                    Test Agent                  Implementer
+   |                           |                           |
+   +-- Plan with Test Specs    |                           |
+   |   (inputs, expected       |                           |
+   |    outputs, what each     |                           |
+   |    test proves)           |                           |
+   +-------------------------->|                           |
+                               +-- Create skeletons        |
+                               |   (empty classes, DTOs,   |
+                               |    method signatures)     |
+                               +-- Write failing tests     |
+                               +-- Verify RED state        |
+                               +-------------------------->|
+                                                           +-- Replace stubs
+                                                           |   with real logic
+                                                           +-- Run tests after
+                                                           |   each major step
+                                                           +-- All GREEN ✓
 ```
 
 ### What runs at each complexity level
@@ -133,10 +157,10 @@ agents/references/
 |------|--------|--------|---------|
 | Context | Inline (orchestrator) | Dep Auditor + Code Analyzer | + Architect |
 | Planning | 1 Planner, no review | 1 Planner + 2 reviewers | Planner Team (3 competing + cross-review) + 4 reviewers |
-| Implementation | 1 Implementer | 1 Implementer + checkpoints | Parallel per module |
+| Test-First | 1 Test Agent → RED | Same | Parallel Test Agents per module |
+| Implementation | 1 Implementer → GREEN | 1 Implementer + checkpoints | Parallel per module |
 | Code Review | Logic + Style + Security* | Logic + Style + Security + Perf | Same |
-| Tests | Implementer writes + STEP 5b | Same + Test Agent fallback | Same + E2E |
-| Validation | Acceptance | + UI/API if changed | Same |
+| Validation | Acceptance | + UI/API if changed | + E2E |
 | Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Same |
 
 *Security runs in SIMPLE only when task touches auth/input/API.
@@ -146,8 +170,8 @@ agents/references/
 ### Multi-Platform Support
 Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart.
 
-### Mandatory Tests
-Every plan includes test steps. Implementer writes code AND tests. STEP 5b verifies they pass. Acceptance Agent checks test coverage. Metrics track `tests_written`.
+### Test-First (TDD)
+Every plan includes detailed test specifications. Test Agent writes failing tests (RED) BEFORE implementation. Implementer makes them pass (GREEN). STEP 6b verifies all GREEN. Acceptance Agent checks coverage. Metrics track `tests_written`.
 
 ### Issue Collection
 Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persists to `tech-debt.md` → `/sweep` reviews and fixes.

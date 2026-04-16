@@ -102,13 +102,15 @@ Ask: *"Does this classification look right? Any corrections before I start?"*
 
 ---
 
-## STEP 3 through STEP 6
+## STEP 3 through STEP 7
 
-Follow `~/.claude/pipelines/[complexity].md` for Steps 3–6 (including sub-step 5b).
+Follow `~/.claude/pipelines/[complexity].md` for Steps 3–7 (including sub-steps 5, 6, 6b).
+
+Pipeline flow: Context Enrichment → Planning → **Test-First (RED)** → Implementation (GREEN) → Test Verification → Validation
 
 ---
 
-## STEP 7 — Final Report (Orchestrator, not in pipeline files)
+## STEP 8 — Final Report (Orchestrator, not in pipeline files)
 
 ### ⛔ HUMAN GATE 2
 Present:
@@ -145,7 +147,7 @@ For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 | Dependency Auditor | sonnet | sonnet | Mechanical: grep + import tracing |
 | Style Reviewer | sonnet | sonnet | Checklist against CLAUDE.md |
 | Acceptance Agent | sonnet | sonnet | Run commands + grep |
-| Test Agent | sonnet | sonnet | Write tests from plan criteria |
+| Test Agent | sonnet | sonnet | Test-first: skeletons + failing tests (RED) |
 | UI Consistency | sonnet | sonnet | Design system checklist |
 | API Contract | sonnet | sonnet | Type matching |
 | Playwright Agent | sonnet | sonnet | Write E2E from plan steps |
@@ -155,13 +157,13 @@ For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 ## Global Rules
 1. Update `.claude/pipeline-state.md` after **every agent completion** (not just step completion) — this enables cross-session recovery via `/task-continue`
 2. Never skip Human Gates — always wait for explicit response
-3. Never write code yourself — Implementer only
+3. Never write code yourself — Test Agent writes skeletons + tests (STEP 5), Implementer writes production code (STEP 6)
 4. If any agent returns uncertainty — pause and surface it to the user
 5. Pass each subagent only what it needs — not the full conversation. Always include `project_stack`.
 6. Always record which reviewers ran and their verdicts in pipeline-state.md
 7. On plan revision: Planner gets ONLY latest review feedback + task + context-doc. No previous plan versions — feedback already captures what to fix.
 8. All reviewer/validator agents output `<!-- STATUS: X -->` within the **first 5 lines** for machine parsing (see `~/.claude/templates/agent-output-formats.md`)
-9. **Rollback safety:** Before STEP 5 (Implementation), run `git stash push -m "pre-implementation-[task-short-name]"` to save a rollback point. If implementation fails catastrophically, restore with `git stash pop`. Do NOT create intermediate commits — the user commits when the task is done.
+9. **Rollback safety:** Before STEP 6 (Implementation/GREEN), run `git stash push -m "pre-implementation-[task-short-name]"` to save a rollback point. If implementation fails catastrophically, restore with `git stash pop`. Do NOT create intermediate commits — the user commits when the task is done.
 10. **Diff-scoped review:** When spawning reviewers, pass `git diff` output (not just file names) so reviewers focus on actual changes, not entire files. Run `git diff` and include the output in each reviewer's context.
 11. **Exact counts in pipeline-state.md:** Record exact agent counts and iteration numbers, never approximations (no `~N`). Parse from actual spawned agent count.
 12. **Background enrichment:** For MEDIUM/COMPLEX, launch enrichment agents with `run_in_background: true` during Gate 0 wait time. If user rejects classification, discard results. If user confirms, collect results at STEP 3. Count background agents in `agents_count`.
@@ -180,6 +182,7 @@ When agents report out-of-scope issues (Implementer's "Out-of-Scope Issues Notic
 
 1. **Enrichment agents** (Code Analyzer, Dependency Auditor, Research): retry once, then proceed without, note gap
 2. **Planner**: retry with simplified context, then escalate to human
-3. **Implementer**: retry from last completed step, if fails twice → escalate
-4. **Reviewers**: if Style/Security/Performance fails → proceed with others. If Logic fails → retry once, then Orchestrator does inline review. Never proceed with zero reviews.
-5. **Validators**: retry once, then run checks manually via CLI
+3. **Test Agent (RED)**: retry once with simplified skeletons. If fails twice → Implementer writes both tests and code (fallback to old flow), note deviation in pipeline-state
+4. **Implementer**: retry from last completed step, if fails twice → escalate
+5. **Reviewers**: if Style/Security/Performance fails → proceed with others. If Logic fails → retry once, then Orchestrator does inline review. Never proceed with zero reviews.
+6. **Validators**: retry once, then run checks manually via CLI

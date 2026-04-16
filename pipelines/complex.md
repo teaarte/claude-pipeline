@@ -58,15 +58,37 @@ Show plan + synthesis note.
 If project uses API codegen: ask if API spec has changed.
 Otherwise: *"Plan ready. Confirm to proceed?"*
 
-## STEP 5 — Implementation
+## STEP 5 — Test-First (RED)
+
+**Goal:** Write failing tests BEFORE any implementation code exists.
+
+1. Spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md`
+   Input: `.claude/plan.md` (Test Specifications section) + `.claude/context-doc.md` + `project_stack` + mode: `test-first`
+   The Test Agent will:
+   - Create skeleton files (empty classes/services with method signatures from plan)
+   - Create DTOs with correct decorators
+   - Write tests based on plan's test specifications
+   - Run tests and verify RED state (all tests fail because logic is missing)
+
+2. **Verify RED:** Orchestrator checks Test Agent output:
+   - `<!-- STATUS: RED -->` = proceed
+   - `<!-- STATUS: ERROR -->` = fix skeletons/imports, re-run Test Agent (max 1 retry)
+   - Any test unexpectedly passes = investigate before continuing
+
+3. Update `.claude/pipeline-state.md`: record test files + skeleton files created + RED verification.
+
+**If independent modules exist** (from `.claude/architecture-decisions.md`):
+Spawn parallel Test Agents per module — each creates skeletons + tests for its module only.
+
+## STEP 6 — Implementation (GREEN)
 **Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer(s). Restore with `git stash pop` if needed.
 
 **If independent modules exist** (from `.claude/architecture-decisions.md`):
 Spawn parallel implementers (model: **opus**), each owning a module with no file overlap.
-Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md` + `project_stack`.
+Each reads `~/.claude/agents/implementer.md` + `.claude/plan.md` + `project_stack` + test files for their module.
 
 **Otherwise:** single Implementer (model: **opus**) with checkpoints every 3-5 steps.
-Implementer writes both code AND tests (test steps are part of the plan).
+Implementer replaces skeleton stubs with real logic to make tests GREEN.
 
 After implementation, run `git diff` to capture all changes. Spawn 2 parallel reviewers, passing the diff output + changed file list:
 - Logic Reviewer (model: **opus**) on changed code
@@ -76,12 +98,14 @@ If BLOCKING → one more iteration per module (max 2 total). Non-blocking → lo
 
 If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
-## STEP 5b — Test Verification
-If Implementer wrote tests → run them via the test command from `project_stack`.
-If tests fail due to bugs in implementation → send back to Implementer (counts toward STEP 5 iteration limit).
-If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
+## STEP 6b — Test Verification (GREEN)
+Run ALL tests (test-first + existing suite) via the test command from `project_stack`.
+- All GREEN → proceed
+- Test-first tests fail → send back to Implementer (counts toward STEP 6 iteration limit)
+- Existing tests regress → send back to Implementer
+- If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
 
-## STEP 6 — Validation
+## STEP 7 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
 If not defined, detect from `project_stack` and run appropriate checks for the language.
 

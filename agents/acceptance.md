@@ -49,8 +49,8 @@ Adapt to detected language:
 **TODO/FIXME:** grep for `TODO`, `FIXME`, `HACK`, `XXX` in source files.
 
 ### 7. Test Coverage Check
-- Were tests written for new/changed functions? Check plan's "Test Steps" section.
-- If plan includes test steps but no test files were created/modified → flag as WARNING.
+- Were tests written for new/changed functions? Check plan's "Test Specifications (Test-First)" section.
+- If plan includes test specs but no test files were created/modified → flag as WARNING.
 - If tests exist and pass → note count in report.
 
 IMPORTANT: Always start output with `<!-- STATUS: PASS -->` or `<!-- STATUS: FAIL -->` or `<!-- STATUS: PASS_WITH_WARNINGS -->`.

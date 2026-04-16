@@ -15,7 +15,7 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 - If `.claude/architecture-decisions.md` exists, follow its file structure and integration points exactly
 - If you're unsure about something — add a question, don't guess
 - When revising a plan (iteration > 1), Orchestrator will save the previous version as `.claude/plan-v[N].md`. You always write to `.claude/plan.md` — versioning is handled by Orchestrator
-- **Every plan MUST include at least one test step** (unit test for the primary function/endpoint/logic changed). If tests are truly not applicable (e.g. config-only change, generated code), explicitly state why in "Testing Instructions"
+- **Every plan MUST include detailed test specifications** (unit test for the primary function/endpoint/logic changed). Tests are written BEFORE implementation (test-first). Specs must include exact inputs, expected outputs, and what each test proves — detailed enough for the Test Agent to write failing tests without seeing any code. If tests are truly not applicable (e.g. config-only change, generated code), explicitly state why in "Testing Instructions"
 - **Use the project's language and tools** — read the `project_stack` context from Orchestrator. Do NOT default to TypeScript syntax/tools
 
 ## Output — Plan Document (save as `.claude/plan.md`)
@@ -62,15 +62,30 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 ## Potential Side Effects
 [From dependency audit — what might be affected and how to handle]
 
-## Test Steps
+## Test Specifications (Test-First)
 
-### Step T1: [Test Name]
+Tests are written BEFORE implementation. Each spec must be detailed enough for the Test Agent to write failing tests without seeing any implementation code.
+
+### Skeleton Files
+[List of empty class/service/controller stubs needed for tests to compile. Include method signatures that throw NotImplementedException or return null.]
+
+```[language]
+// Example: src/modules/foo/foo.service.ts
+export class FooService {
+  constructor(private readonly prisma: PrismaService) {}
+  async createFoo(dto: CreateFooDto): Promise<FooResponseDto> {
+    throw new NotImplementedException();
+  }
+}
+```
+
+### Test T1: [Test Name]
 **File:** `path/to/test_file`
 **Action:** [create | modify]
 **What to test:** [function/endpoint/class being tested]
 **Cases:**
-- [happy path]
-- [edge case / error path]
+- **[descriptive test name]** — Input: [setup/input], Expected: [output/behavior], Proves: [acceptance criterion]
+- **[descriptive test name]** — Input: [setup/input], Expected: [output/behavior], Proves: [edge case / error path]
 **Mocking:** [what to mock — DB, external APIs, etc.]
 
 ### Manual Verification

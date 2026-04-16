@@ -34,11 +34,15 @@
 - [ ] Plan review (iteration 1)
 - [ ] HUMAN GATE 1
 
-### Implementation Phase
+### Test-First Phase (RED)
+- [ ] Skeleton files created
+- [ ] Failing tests written
+- [ ] RED state verified (all tests fail for expected reasons)
+
+### Implementation Phase (GREEN)
 - [ ] Implementation (iteration 1)
 - [ ] Code review
-- [ ] Tests written
-- [ ] Tests passing
+- [ ] All tests GREEN
 
 ### Validation Phase
 - [ ] Validation commands pass

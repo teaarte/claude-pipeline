@@ -38,6 +38,7 @@ Start working:
 Feature work:
   /task <description with context>
   → review plan at Gate 1 (spend 2 min here — plan determines 90% of quality)
+  → tests written first (RED), then implementation (GREEN)
   → review result at Gate 2
   → /done
 

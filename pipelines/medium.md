@@ -32,12 +32,31 @@ Show plan.
 If project uses API codegen (Orval, OpenAPI generator, etc.): ask if API spec has changed.
 Otherwise: *"Plan ready. Confirm to proceed?"*
 
-## STEP 5 — Implementation
+## STEP 5 — Test-First (RED)
+
+**Goal:** Write failing tests BEFORE any implementation code exists.
+
+1. Spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md`
+   Input: `.claude/plan.md` (Test Specifications section) + `.claude/context-doc.md` + `project_stack` + mode: `test-first`
+   The Test Agent will:
+   - Create skeleton files (empty classes/services with method signatures from plan)
+   - Create DTOs with correct decorators
+   - Write tests based on plan's test specifications
+   - Run tests and verify RED state (all tests fail because logic is missing)
+
+2. **Verify RED:** Orchestrator checks Test Agent output:
+   - `<!-- STATUS: RED -->` = proceed
+   - `<!-- STATUS: ERROR -->` = fix skeletons/imports, re-run Test Agent (max 1 retry)
+   - Any test unexpectedly passes = investigate before continuing
+
+3. Update `.claude/pipeline-state.md`: record test files + skeleton files created + RED verification.
+
+## STEP 6 — Implementation (GREEN)
 **Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer. Restore with `git stash pop` if needed.
 
 1. Spawn Implementer (model: **opus**) → `~/.claude/agents/implementer.md`
-   Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack`
-   Implementer writes both code AND tests (test steps are part of the plan).
+   Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack` + list of test files from STEP 5
+   Implementer replaces skeleton stubs with real logic to make tests GREEN.
 
    **Checkpoints (5+ step plans):** Implementer pauses every 3-5 steps with interim report.
    If concerns → spawn Logic Reviewer (model: **opus**) on changed files. If BLOCKING → fix before continuing.
@@ -52,12 +71,14 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 4. If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
-## STEP 5b — Test Verification
-If Implementer wrote tests → run them via the test command from `project_stack`.
-If tests fail due to bugs in implementation → send back to Implementer (counts toward STEP 5 iteration limit).
-If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
+## STEP 6b — Test Verification (GREEN)
+Run ALL tests (test-first + existing suite) via the test command from `project_stack`.
+- All GREEN → proceed
+- Test-first tests fail → send back to Implementer (counts toward STEP 6 iteration limit)
+- Existing tests regress → send back to Implementer
+- If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
 
-## STEP 6 — Validation
+## STEP 7 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).
 If not defined, detect from `project_stack` and run appropriate checks for the language.
 

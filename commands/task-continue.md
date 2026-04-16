@@ -24,7 +24,7 @@ Read `~/.claude/pipelines/[complexity].md` to know the steps.
 - User answers questions → incorporate, proceed to STEP 3
 
 **Gate 1 (Plan Review):**
-- User approves → proceed to STEP 5 (Implementation)
+- User approves → proceed to STEP 5 (Test-First / RED), then STEP 6 (Implementation / GREEN)
 - User gives feedback → spawn Planner with feedback to revise, re-run review, present Gate 1 again
 - User rejects entirely → re-run from STEP 3
 

@@ -171,7 +171,13 @@ For COMPLEX tasks, upgrade borderline agents to opus (marked with *).
 11. **Exact counts in pipeline-state.md:** Record exact agent counts and iteration numbers, never approximations (no `~N`). Parse from actual spawned agent count.
 12. **Background enrichment:** For MEDIUM/COMPLEX, launch enrichment agents with `run_in_background: true` during Gate 0 wait time. If user rejects classification, discard results. If user confirms, collect results at STEP 3. Count background agents in `agents_count`.
 13. **Agent teams:** COMPLEX planning uses `TeamCreate` for competing planners (see `pipelines/complex.md`). Teams are preferred over independent parallel agents when agents benefit from seeing each other's work and challenging conclusions. Do NOT use teams for reviewers — independent perspectives are more valuable than consensus.
-14. **File-writing agents fallback:** After Planner, Architect, Code Analyzer, or Dependency Auditor completes, verify their output file exists (`.claude/plan.md`, `.claude/architecture-decisions.md`, `.claude/context-doc.md`, `.claude/dependency-audit.md`). If the file is missing but the agent returned content inline — write the file yourself from the inline content, then proceed. Do NOT re-spawn the agent.
+14. **File-writing agents fallback:** After any file-writing agent completes, verify its output file exists. If missing but content returned inline — write the file yourself, then proceed. Do NOT re-spawn the agent. Files to check:
+    - Planner → `.claude/plan.md`
+    - Architect → `.claude/architecture-decisions.md`
+    - Code Analyzer → `.claude/context-doc.md`
+    - Dependency Auditor → `.claude/dependency-audit.md`
+    - Research Agent → `.claude/research-report.md`
+    - Migration Agent → `.claude/migration-plan.md`
 
 ## Issue Collection
 

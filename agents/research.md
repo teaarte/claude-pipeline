@@ -16,6 +16,10 @@ What specifically to research + current tech stack from CLAUDE.md
 
 ## Output
 
+**MANDATORY:** Write directly to `.claude/research-report.md` using the Write tool. Do NOT return the full report inline — only return your recommendation in 2-3 sentences + install command.
+
+**Template** (write to `.claude/research-report.md`):
+
 ```markdown
 # Research Report: [Topic]
 

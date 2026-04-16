@@ -71,7 +71,7 @@ If `.claude/issues-found.md` exists and is non-empty:
 If no issues found: skip silently.
 
 ## 5. Clean Working Files
-- Delete all `.claude/*.md` files (plan.md, pipeline-state.md, context-doc.md, dependency-audit.md, architecture-decisions.md, plan-*.md, review files, implementation-notes*.md, issues-found.md)
+- Delete all `.claude/*.md` files (plan.md, pipeline-state.md, context-doc.md, dependency-audit.md, architecture-decisions.md, research-report.md, migration-plan.md, plan-*.md, review files, implementation-notes*.md, issues-found.md)
 - Keep only `settings.local.json` and `commands/` directory
 - Delete `PLANNING.md` in project root if it exists (debug agent artifact)
 

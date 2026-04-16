@@ -24,6 +24,10 @@ Handle breaking changes safely — API contracts, DB schema, shared types.
 
 ## Output
 
+**MANDATORY:** Write directly to `.claude/migration-plan.md` using the Write tool. Do NOT return the full plan inline — only return a 2-3 sentence summary + whether single deploy is possible.
+
+**Template** (write to `.claude/migration-plan.md`):
+
 ```markdown
 # Migration Plan
 

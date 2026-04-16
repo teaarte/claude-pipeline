@@ -15,7 +15,8 @@ All reviewer/validator agents MUST start output with a status comment for machin
 | Security Agent | APPROVE, REQUEST_CHANGES, WARN |
 | Performance Agent | APPROVE, REQUEST_CHANGES, WARN |
 | Acceptance Agent | PASS, FAIL, PASS_WITH_WARNINGS |
-| Test Agent | PASS, FAIL |
+| Test Agent (test-first) | RED, ERROR |
+| Test Agent (test-after) | PASS, FAIL |
 | API Contract Agent | APPROVE, REQUEST_CHANGES |
 | Playwright Agent | PASS, FAIL |
 | UI Consistency Agent | APPROVE, REQUEST_CHANGES |
@@ -31,8 +32,8 @@ These produce data documents, not verdicts:
 | Architect | `.claude/architecture-decisions.md` |
 | Planner | `.claude/plan.md` |
 | Implementer | Inline completion report |
-| Research | Inline research results |
-| Migration | Inline migration plan |
+| Research | `.claude/research-report.md` |
+| Migration | `.claude/migration-plan.md` |
 
 ## Parsing Rules
 

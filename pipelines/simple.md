@@ -21,6 +21,8 @@ Show plan. Ask: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Test-First (RED)
 
+> **Guard:** Check `tests_mode` in pipeline-state.md. If `regression-only` → skip to STEP 6.
+
 **Goal:** Write failing tests BEFORE any implementation code exists.
 
 1. Spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md`
@@ -41,9 +43,8 @@ Update `.claude/pipeline-state.md`: record test files created + RED verification
 **Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer. Restore with `git stash pop` if needed.
 
 1. Spawn subagent (model: **opus**) → `~/.claude/agents/implementer.md`
-   Input: `.claude/plan.md` + inline context + `project_stack` + list of test files from STEP 5
+   Input: `.claude/plan.md` + inline context + `project_stack` + `tests_mode` + test files list (if `tdd`)
    No checkpoints (plan is ≤5 steps).
-   Implementer replaces skeleton stubs with real logic to make tests GREEN.
 
 2. After implementation, run `git diff` to capture all changes. Spawn 2-3 parallel subagents, passing the diff output + changed file list:
    - Logic Reviewer (model: **opus**) → `~/.claude/agents/logic-reviewer.md`
@@ -52,11 +53,11 @@ Update `.claude/pipeline-state.md`: record test files created + RED verification
 
 3. If BLOCKING issues → one more iteration (max 2 total). Non-blocking → log and proceed.
 
-## STEP 6b — Test Verification (GREEN)
-Run ALL tests (test-first + existing suite) via the test command from `project_stack`.
-- All GREEN → proceed
-- Test-first tests fail → send back to Implementer (counts toward STEP 6 iteration limit)
-- Existing tests regress → send back to Implementer
+## STEP 6b — Test Verification
+Run test suite via the test command from `project_stack`.
+- **`tdd`:** run all tests (test-first + existing). Test-first tests fail → send back to Implementer.
+- **`regression-only`:** run existing tests only. No new tests expected.
+- All pass → proceed. Regressions → send back to Implementer (counts toward STEP 6 iteration limit).
 - If no test framework in project → skip, note in pipeline-state.
 
 ## STEP 7 — Validation

@@ -9,7 +9,7 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 ### Core Workflow
 | Command | When to use |
 |---------|-------------|
-| `/task <description>` | Any task — auto-classifies complexity, runs full pipeline. `--no-tests` to skip test-first step |
+| `/task <description>` | Any task — auto-classifies complexity, runs full pipeline |
 | `/quick <description>` | Obvious change, 1-3 files, no new patterns |
 | `/task-continue` | Resume after session break or Human Gate feedback |
 | `/done` | Finish: validate, save metrics, persist issues, clean up |
@@ -56,7 +56,7 @@ Project-specific rules live in each project's CLAUDE.md. Platform-specific agent
 |-------|------|
 | planner | Create implementation plan with detailed test specifications (3 competing mandates for complex) |
 | test | Write failing tests BEFORE implementation (test-first) or after (test-after for bug fixes) |
-| implementer | Make failing tests GREEN — follows the plan exactly, does not write tests |
+| implementer | Write production code — fills skeletons when TDD, writes directly when regression-only |
 
 ### Review
 | Agent | Role |
@@ -107,28 +107,42 @@ agents/references/
 
 **Adding a new platform** (e.g. Go, Kotlin/Android): create `perf-go.md`, `test-go.md`, etc. — no agent files need changing.
 
-## Pipeline Flow (Test-First / TDD)
+## Pipeline Flow
 
 ```
 /task "add user settings page"
   |
   +- STEP -1: Trivial detection (skip pipeline for rename/typo/config)
   +- STEP 0:  Brainstorming (if scope unclear)
-  +- STEP 1:  Stack detection + complexity classification
+  +- STEP 1:  Stack detection + complexity + tests_mode
   +- STEP 2:  Gate 0 — human confirms (skipped for SIMPLE)
   |           + enrichment agents launched in background for MEDIUM/COMPLEX
   +- STEP 3:  Context enrichment (collect background results + remaining agents)
-  +- STEP 4:  Planning (with detailed test specifications)
+  +- STEP 4:  Planning (with test specifications when tests_mode: tdd)
   +- Gate 1 — human reviews plan
-  +- STEP 5:  Test-First (RED) — skeletons + failing tests written before code
-  +- STEP 6:  Implementation (GREEN) — make tests pass, rollback stash created first
-  +- STEP 6b: Test verification (all GREEN)
+  +- STEP 5:  Test-First (RED) — only when tests_mode: tdd
+  +- STEP 6:  Implementation (GREEN) — rollback stash created first
+  +- STEP 6b: Test verification (regression check or full GREEN)
   +- STEP 7:  Validation (lint, typecheck, acceptance)
   +- STEP 8:  Final report (Orchestrator)
   +- Gate 2 — human accepts → /code-review → /done
 ```
 
-### Test-First flow in detail
+### Tests Mode — Auto-Detection
+
+`tests_mode` is determined once at STEP 1 and stored in `pipeline-state.md`. It controls whether STEP 5 (Test-First) runs and how STEP 6b (verification) behaves.
+
+| Project type | tests_mode | What happens |
+|-------------|-----------|-------------|
+| Frontend app (Next.js, React, Vue, Svelte, Angular) | `regression-only` | STEP 5 skipped, existing tests checked for regressions |
+| Backend (NestJS, Express, FastAPI, Django) | `tdd` | Full TDD: skeletons → failing tests → implementation → GREEN |
+| Shared library / package | `tdd` | Full TDD |
+
+**Override flags:**
+- `--no-tests` → force `regression-only` on any project
+- `--with-tests` → force `tdd` on any project (e.g. frontend lib with contract tests)
+
+### TDD flow (when tests_mode: tdd)
 
 ```
 Planner                    Test Agent                  Implementer
@@ -151,14 +165,28 @@ Planner                    Test Agent                  Implementer
                                                            +-- All GREEN ✓
 ```
 
+### Regression-only flow (when tests_mode: regression-only)
+
+```
+Planner                    Implementer
+   |                           |
+   +-- Plan (no test specs)    |
+   +-------------------------->|
+                               +-- Write production code
+                               |   directly from plan
+                               +-- Existing tests checked
+                               |   for regressions
+                               +-- Validation ✓
+```
+
 ### What runs at each complexity level
 
 | Step | SIMPLE | MEDIUM | COMPLEX |
 |------|--------|--------|---------|
 | Context | Inline (orchestrator) | Dep Auditor + Code Analyzer | + Architect |
 | Planning | 1 Planner, no review | 1 Planner + 2 reviewers | Planner Team (3 competing + cross-review) + 4 reviewers |
-| Test-First | 1 Test Agent → RED | Same | Parallel Test Agents per module |
-| Implementation | 1 Implementer → GREEN | 1 Implementer + checkpoints | Parallel per module |
+| Test-First | 1 Test Agent (if tdd) | Same | Parallel Test Agents per module (if tdd) |
+| Implementation | 1 Implementer | 1 Implementer + checkpoints | Parallel per module |
 | Code Review | Logic + Style + Security* | Logic + Style + Security + Perf | Same |
 | Validation | Acceptance | + UI/API if changed | + E2E |
 | Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Same |
@@ -170,8 +198,8 @@ Planner                    Test Agent                  Implementer
 ### Multi-Platform Support
 Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart.
 
-### Test-First (TDD)
-Every plan includes detailed test specifications. Test Agent writes failing tests (RED) BEFORE implementation. Implementer makes them pass (GREEN). STEP 6b verifies all GREEN. Acceptance Agent checks coverage. Metrics track `tests_written`.
+### Smart Test Mode
+`tests_mode` auto-detected from project type. Frontend apps skip TDD (regression-only), backend and libraries get full TDD. Override with `--with-tests` or `--no-tests`. Single field in `pipeline-state.md` — all pipeline steps read from it, no scattered conditionals.
 
 ### Issue Collection
 Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persists to `tech-debt.md` → `/sweep` reviews and fixes.

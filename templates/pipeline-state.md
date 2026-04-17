@@ -9,6 +9,9 @@
 ## Complexity
 [simple | medium | complex]
 
+## Tests Mode
+[tdd | regression-only]
+
 ## Project Stack
 - **Language:** [Python | TypeScript | Dart | etc.]
 - **Package manager:** [uv | npm | pnpm | pip | etc.]
@@ -35,6 +38,7 @@
 - [ ] HUMAN GATE 1
 
 ### Test-First Phase (RED)
+<!-- If tests_mode = regression-only, mark all as "skipped" and move on -->
 - [ ] Skeleton files created
 - [ ] Failing tests written
 - [ ] RED state verified (all tests fail for expected reasons)

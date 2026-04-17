@@ -13,8 +13,9 @@ Small change? (1-3 files, existing patterns)
   → /quick
 
 Feature, refactor, or multi-file change?
-  → /task (auto-classifies complexity)
-  → /task --no-tests (skip test-first step)
+  → /task (auto-classifies complexity and tests_mode)
+  → /task --no-tests (force skip TDD on backend)
+  → /task --with-tests (force TDD on frontend)
 
 New idea or need to pick a library?
   → /brainstorm (has built-in research mode)
@@ -39,7 +40,8 @@ Start working:
 Feature work:
   /task <description with context>
   → review plan at Gate 1 (spend 2 min here — plan determines 90% of quality)
-  → tests written first (RED), then implementation (GREEN)
+  → backend: tests written first (RED), then implementation (GREEN)
+  → frontend: implementation directly, existing tests checked for regressions
   → review result at Gate 2
   → /done
 
@@ -60,6 +62,24 @@ Periodic:
   /validate-claudemd  — keep CLAUDE.md current
   /validate-pipeline  — verify pipeline config integrity after changes
 ```
+
+## Tests Mode — How It Works
+
+The pipeline auto-detects `tests_mode` at STEP 1 based on project type:
+
+| Project type | tests_mode | Behavior |
+|-------------|-----------|----------|
+| Frontend app (Next.js, React, Vue, Svelte, Angular) | `regression-only` | No TDD. Implementer writes code directly. Existing tests checked for regressions. |
+| Backend (NestJS, Express, FastAPI, Django) | `tdd` | Full TDD. Test Agent writes skeletons + failing tests. Implementer makes them GREEN. |
+| Shared library / package | `tdd` | Full TDD. Libraries need contract tests. |
+
+**Why?** TDD on frontend mostly produces "renders without errors" + API mock tests that don't catch real bugs. Backend business logic benefits from test-first because edge cases are caught before implementation.
+
+**Override when needed:**
+- `--no-tests` on a backend project (quick prototype, spike)
+- `--with-tests` on a frontend project (shared component library with contract tests)
+
+`tests_mode` is stored in `pipeline-state.md` and read by all pipeline steps — single source of truth.
 
 ## How the Pipeline Detects Your Stack
 

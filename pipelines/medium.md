@@ -34,6 +34,8 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Test-First (RED)
 
+> **Guard:** Check `tests_mode` in pipeline-state.md. If `regression-only` → skip to STEP 6.
+
 **Goal:** Write failing tests BEFORE any implementation code exists.
 
 1. Spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md`
@@ -55,8 +57,7 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 **Rollback point:** Run `git stash push -m "pre-implementation"` before spawning Implementer. Restore with `git stash pop` if needed.
 
 1. Spawn Implementer (model: **opus**) → `~/.claude/agents/implementer.md`
-   Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack` + list of test files from STEP 5
-   Implementer replaces skeleton stubs with real logic to make tests GREEN.
+   Input: `.claude/plan.md` + `.claude/context-doc.md` + `project_stack` + `tests_mode` + test files list (if `tdd`)
 
    **Checkpoints (5+ step plans):** Implementer pauses every 3-5 steps with interim report.
    If concerns → spawn Logic Reviewer (model: **opus**) on changed files. If BLOCKING → fix before continuing.
@@ -71,12 +72,12 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 4. If API/DB/type changes → spawn Migration Agent (model: **opus**) → `~/.claude/agents/migration.md`
 
-## STEP 6b — Test Verification (GREEN)
-Run ALL tests (test-first + existing suite) via the test command from `project_stack`.
-- All GREEN → proceed
-- Test-first tests fail → send back to Implementer (counts toward STEP 6 iteration limit)
-- Existing tests regress → send back to Implementer
-- If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests.
+## STEP 6b — Test Verification
+Run test suite via the test command from `project_stack`.
+- **`tdd`:** run all tests (test-first + existing). Test-first tests fail → send back to Implementer.
+- **`regression-only`:** run existing tests only. No new tests expected. Do NOT spawn Test Agent.
+- All pass → proceed. Regressions → send back to Implementer (counts toward STEP 6 iteration limit).
+- If no test framework in project → spawn Test Agent (model: **sonnet**) → `~/.claude/agents/test.md` to set up tests (only when `tests_mode: tdd`).
 
 ## STEP 7 — Validation
 Run validation commands from CLAUDE.md (look for a "Validation" or "Quality Checks" section).

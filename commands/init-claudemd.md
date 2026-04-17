@@ -83,6 +83,13 @@ Build: [exact command or N/A]
   - Mocking approach (MSW, jest.mock, pytest fixtures, unittest.mock)
   - What to test and what not to test
 
+### Recommended for projects with deployment/infra:
+- **Deployment Checklist** — migration commands, Dockerfile verification, env var consistency checks. Prevents missed migrations and config mismatches that break deploys.
+- **Code Quality** — architectural preferences (proper fixes over hacks), reuse-first policy, typecheck command. Prevents hacky workarounds and duplicate utilities.
+
+### Recommended for spec-driven development:
+- **Spec & Implementation Flow** — rules for acceptance criteria in specs, spec-vs-implementation verification during code review, and implementation delta tracking. Prevents drift between specs and actual code.
+
 ### Optional (add when relevant):
 - **API / Backend** — base URL, auth pattern, codegen setup
 - **i18n** — if the project uses internationalization

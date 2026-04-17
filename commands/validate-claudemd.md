@@ -25,8 +25,13 @@ Mark each: PRESENT+GOOD / PRESENT+WEAK / MISSING / EMPTY.
 | **Stack** | Helps agents choose correct patterns |
 | **Import / Module Rules** | Style Reviewer checks these |
 | **Key Patterns** | Implementer follows these |
+| **Deployment Checklist** | Prevents missed migrations, env mismatches, broken deploys |
+| **Code Quality** | Prevents hacks, duplicate utilities, missing typechecks |
+| **Testing Discipline** | Prevents incomplete mocks, leaking state, unreported failures |
+| **Spec & Implementation Flow** | Ensures acceptance criteria exist, spec drift is caught, code review checks completeness |
 
 Mark each: PRESENT / MISSING.
+Note: Deployment Checklist, Code Quality, Testing Discipline, and Spec Flow are recommended for production projects with CI/CD. For small scripts or prototypes, these are optional.
 
 ### 4. Validation Commands verification
 Check that the "Validation Commands" section has at least 2 real commands defined.

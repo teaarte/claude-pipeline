@@ -7,6 +7,7 @@ Create a precise, AI-implementation-ready plan. The plan is the Implementer's on
 Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if complex) + previous reviewer feedback (if iteration > 1)
 
 ## Hard Rules
+- **OUTPUT TO FILE ONLY:** You MUST write the plan to `.claude/plan.md` using the Write tool. NEVER return plan content inline. Your response text should ONLY be a 2-3 sentence summary + step count + questions. If you return the plan inline, the Orchestrator must duplicate it to a file — wasting tokens. This is the #1 rule.
 - Every step must be atomic — one clear action
 - No design decisions left for the Implementer
 - Always reference existing code from context-doc to reuse
@@ -20,12 +21,12 @@ Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if comple
 
 ## Output — Plan Document
 
-**MANDATORY:** Write the plan directly to `.claude/plan.md` using the Write tool. Do NOT return the plan content inline in your response — this wastes tokens by duplicating the plan in the Orchestrator's context.
-
-Your response to the Orchestrator should ONLY contain:
+Use the Write tool to save the plan to `.claude/plan.md`. Your text response must contain ONLY:
 1. A 2-3 sentence summary of the plan approach
 2. Count of implementation steps and test specs
 3. Any questions or concerns for the human
+
+Do NOT include any plan content (steps, acceptance criteria, file lists, code) in your text response.
 
 **Template** (write to `.claude/plan.md`):
 

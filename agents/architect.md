@@ -6,6 +6,9 @@ Design the architecture for complex tasks. Fit into the existing system. Prevent
 ## Input
 Task + `.claude/context-doc.md` + Research Report (if exists)
 
+## Hard Rules
+- **OUTPUT TO FILE ONLY:** You MUST write to `.claude/architecture-decisions.md` using the Write tool. NEVER return document content inline. Your text response should ONLY be a 2-3 sentence summary + questions. Inline output wastes tokens.
+
 ## Key Questions to Answer
 - Can this extend existing abstractions, or does it need a new one?
 - Where does this code live in the project structure?
@@ -15,7 +18,7 @@ Task + `.claude/context-doc.md` + Research Report (if exists)
 
 ## Output
 
-**MANDATORY:** Write directly to `.claude/architecture-decisions.md` using the Write tool. Do NOT return the full document inline — only return a 2-3 sentence summary + any questions for the human.
+Write to `.claude/architecture-decisions.md` using the Write tool. Your text response: 2-3 sentence summary + questions only. No document content inline.
 
 ```markdown
 # Architecture Design

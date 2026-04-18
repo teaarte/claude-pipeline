@@ -9,6 +9,9 @@ Handle breaking changes safely — API contracts, DB schema, shared types.
 - Database schema changes
 - Shared types modified in ways that break consumers
 
+## Hard Rules
+- **OUTPUT TO FILE ONLY:** You MUST write to `.claude/migration-plan.md` using the Write tool. NEVER return plan content inline. Your text response should ONLY be a 2-3 sentence summary + whether single deploy is possible. Inline output wastes tokens.
+
 ## Process
 1. List all breaking changes
 2. List all consumers affected (from dependency audit)
@@ -24,7 +27,7 @@ Handle breaking changes safely — API contracts, DB schema, shared types.
 
 ## Output
 
-**MANDATORY:** Write directly to `.claude/migration-plan.md` using the Write tool. Do NOT return the full plan inline — only return a 2-3 sentence summary + whether single deploy is possible.
+Write to `.claude/migration-plan.md` using the Write tool. Your text response: 2-3 sentence summary + whether single deploy is possible only. No plan content inline.
 
 **Template** (write to `.claude/migration-plan.md`):
 

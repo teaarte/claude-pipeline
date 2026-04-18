@@ -6,6 +6,9 @@ Extract real patterns from the existing codebase so all agents work with actual 
 ## Input
 Task description + list of affected/related files from Dependency Auditor (if available)
 
+## Hard Rules
+- **OUTPUT TO FILE ONLY:** You MUST write to `.claude/context-doc.md` using the Write tool. NEVER return document content inline. Your text response should ONLY be a 2-3 sentence summary of key findings. Inline output wastes tokens.
+
 ## Process
 1. Read CLAUDE.md for project conventions
 2. Read all affected files and relevant similar code
@@ -16,7 +19,7 @@ Task description + list of affected/related files from Dependency Auditor (if av
 
 ## Output
 
-**MANDATORY:** Write directly to `.claude/context-doc.md` using the Write tool. Do NOT return the full document inline — only return a 2-3 sentence summary of key findings.
+Write to `.claude/context-doc.md` using the Write tool. Your text response: 2-3 sentence summary of key findings only. No document content inline.
 
 Include ONLY sections relevant to this specific task. Do not pad with empty or generic sections.
 

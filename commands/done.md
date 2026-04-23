@@ -57,8 +57,23 @@ If CLAUDE.md references a Knowledge Base:
 - Update or create changelog entry for the work done
   - File naming: `YYYY-MM-DD-<slug>.md` — date + concise what-was-done (e.g. `2026-04-09-continent-filter.md`, `2026-03-15-auth-pages.md`)
   - Location: `changelog/{project-name}/`
-- If the task was based on a spec file in `specs/`, move it to `specs/done/`
 - Create ADR if an architectural choice was made
+
+### Spec & Backlog Completion Check
+After updating the changelog, check if the completed task was the **last remaining phase/item** in a spec or backlog document:
+
+1. **Specs (`specs/*.md`):** If the task was based on a spec file, read it and check its acceptance criteria / phases:
+   - If ALL phases/criteria are now complete → move to `specs/done/`
+   - If some phases remain → leave in `specs/`, but append an `## Implementation Delta` section (if not already present) noting what was completed and any deviations
+   - Print: *"Spec {filename}: {N}/{total} phases complete → {moved to done / stays active}"*
+
+2. **Backlog (`backlog/*.md`):** Scan `backlog/*.md` files — if any item's described work is now fully implemented (cross-reference with changelogs and the current task), move it to `backlog/done/`:
+   - Read each backlog item's status/description
+   - If the work described is complete → `mv backlog/{file} backlog/done/{file}`
+   - If partially done → update its `Status:` field to reflect progress (e.g. `Status: backend-done`, `Status: Phase 1 done`)
+   - Print: *"Backlog: {filename} → {moved to done / updated status / no change}"*
+
+3. **Multi-project specs:** If a spec covers multiple repos (e.g. wandr-be + wandr-fe), only move to done when ALL repos' work is complete. If only one side is done, update the spec with a status note instead.
 
 ## 4. Persist Discovered Issues
 If `.claude/issues-found.md` exists and is non-empty:

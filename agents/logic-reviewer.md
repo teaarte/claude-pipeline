@@ -70,6 +70,7 @@ Template:
   "summary_line": "no logic issues; one over-engineering note non-blocking",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-ab12cd",
       "agent": "logic-reviewer",
       "iteration": 1,

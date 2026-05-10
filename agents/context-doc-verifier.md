@@ -40,6 +40,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "summary_line": "1 claim-mismatch on useAuth shape",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-77tt",
       "agent": "context-doc-verifier",
       "iteration": 1,

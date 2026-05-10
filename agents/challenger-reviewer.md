@@ -51,6 +51,7 @@ Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
   "summary_line": "concurrent retry can double-charge",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-ff77bb",
       "agent": "challenger-reviewer",
       "iteration": 1,

@@ -75,6 +75,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "summary_line": "lint+typecheck+tests pass; one file > 200 lines",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-1abc23",
       "agent": "acceptance",
       "iteration": 1,

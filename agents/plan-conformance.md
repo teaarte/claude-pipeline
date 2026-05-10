@@ -58,6 +58,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "summary_line": "1 blocking drift, AC-2 not satisfied",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-22zz",
       "agent": "plan-conformance",
       "iteration": 1,

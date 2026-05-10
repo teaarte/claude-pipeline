@@ -52,6 +52,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "summary_line": "1 file-not-found, 1 unverified",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-99kk",
       "agent": "plan-grounding-check",
       "iteration": 1,

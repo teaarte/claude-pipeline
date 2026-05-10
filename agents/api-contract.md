@@ -44,6 +44,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "summary_line": "POST /api/x missing field b on frontend",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-aa11",
       "agent": "api-contract",
       "iteration": 1,

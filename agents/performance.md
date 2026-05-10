@@ -43,6 +43,7 @@ Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
   "summary_line": "N+1 in feed loader; OFFSET pagination on posts",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-ee99aa",
       "agent": "performance",
       "iteration": 1,

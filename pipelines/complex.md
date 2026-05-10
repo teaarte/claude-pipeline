@@ -71,7 +71,7 @@ Otherwise: *"Plan ready. Confirm to proceed?"*
 
 ## STEP 5 — Test-First (RED)
 
-> **Guard:** Check `tests_mode` in pipeline-state.json. If `regression-only` → set `phases.test_first.status="skipped"` + `skipped_reason` per rule #26, jump to STEP 6.
+> **Guard:** Check `tests_mode` in pipeline-state.json. If `regression-only` → set `phases.test_first.status="skipped"` + `skipped_reason` per rule #29, jump to STEP 6.
 
 **Goal:** Write failing tests BEFORE any implementation code exists.
 

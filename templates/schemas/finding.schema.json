@@ -4,9 +4,14 @@
   "title": "Finding",
   "description": "A single issue surfaced by a reviewer or validator. Designed for clustering, metrics, and self-learning.",
   "type": "object",
-  "required": ["id", "agent", "severity", "category", "summary"],
+  "required": ["schema_version", "id", "agent", "severity", "category", "summary"],
   "additionalProperties": false,
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version. Bump on breaking field changes; orchestrator switches by version."
+    },
     "id": {
       "type": "string",
       "description": "Stable id: f-<YYYY-MM-DD>-<random6>",

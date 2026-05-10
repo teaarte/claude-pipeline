@@ -36,6 +36,7 @@ Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
   "summary_line": "no critical issues; rate-limit absent on /reset",
   "findings": [
     {
+      "schema_version": "1.0",
       "id": "f-2026-05-10-cd34ef",
       "agent": "security",
       "iteration": 1,

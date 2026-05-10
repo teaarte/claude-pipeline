@@ -231,12 +231,12 @@ Planner                    Implementer
 
 - **`file:line` citations** in every plan — verified by `plan-grounding-check` before Gate 1.
 - **Executable AAA test specs** in every plan — `test` agent translates mechanically, no interpretation.
-- **Past-misses injection** — every reviewer spawn includes the last 10 entries from `metrics/agent-feedback.md` filtered to that agent. Closes the loop between `/agent-feedback` logging and future runs.
+- **Past-misses injection** — orchestrator caches per-agent past-misses files at pipeline start from `metrics/agent-feedback.jsonl` (filtered by agent + `human_confirmed=true`, last 10). Reviewers read their `.claude/past-misses-{agent}.md`. Closes the loop between `/agent-feedback` logging and future runs.
 - **CLAUDE.md anti-pattern grep** before code review — mechanical, free of LLM cost.
 - **Caller-context expansion** (1-hop) for changed function signatures, attached to all reviewers (MEDIUM/COMPLEX).
 - **Logic vs Challenger reviewer pair** with independent verdicts. Disagreements never auto-route to Implementer — surfaced to human at Gate 2.
 - **Plan Conformance** after implementation: drift, unfinished steps, AC coverage all measured.
-- **Accuracy metrics** in `metrics/pipeline.md`: `plan_drift`, `gate1_revisions`, `acceptance_first_pass`, `grounding_mismatches`, `reviewer_disagreements`, `reviewer_misses_post_merge`.
+- **Accuracy metrics** in `metrics/pipeline.jsonl` (append-only, one JSON object per task): `plan_drift`, `gate1_revisions`, `acceptance_first_pass`, `grounding_mismatches`, `reviewer_disagreements`, `reviewer_misses_post_merge`, `categories_seen`. Run `/learn` for clustering and drift analysis; `/metrics-report` for human-readable summary.
 
 ## Key Features
 

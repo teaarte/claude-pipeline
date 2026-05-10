@@ -18,27 +18,43 @@ Apply the process and rules from the loaded reference file.
 - Run using command from reference or CLAUDE.md
 - Report results with failure details
 
-IMPORTANT: Always start output with a status line for machine parsing.
+## Output (JSON header + markdown narrative)
 
-## Output
+Order: ```json block (`validator-output.schema.json`) → markdown narrative.
+`category` from `category-vocab.json` → `vocab["playwright"]`.
 
-```markdown
-<!-- STATUS: PASS -->  or  <!-- STATUS: FAIL -->
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "playwright",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "PASS",
+  "summary_line": "3/3 flows pass",
+  "findings": [],
+  "details": {
+    "platform": "Web/Playwright",
+    "tests_written": ["e2e/login.spec.ts", "e2e/checkout.spec.ts"],
+    "tests_run": 3,
+    "tests_passed": 3,
+    "tests_failed": 0
+  }
+}
+```
 
 # E2E Test Report
 
 ## Platform: [Web/Playwright | Flutter/integration_test]
 
 ## Tests Written
-- `path/to/test_file`
-  - [flow description] — PASS/FAIL
+[narrative]
 
 ## Run Output
 [actual terminal output]
 
 ## Failed Tests Detail
-Expected: [what was expected]
-Actual: [what happened]
+[narrative]
+````
 
-## Verdict: [PASS | FAIL]
-```
+Verdict: `FAIL` iff any test failed or was skipped due to error. Otherwise `PASS`.

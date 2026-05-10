@@ -11,6 +11,7 @@ Orchestrator specifies the mode. If not specified, default to **Test-First** for
 ## Input
 - `.claude/plan.md` — acceptance criteria and **test specifications** (Test-First section)
 - CLAUDE.md — test command, architecture, patterns
+- `.claude/refs-to-load.md` — Read referenced files; their **Anti-Patterns** sections inform what edge cases to test (e.g. db-postgres anti-patterns suggest tests for OFFSET pagination behavior at boundaries; redis anti-patterns suggest tests for stampede protection)
 - Mode: `test-first` or `test-after`
 - List of changed files from Orchestrator (test-after mode only)
 - If not provided in test-after mode, detect changed files: `git diff --name-only HEAD~1`
@@ -66,11 +67,15 @@ Follow project conventions exactly:
 - Same mocking approach (project's existing mock patterns — see reference)
 - Same assertion library
 
-**Test structure:**
-- Arrange → Act → Assert
-- One assertion per test when possible
-- Descriptive test names that read as behavior specs
-- Group by function/method being tested
+**For Test-First mode: translate AAA blocks mechanically.**
+The plan's Test Specifications use executable AAA format — each `Case` has literal `arrange`/`act`/`assert` code in the project's language. Your job is to translate this into the project's test framework syntax with **minimal interpretation**:
+- Wrap each case in the framework's test function (`it`/`test`/`describe` in JS, `def test_*` in pytest, `testWidgets` in Flutter, etc.).
+- Hoist setup the framework expects in `beforeEach`/`fixture` — but only when the framework requires it. Otherwise keep the literal block from the plan.
+- Translate mocks the plan declared (`PrismaService.user.create → mockResolvedValue(...)`) into the project's mocking syntax.
+- Resolve only **syntactic gaps** (imports, type annotations, framework-specific assertions). Do NOT reinterpret the case's intent — if a case's `assert` block is wrong/incomplete, report back rather than "fixing" it silently.
+- Each AAA case becomes exactly one test. Do not split or merge cases.
+
+If the plan's test specs are NOT in AAA format, treat it as a planner bug — emit JSON with `"verdict": "ERROR"` and a finding with `"category": "non-aaa-spec"`. Do NOT silently interpret. The Planner is contractually required to emit AAA (per `agents/planner.md`).
 
 **Mocking rules:**
 - Mock external dependencies (API calls, DB, file system)
@@ -112,70 +117,82 @@ Use test command from CLAUDE.md. If new test file, run just that file first, the
 - Generated code (Orval, Prisma client, freezed, etc.)
 - Configuration files
 
-IMPORTANT: Always start output with a status line for machine parsing.
+## Output (JSON header + markdown narrative)
 
-## Output — Test-First Mode
+Order: ```json block (`validator-output.schema.json`) → markdown narrative.
+`agent`: `"test"`. `category` from `category-vocab.json` → `vocab["test"]`.
 
-```markdown
-<!-- STATUS: RED -->  or  <!-- STATUS: ERROR -->
+### Test-First Mode
+
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "test",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "RED",
+  "summary_line": "8/8 tests fail with NotImplementedException as expected",
+  "findings": [],
+  "details": {
+    "mode": "test-first",
+    "framework": "vitest",
+    "command": "npx vitest run src/foo",
+    "skeleton_files": ["src/foo/foo.service.ts"],
+    "test_files": ["src/foo/foo.service.test.ts"],
+    "totals": { "tests": 8, "failing_expected": 8, "passing_unexpected": 0, "errors": 0 },
+    "ac_coverage": [{ "ac_id": "AC-1", "covered_by": ["should-create-foo"] }]
+  }
+}
+```
 
 # Test-First Report
 
-## Mode: Test-First (RED)
-
-## Setup
-- Framework: [vitest/jest/pytest/flutter test]
-- Command: [what was run]
-- Existing tests found: [yes — matched patterns / no — new setup]
-
-## Skeleton Files Created
-- `path/to/skeleton` — [class/service/controller with empty methods]
-
-## Tests Written
-- `path/to/test_file`
-  - [test name] — [what it verifies] — Expected to FAIL: [reason]
+## Setup / Skeletons / Tests Written
+[narrative]
 
 ## Test Run Output
-[actual terminal output showing failures]
+[terminal output]
 
 ## RED Verification
-- Total tests: [N]
-- Failing (expected): [N] — [brief summary of failure reasons]
-- Passing (unexpected): [N] — [these need investigation]
-- Errors (compile/import): [N] — [fixed or needs attention]
+[narrative]
 
 ## Acceptance Criteria Coverage
-- [Criterion 1] — covered by [test name]
-- [Criterion 2] — not covered, reason: [why]
+[narrative]
+````
 
-## Verdict: [RED — ready for implementation | ERROR — needs fixes]
+Verdict: `RED` if all tests fail for expected reasons. `ERROR` if compile/import errors or unexpected pass.
+
+### Test-After Mode
+
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "test",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "PASS",
+  "summary_line": "5/5 regression tests pass",
+  "findings": [],
+  "details": {
+    "mode": "test-after",
+    "framework": "pytest",
+    "command": "uv run pytest tests/test_foo.py",
+    "test_files": ["tests/test_foo.py"],
+    "totals": { "tests": 5, "passed": 5, "failed": 0 },
+    "ac_coverage": []
+  }
+}
 ```
 
-## Output — Test-After Mode
+# Test Report (Test-After)
 
-```markdown
-<!-- STATUS: PASS -->  or  <!-- STATUS: FAIL -->
-
-# Test Report
-
-## Mode: Test-After
-
-## Setup
-- Framework: [vitest/jest/pytest/flutter test]
-- Command: [what was run]
-- Existing tests found: [yes — matched patterns / no — new setup]
-
-## Tests Written
-- `path/to/test_file`
-  - [test name] — [what it verifies]
-
-## Test Run Output
-[actual terminal output]
+## Setup / Tests Written / Run Output
+[narrative]
 
 ## Acceptance Criteria Coverage
-- [Criterion 1] — covered by [test name]
-- [Criterion 2] — not covered, reason: [why]
+[narrative]
+````
 
-## Verdict: [PASS | FAIL]
-## If FAIL — details of failures
-```
+Verdict: `PASS` iff all green. `FAIL` if any test fails.

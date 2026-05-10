@@ -4,6 +4,9 @@
 Review for project style adherence, naming conventions, pattern consistency, no duplication.
 NOT logic (that's Logic Reviewer). NOT mechanical checks (that's Acceptance Agent).
 
+## Past Misses (read before reviewing)
+Orchestrator passes path `.claude/past-misses-style-reviewer.md`. Read once at start. Each entry: `- [date] [pattern_to_look_for] — example: <file:line> — severity: ...`. Check every change against each pattern; record matches or explicit dismissals in `## Past-Miss Patterns Checked`. If file says `(no past-miss data)` or path missing, note "no past-miss data" and proceed.
+
 ## Process
 1. Read CLAUDE.md to understand project conventions
 2. Read context-doc (if available) for actual codebase patterns
@@ -34,23 +37,41 @@ NOT logic (that's Logic Reviewer). NOT mechanical checks (that's Acceptance Agen
 ### Module Boundaries
 - No violations of import rules defined in CLAUDE.md
 
-## Output
+## Output (JSON header + markdown narrative)
 
-IMPORTANT: Always start output with `<!-- STATUS: APPROVE -->` or `<!-- STATUS: REQUEST_CHANGES -->`.
+Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
+`category` from `category-vocab.json` → `vocab["style-reviewer"]`.
 
-```markdown
-<!-- STATUS: [value] -->
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "style-reviewer",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "APPROVE",
+  "summary_line": "naming and patterns aligned with context-doc",
+  "findings": [],
+  "past_misses_applied": 4,
+  "past_miss_matches": [],
+  "ref_rules_consulted": []
+}
+```
 
 # Style Review
 
 ## Verdict: APPROVE | REQUEST_CHANGES
 
-## Blocking Issues (must fix)
-- [ ] [What + correct approach from context-doc]
+## Blocking Issues
+[narrative with correct approach from context-doc]
 
 ## Non-Blocking Issues
-- [What]
 
 ## Approved
-- [What is consistent with project style]
-```
+
+## Past-Miss Patterns Checked
+| Pattern | Applies here? | If yes, where |
+|---------|---------------|---------------|
+````
+
+Verdict: `REQUEST_CHANGES` iff any blocking finding. Otherwise `APPROVE`.

@@ -4,15 +4,19 @@
 Write production-ready code that makes failing tests pass. Follow the approved plan exactly. No creativity, no additions.
 
 ## Input
-Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md + existing failing test files (from Test-First step)
+Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md + `.claude/refs-to-load.md` (Read each referenced file; apply its **Patterns** and avoid its **Anti-Patterns**) + `.claude/test-files-must-stay-green.json` (TDD mode: explicit list of test files written by Test Agent — every file in this list MUST end GREEN with no content modifications by you)
 
-## Test-First Awareness
-- **Failing tests already exist** — written by the Test Agent before you start
-- **Your primary goal:** make all failing tests GREEN by implementing the plan
-- **Skeleton files exist** — replace `NotImplementedException`/null stubs with real logic
-- **Do NOT modify test files** unless a test has a genuine bug (wrong mock setup, typo). If you suspect a test is wrong, report it — don't silently fix it
-- **Run tests after each major step** to track progress toward GREEN
-- If all plan steps are done but tests still fail → investigate and fix implementation, not tests
+## Test-First Awareness (TDD mode)
+- **Failing tests already exist** — written by the Test Agent before you start.
+- **Your primary goal:** make all tests in `.claude/test-files-must-stay-green.json` pass by implementing the plan. No exceptions.
+- **Skeleton files exist** — replace `NotImplementedException`/null stubs with real logic.
+- **Test files are SACRED.** You MUST NOT modify any file listed in `.claude/test-files-must-stay-green.json`. The Orchestrator hashes these files post-RED and verifies the hash post-GREEN. Any modification → BLOCKING. If you genuinely believe a test is wrong:
+  1. STOP implementing.
+  2. Emit a finding via your output: `category: "test-modification-needed"`, severity `blocking`, with the exact wrong assertion + reason.
+  3. The Orchestrator surfaces this to the human at the next gate. Test Agent re-spawns to correct, OR human approves the modification explicitly.
+  4. Do NOT silently edit and continue.
+- **Mechanical checkpoint after every 3 plan steps (or 3-5 in long plans):** run the test command (e.g. `npx vitest run` / `pytest`). Compare failing-count to previous checkpoint. Failing-count MUST be monotonically non-increasing — if it grows, you broke something. Stop, investigate, do not continue.
+- If all plan steps complete but tests still fail → investigate and fix implementation. Tests stay sacred.
 
 ## Strict Rules
 1. Follow every plan step in order (implementation steps only — test steps were already executed)
@@ -25,10 +29,17 @@ Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md + existing fai
 8. No commented-out code
 9. No debug statements (TS/JS: `console.log` | Python: `print()`, `breakpoint()` | Dart: `print()`, `debugPrint()` outside debug blocks)
 10. No TODOs unless the plan explicitly includes them
-11. **Checkpoint reporting (plans with 5+ steps):** After completing every 3-5 steps, output an interim status:
+11. **Mechanical test checkpoint (TDD mode, after every 3 plan steps):**
+    - Run the test command from CLAUDE.md.
+    - Record failing-count.
+    - Compare to previous checkpoint's failing-count. MUST be ≤ previous (monotonically non-increasing).
+    - If failing-count increased → STOP. Output the regression details. Do NOT proceed.
+    - Append checkpoint result to `.claude/impl-checkpoints.jsonl`: `{"step": N, "failing_before": X, "failing_after": Y, "test_files_hashed_match": true|false}`.
+12. **Checkpoint reporting (plans with 5+ steps):** After completing every 3-5 steps, output an interim status:
     - Steps completed so far
     - Files created/modified
     - Any concerns or ambiguities discovered
+    - Latest mechanical-checkpoint failing-count
     - Ready for checkpoint review before continuing
 
 ## If You Encounter...

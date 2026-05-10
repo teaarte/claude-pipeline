@@ -30,26 +30,38 @@ Read `project_stack` from Orchestrator context or detect from code:
 ### 3. Platform-Specific Checks
 Apply checks from the loaded reference file.
 
-IMPORTANT: Always start output with a status line for machine parsing.
+## Output (JSON header + markdown narrative)
 
-## Output
+Order: ```json block (`validator-output.schema.json`) → markdown narrative.
+`category` from `category-vocab.json` → `vocab["ui-consistency"]`.
 
-```markdown
-<!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "ui-consistency",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "APPROVE",
+  "summary_line": "design tokens used; one duplicated button variant",
+  "findings": [],
+  "details": {}
+}
+```
 
 # UI Consistency Review
 
-## Verdict: [APPROVE | REQUEST_CHANGES]
-
 ## Duplication Issues
-- [Existing component to use instead]
+[narrative]
 
 ## Design System Violations
-- [Violation + correct approach]
+[narrative]
 
 ## Accessibility Issues
-- [Issue + fix]
+[narrative]
 
 ## Approved
-- [What is consistent]
-```
+[narrative]
+````
+
+Verdict: `REQUEST_CHANGES` iff any blocking finding. Otherwise `APPROVE`.

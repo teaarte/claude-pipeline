@@ -9,9 +9,9 @@ Resume a paused pipeline.
 ## Process
 
 ### 1. Read Pipeline State
-Read `.claude/pipeline-state.md` to determine current step, what's completed, what feedback is pending.
+Read `.claude/pipeline-state.json` to determine current step, what's completed, what feedback is pending.
 
-If no pipeline-state.md: *"No active task found. Start one with `/task <description>`"*
+If no pipeline-state.json: *"No active task found. Start one with `/task <description>`"*
 
 ### 2. Read the complexity pipeline
 Read `~/.claude/pipelines/[complexity].md` to know the steps.
@@ -20,7 +20,7 @@ Read `~/.claude/pipelines/[complexity].md` to know the steps.
 
 **Gate 0 (Classification):**
 - User confirms → proceed to STEP 3
-- User corrects classification → update pipeline-state.md, re-announce
+- User corrects classification → update pipeline-state.json, re-announce
 - User answers questions → incorporate, proceed to STEP 3
 
 **Gate 1 (Plan Review):**
@@ -48,11 +48,11 @@ Read `~/.claude/pipelines/[complexity].md` to know the steps.
 
 ### 4. Resume
 Follow `~/.claude/pipelines/[complexity].md` from the current step.
-Update pipeline-state.md after resuming.
+Update pipeline-state.json after resuming.
 
 ---
 
 ## Rules
-- Always read pipeline-state.md before acting
+- Always read pipeline-state.json before acting
 - If ambiguous → ask, don't guess
 - Never skip Human Gates on resume

@@ -7,7 +7,7 @@ Run a multi-agent code review on all changes in the current session.
 ## Process
 
 ### 1. Collect changes
-Run `git diff` (full diff, not just names) and `git diff --name-only` to get both the diff content and file list.
+Run `git diff > .claude/diff.txt` (full diff written ONCE) and `git diff --name-only` to get the file list. Reviewers receive the path, not inlined content (file-pointer mode per task.md rule #10).
 If no changes found, check `git diff --cached` and `git status`.
 If still nothing — tell the user there's nothing to review.
 
@@ -16,22 +16,22 @@ Load project conventions — reviewers need this as context.
 
 ### 3. Spawn 5 review agents in parallel
 
-All agents receive: `git diff` output + list of changed files + CLAUDE.md conventions.
-Passing the diff (not just file names) focuses reviewers on actual changes.
+Each receives **file pointers**: `.claude/diff.txt`, list of changed files, CLAUDE.md path, `.claude/past-misses-{agent}.md` (if available).
 
 | Agent | Model | File |
 |-------|-------|------|
 | Logic Reviewer | opus | `~/.claude/agents/logic-reviewer.md` |
-| Style Reviewer | sonnet | `~/.claude/agents/style-reviewer.md` |
+| Challenger Reviewer | opus | `~/.claude/agents/challenger-reviewer.md` |
+| Style Reviewer | haiku | `~/.claude/agents/style-reviewer.md` |
 | Security Agent | sonnet | `~/.claude/agents/security.md` |
 | Performance Agent | sonnet | `~/.claude/agents/performance.md` |
-| Dependency Auditor | sonnet | `~/.claude/agents/dependency-auditor.md` |
+| Dependency Auditor | haiku | `~/.claude/agents/dependency-auditor.md` |
 
 Each agent should review **code** (not plans) — pass them the "For Code" instructions.
 
 ### 4. Collect results
 
-Parse each agent's `<!-- STATUS: X -->` line.
+Parse each agent's fenced ```json header (validates against `templates/schemas/reviewer-output.schema.json`). The `verdict` and `findings[]` are the source of truth. Append findings to `.claude/findings.jsonl`.
 
 ### 5. Present summary
 

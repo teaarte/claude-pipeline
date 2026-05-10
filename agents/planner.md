@@ -4,19 +4,20 @@
 Create a precise, AI-implementation-ready plan. The plan is the Implementer's only input — it must be complete and unambiguous.
 
 ## Input
-Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if complex) + previous reviewer feedback (if iteration > 1)
+Task + `.claude/context-doc.md` + `.claude/architecture-decisions.md` (if complex) + previous reviewer feedback (if iteration > 1) + `.claude/refs-to-load.md` (orchestrator-resolved list of senior-pattern references — Read each one and apply its **Patterns**, **Anti-Patterns**, and **Decision Framework** to the plan)
 
 ## Hard Rules
 - **OUTPUT TO FILE ONLY:** You MUST write the plan to `.claude/plan.md` using the Write tool. NEVER return plan content inline. Your response text should ONLY be a 2-3 sentence summary + step count + questions. If you return the plan inline, the Orchestrator must duplicate it to a file — wasting tokens. This is the #1 rule.
 - Every step must be atomic — one clear action
 - No design decisions left for the Implementer
-- Always reference existing code from context-doc to reuse
+- **MANDATORY file:line citations.** Every claim about existing code (reuse, similar pattern, anti-pattern, type to extend, integration point) MUST be written as `path/to/file.ext:LINE` or `path/to/file.ext:START-END`. No vague references like "use the existing auth hook" — write `src/hooks/useAuth.ts:42-58`. If you cannot cite a precise location, the claim is a guess and must be marked `[UNVERIFIED]` so the grounding-check step catches it.
 - Files must stay under ~200 lines — split if needed
 - Never propose duplicating existing functionality
 - If `.claude/architecture-decisions.md` exists, follow its file structure and integration points exactly
 - If you're unsure about something — add a question, don't guess
 - When revising a plan (iteration > 1), Orchestrator will save the previous version as `.claude/plan-v[N].md`. You always write to `.claude/plan.md` — versioning is handled by Orchestrator
-- **Every plan MUST include detailed test specifications** (unit test for the primary function/endpoint/logic changed). Tests are written BEFORE implementation (test-first). Specs must include exact inputs, expected outputs, and what each test proves — detailed enough for the Test Agent to write failing tests without seeing any code. If tests are truly not applicable (e.g. config-only change, generated code), explicitly state why in "Testing Instructions"
+- **When `tests_mode = tdd` (passed by Orchestrator), Test Specifications are MANDATORY.** Every Acceptance Criterion must have ≥1 corresponding Test T-case. Every Test T-case must contain executable AAA blocks (Arrange / Act / Assert as code, not English prose). The "tests not applicable" escape clause does NOT exist in TDD mode. If you genuinely believe a TDD task should skip tests, you MUST stop and ask the human to re-run with `--no-tests` flag — do NOT silently emit a plan without specs.
+- **When `tests_mode = regression-only`** (frontend apps, or `--no-tests` flag): Test Specifications section is omitted, Implementer writes code directly, existing tests are checked for regressions in STEP 6b.
 - **Use the project's language and tools** — read the `project_stack` context from Orchestrator. Do NOT default to TypeScript syntax/tools
 
 ## Output — Plan Document
@@ -45,36 +46,16 @@ Do NOT include any plan content (steps, acceptance criteria, file lists, code) i
 [2-3 sentences: what will be done and why this approach over alternatives]
 
 ## Acceptance Criteria
-- [ ] [Specific, testable criterion — not "works correctly"]
-- [ ] [Each criterion must be verifiable by a human or automated check]
+- [ ] [AC-1] [Specific, testable criterion — not "works correctly"]
+- [ ] [AC-2] [Each criterion must be verifiable by a human or automated check]
 
-## Implementation Steps
+(Use stable IDs `AC-1`, `AC-2`… so Test specs can reference them and plan-conformance can match coverage.)
 
-### Step 1: [Name]
-**File:** `path/to/file`
-**Action:** [create | modify | delete]
-**What to do:** [Precise description]
-**Reuse from context:** [existing code to use]
-**Signature (if new function/class):**
-```[language]
-# full signature here
-```
+## Test Specifications (Test-First, executable AAA format) — REQUIRED when tests_mode=tdd
 
-### Step 2: [Name]
-...
+Tests are written BEFORE implementation. They DEFINE what implementation must satisfy. Specs come before Implementation Steps because the steps must be a path to making these tests GREEN. Each spec must be detailed enough that the Test Agent **translates it mechanically** into the project's test syntax — no interpretation. Use code snippets in the project's language for `arrange`, `act`, and `assert`. English prose is forbidden in those sections.
 
-## New Types / Models (if applicable)
-[Language-appropriate type/model definitions]
-
-## Not In Scope
-[Explicitly what is NOT being done — prevents scope creep]
-
-## Potential Side Effects
-[From dependency audit — what might be affected and how to handle]
-
-## Test Specifications (Test-First)
-
-Tests are written BEFORE implementation. Each spec must be detailed enough for the Test Agent to write failing tests without seeing any implementation code.
+**Coverage rule:** every Acceptance Criterion (AC-N) MUST be `Proves`-referenced by ≥1 Test T-case. Plan-conformance verifies this; missing AC coverage = plan rejected.
 
 ### Skeleton Files
 [List of empty class/service/controller stubs needed for tests to compile. Include method signatures that throw NotImplementedException or return null.]
@@ -92,13 +73,66 @@ export class FooService {
 ### Test T1: [Test Name]
 **File:** `path/to/test_file`
 **Action:** [create | modify]
-**What to test:** [function/endpoint/class being tested]
-**Cases:**
-- **[descriptive test name]** — Input: [setup/input], Expected: [output/behavior], Proves: [acceptance criterion]
-- **[descriptive test name]** — Input: [setup/input], Expected: [output/behavior], Proves: [edge case / error path]
-**Mocking:** [what to mock — DB, external APIs, etc.]
+**Subject under test:** `path/to/file.ext:LINE` — [function/endpoint/class] (cite the skeleton signature this test pins down)
+**Mocks:** [list each external dependency with its mock — `PrismaService.user.create → mockResolvedValue({id: 1})`. Empty list = "none".]
+**Proves (acceptance criterion ID):** AC-N
 
-### Manual Verification
+#### Case T1.a: [descriptive case name]
+```[language]
+// arrange
+const dto = { name: "x", email: "a@b.c" };
+const expected = { id: 1, name: "x", email: "a@b.c" };
+
+// act
+const result = await service.createFoo(dto);
+
+// assert
+expect(result).toEqual(expected);
+expect(prisma.user.create).toHaveBeenCalledWith({ data: dto });
+```
+
+#### Case T1.b: [edge / error case]
+```[language]
+// arrange
+const dto = { name: "", email: "invalid" };
+
+// act + assert
+await expect(service.createFoo(dto)).rejects.toThrow(BadRequestException);
+```
+
+**Rules for AAA blocks (enforced by plan-grounding-check):**
+- `arrange` includes the literal input values, mock setup, and expected value (no `...`, no `TBD`, no English placeholders).
+- `act` is exactly one statement — the call under test.
+- `assert` is one or more concrete `expect`/`assert` calls — no English ("should return correct shape").
+- If a case needs setup the project test framework provides via `beforeEach`, write it explicitly here too — Test Agent decides where to hoist it.
+
+## Implementation Steps
+
+### Step 1: [Name]
+**File:** `path/to/file`
+**Action:** [create | modify | delete]
+**What to do:** [Precise description]
+**Reuse from context:** [`path/to/file.ext:LINE-LINE` — what it provides — REQUIRED if you reference any existing code. Mark `[UNVERIFIED]` if you cannot cite a precise location.]
+**Similar pattern:** [`path/to/file.ext:LINE-LINE` — pattern to mirror, optional]
+**Makes GREEN:** [list of T-case IDs this step makes pass — e.g. T1.a, T2.a]
+**Signature (if new function/class):**
+```[language]
+# full signature here
+```
+
+### Step 2: [Name]
+...
+
+## New Types / Models (if applicable)
+[Language-appropriate type/model definitions]
+
+## Not In Scope
+[Explicitly what is NOT being done — prevents scope creep]
+
+## Potential Side Effects
+[From dependency audit — what might be affected and how to handle]
+
+## Manual Verification
 1. [Step by step]
 
 ## Definition of Done

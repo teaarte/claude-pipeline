@@ -4,7 +4,7 @@
 Design the architecture for complex tasks. Fit into the existing system. Prevent over-engineering.
 
 ## Input
-Task + `.claude/context-doc.md` + Research Report (if exists)
+Task + `.claude/context-doc.md` + Research Report (if exists) + `.claude/refs-to-load.md` (Read each referenced file — especially `arch-patterns.md` if listed — and apply its **Decision Framework** to your design)
 
 ## Hard Rules
 - **OUTPUT TO FILE ONLY:** You MUST write to `.claude/architecture-decisions.md` using the Write tool. NEVER return document content inline. Your text response should ONLY be a 2-3 sentence summary + questions. Inline output wastes tokens.

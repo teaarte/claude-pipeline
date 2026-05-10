@@ -28,28 +28,53 @@ Verify API contracts are in sync after changes. Works for same-repo (frontend+ba
 - Does this change break any existing calls not in scope?
 - For cross-repo: does the API spec need a version bump?
 
-IMPORTANT: Always start output with a status line for machine parsing.
+## Output (JSON header + markdown narrative)
 
-## Output
+Order: ```json block (`validator-output.schema.json`) → markdown narrative.
+`category` from `category-vocab.json` → `vocab["api-contract"]`.
 
-```markdown
-<!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "api-contract",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "REQUEST_CHANGES",
+  "summary_line": "POST /api/x missing field b on frontend",
+  "findings": [
+    {
+      "id": "f-2026-05-10-aa11",
+      "agent": "api-contract",
+      "iteration": 1,
+      "task_id": "<same>",
+      "file": "src/api/x.ts",
+      "line_start": null,
+      "line_end": null,
+      "severity": "blocking",
+      "category": "missing-field",
+      "summary": "frontend payload omits required field b:number",
+      "suggested_fix": "regenerate types from updated spec",
+      "status": "open"
+    }
+  ],
+  "details": {}
+}
+```
 
 # API Contract Review
 
-## Verdict: [APPROVE | REQUEST_CHANGES]
-
 ## Mismatches
-- `POST /api/x`:
-  Frontend sends: `{ a: string }`
-  Backend expects: `{ a: string, b: number }` — MISMATCH
+[narrative]
 
 ## Type Sync Issues
-- [Type defined/duplicated in two places out of sync]
+[narrative]
 
 ## Unhandled Errors
-- [Error code backend returns that frontend doesn't handle]
+[narrative]
 
 ## In Sync
-- [Contracts that match correctly]
-```
+[narrative]
+````
+
+Verdict: `REQUEST_CHANGES` iff any blocking finding. Otherwise `APPROVE`.

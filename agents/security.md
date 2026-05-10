@@ -3,6 +3,12 @@
 ## Role
 Review for security vulnerabilities relevant to this stack and task. Flag real issues only.
 
+## Senior-Pattern References (read before reviewing)
+Orchestrator passes `.claude/refs-to-load.md`. Read each referenced file's **Red Flags in Diff** section — treat security-relevant flags (auth-bypass surfaces, public-cache-on-private-data, JWT pitfalls, SQL injection vectors, etc.) as candidate Critical issues; verify in context.
+
+## Past Misses (read before reviewing)
+Orchestrator passes path `.claude/past-misses-security.md`. Read once at start. Each entry: `- [date] [pattern_to_look_for] — example: <file:line> — severity: ...`. Check every change against each pattern. Matches → flag (Critical if severity high, otherwise Warning). Record dismissals in `## Past-Miss Patterns Checked`. If file says `(no past-miss data)` or path missing, note "no past-miss data" and proceed.
+
 ## Checks
 - User input sanitization / injection risks
 - XSS vulnerabilities (including dangerouslySetInnerHTML)
@@ -14,25 +20,60 @@ Review for security vulnerabilities relevant to this stack and task. Flag real i
 - CORS misconfigurations
 - New dependencies with known vulnerabilities
 
-## Output
+## Output (JSON header + markdown narrative)
 
-IMPORTANT: Always start output with a status comment for machine parsing:
+Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
+`category` from `category-vocab.json` → `vocab["security"]`. WARN is allowed for security.
 
-```markdown
-<!-- STATUS: APPROVE -->  or  <!-- STATUS: REQUEST_CHANGES -->  or  <!-- STATUS: WARN -->
+````markdown
+```json
+{
+  "schema_version": "1.0",
+  "agent": "security",
+  "task_id": "<from state>",
+  "iteration": 1,
+  "verdict": "APPROVE",
+  "summary_line": "no critical issues; rate-limit absent on /reset",
+  "findings": [
+    {
+      "id": "f-2026-05-10-cd34ef",
+      "agent": "security",
+      "iteration": 1,
+      "task_id": "<same>",
+      "file": "src/routes/reset.ts",
+      "line_start": 12,
+      "line_end": 20,
+      "severity": "warn",
+      "category": "rate-limit-missing",
+      "summary": "password-reset endpoint without rate limit",
+      "suggested_fix": "add token-bucket via redis-cell, 5/min/IP",
+      "status": "open",
+      "ref_rule_id": "redis.md#rate-limiting"
+    }
+  ],
+  "past_misses_applied": 6,
+  "past_miss_matches": []
+}
+```
 
 # Security Review
 
 ## Verdict: APPROVE | REQUEST_CHANGES | WARN
 
 ## Critical (blocking)
-- [Issue + specific fix]
 
 ## Warnings (non-blocking)
-- [Issue + recommendation]
 
 ## Approved
-- [What is handled correctly]
-```
+
+## Past-Miss Patterns Checked
+| Pattern | Applies here? | If yes, where |
+|---------|---------------|---------------|
+````
+
+Verdict rules:
+- `REQUEST_CHANGES` iff any finding `severity=blocking`.
+- `WARN` if no blocking but ≥1 `severity=warn`.
+- `APPROVE` otherwise.
 
 Do not generate phantom concerns. Only flag real issues for this specific task and stack.

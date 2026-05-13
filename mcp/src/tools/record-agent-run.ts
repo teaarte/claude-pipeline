@@ -9,6 +9,7 @@ import { extractJsonHeader, makeFindingId } from "../lib/parse-json-header.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
 import { buildSummary } from "../lib/summary.js";
 import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
 const REVIEWER_AGENTS = new Set([
@@ -62,6 +63,18 @@ export async function pipelineRecordAgentRun(input: {
   const agent = header.agent;
   if (!agent || typeof agent !== "string") {
     throw new Error("JSON header missing 'agent' field");
+  }
+  // Item 7: coerce stringified integers in the header. Approximations throw.
+  if (header.iteration !== undefined) {
+    header.iteration = coerceIntegerOpt(header.iteration, "header.iteration");
+  }
+  if (header.past_misses_applied !== undefined) {
+    header.past_misses_applied = coerceIntegerOpt(header.past_misses_applied, "header.past_misses_applied");
+  }
+  for (const f of (Array.isArray(header.findings) ? header.findings : []) as any[]) {
+    if (f && f.iteration !== undefined) {
+      f.iteration = coerceIntegerOpt(f.iteration, "finding.iteration");
+    }
   }
 
   // 2. validate against reviewer or validator schema

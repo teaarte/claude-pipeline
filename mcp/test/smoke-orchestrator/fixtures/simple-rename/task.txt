@@ -1,0 +1,1 @@
+Rename `oldName` to `newName` in src/foo.ts. Single-file rename, no signature change.

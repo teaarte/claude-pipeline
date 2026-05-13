@@ -17,7 +17,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ci": "pnpm typecheck && pnpm test && pnpm build && pnpm smoke"
+    "smoke:orchestrator": "vitest run test/smoke-orchestrator",
+    "ci": "pnpm typecheck && pnpm test && pnpm build && pnpm smoke && pnpm smoke:orchestrator"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",

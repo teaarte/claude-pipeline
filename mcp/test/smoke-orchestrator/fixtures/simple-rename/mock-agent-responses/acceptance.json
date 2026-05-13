@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "agent": "acceptance",
+  "task_id": "t-2026-05-13-smoke",
+  "iteration": 1,
+  "verdict": "PASS",
+  "summary_line": "all AC pass, lint+typecheck green",
+  "findings": [],
+  "details": { "lint": "pass", "typecheck": "pass" }
+}

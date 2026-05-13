@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "agent": "planner",
+  "task_id": "t-2026-05-13-smoke",
+  "iteration": 1,
+  "summary_line": "rename oldName → newName",
+  "plan_text": "Rename oldName → newName in src/foo.ts. No public API change. Single edit.",
+  "_smoke_marker": "planner-response"
+}

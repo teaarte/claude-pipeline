@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "agent": "logic-reviewer",
+  "task_id": "t-2026-05-13-smoke",
+  "iteration": 1,
+  "verdict": "APPROVE",
+  "summary_line": "rename is safe — no callers outside the file",
+  "findings": [],
+  "past_misses_applied": 0,
+  "past_miss_matches": [],
+  "ref_rules_consulted": []
+}

@@ -350,7 +350,7 @@ permission_strategy: {
 
 Web UI Settings page surfaces this as a radio choice per mode (autonomous/interactive) + per-agent override grid. The default values above are pre-selected; user can change but the safe defaults assume Docker isolation is on.
 
-### v2.5.8 — Worktree isolation
+### v2.5.8 — Branch isolation + merge strategy (worktree + auto-merge)
 
 Each autonomous task runs in a `git worktree` isolated from the main working tree:
 
@@ -364,13 +364,136 @@ Each autonomous task runs in a `git worktree` isolated from the main working tre
       .claude/                             # task-local state
 ```
 
-`pipeline_init` accepts `isolation: "worktree" | "in-place"` (default `in-place` for backward compatibility with v2; `worktree` for autonomous submissions).
+`pipeline_init` accepts `isolation: "worktree" | "in-place"` (default `in-place` for interactive Claude Code `/task`; default `worktree` for autonomous Web UI / CLI submissions).
 
-When task completes successfully, daemon either auto-merges to main (if config allows) or surfaces a "merge ready" notification.
+#### Branch strategy (where task runs)
 
-**Pros:** multiple autonomous tasks run in parallel without branch conflicts; failed tasks discardable without affecting main.
-**Cons:** worktree management adds complexity; merge conflicts on completion need handling.
-**Effort:** ~2-3 days (was previously P2.5 in earlier draft; promoted here because autonomous mode needs it).
+| Strategy | When | Behavior |
+|----------|------|----------|
+| `in-place` | Interactive `/task` in Claude Code chat (default) | Task runs on current branch. User sees changes immediately. No worktree. |
+| `new-branch` | Autonomous Web UI submission (default) | Daemon creates `claude-pipeline/<task_id>` branch from configured base. Worktree checks it out. All commits land on this branch. |
+| `existing-branch` | Submitter specifies target branch in submit form | Like `new-branch` but checks out an existing branch (e.g. resume work on a feature branch). |
+
+Branch name pattern is configurable: `branch_name_template: "claude-pipeline/{task_id}"` (defaults shown; can be `"feat/{task_short}"` or whatever).
+
+#### Merge strategy (what happens when task completes successfully)
+
+User-selectable in **Web UI submit form** (overrides global default in Settings):
+
+| Strategy | Behavior | When to use |
+|----------|----------|-------------|
+| `no-merge` (manual) | Task branch left untouched. UI shows "Merge ready" with link to open PR or merge locally. | Code review desired before integration. Default for first-time users. |
+| `auto-merge` | After `pipeline_finish` succeeds, daemon `git merge --no-ff <task-branch>` into base (preserves task history). | Trusted autonomous flows where review already happened via in-pipeline reviewers. |
+| `auto-squash-merge` | Same as `auto-merge` but `git merge --squash` + auto-commit with summary message. Loses individual task commits, keeps single "feat: <task description>" commit. | Clean linear history preferred. **Toggle in UI** as per user request. |
+| `auto-rebase-merge` | `git rebase` task branch onto base, then fast-forward. | Linear history without explicit merge commits. |
+
+#### Auto-merge safety preconditions (HARD)
+
+Auto-merge ONLY proceeds when ALL of:
+
+1. `pipeline_finish` returned successfully (`verdict: "accepted"`, no INV violations).
+2. All gates were either approved or auto-approved per `GatePolicyPlugin`.
+3. All tests in `phases.test_first.test_files_written` and `phases.validation` are green.
+4. No `pipeline_violation` flag is set on state.
+5. `git merge --no-commit` dry-run shows no conflicts with base.
+
+If ANY of these fails → fall back to `no-merge` (manual), with notification explaining which precondition blocked.
+
+Conflict on attempted merge → daemon aborts the merge cleanly (`git merge --abort`), leaves the task branch, and emits a `merge-conflict` notification with the conflict file list. User resolves manually.
+
+#### UI surface
+
+**Settings page (global defaults):**
+
+```
+Branch & Merge defaults
+────────────────────────
+Branch strategy (autonomous tasks):
+  ◯ Stay on current branch (in-place)
+  ◉ Create new branch (recommended)
+  ◯ Resume existing branch (specified per submission)
+
+Default base branch: [main ▼]
+Branch name template: [claude-pipeline/{task_id}]
+
+Merge strategy when task succeeds:
+  ◉ Manual (notification only, no merge)
+  ◯ Auto-merge (git merge --no-ff, preserves task commits)
+  ◯ Auto-squash-merge (single commit with task summary)
+  ◯ Auto-rebase-merge (linear history)
+
+  ☐ Push to remote after merge (origin/main)
+  ☐ Delete task branch after merge
+```
+
+**Task submit form (per-task override):**
+
+```
+Task: [_______________________________________]
+
+▼ Advanced
+  Base branch:   [main ▼]  (default from Settings)
+  Merge:         [Manual ▼]   ← user request: dropdown overrides global
+                  ├ Manual (notification only)
+                  ├ Auto-merge
+                  ├ Auto-squash-merge
+                  └ Auto-rebase-merge
+  ☑ Delete branch after merge
+```
+
+**Tasks list (per-task status):**
+
+| Task | Branch | Status | Merge |
+|------|--------|--------|-------|
+| t-...-rename-foo | `claude-pipeline/t-...-rename-foo` | ✓ done | ✓ squash-merged into main |
+| t-...-auth-fix | `feat/auth-overhaul` | ⏵ running | — |
+| t-...-migrate | `claude-pipeline/t-...-migrate` | ✗ failed | ✗ branch preserved for inspection |
+
+#### Configuration
+
+```typescript
+// ClaudePipelineConfig
+branch_strategy: {
+  default_autonomous: "new-branch",       // for Web UI / CLI submissions
+  default_interactive: "in-place",         // for Claude Code /task chat
+  base_branch: "main",                     // configurable
+  branch_name_template: "claude-pipeline/{task_id}",
+  delete_branch_after_merge: false,        // safety: off by default
+  push_after_merge: false,                  // safety: off by default
+},
+merge_strategy: {
+  default_on_success: "no-merge",          // safe default; user opts into auto-*
+  per_task_override: true,                  // submit form can override
+  fallback_on_precondition_fail: "no-merge", // never auto-merge unsafely
+},
+```
+
+#### Per-merge audit
+
+Every auto-merge attempt (success OR failure) appends to `~/.claude/metrics/mcp-audit.jsonl` via the existing `audit()` helper:
+
+```json
+{
+  "schema_version": "1.0",
+  "ts": "...",
+  "tool": "branch:auto-merge",
+  "task_id": "t-...",
+  "args_summary": {
+    "branch": "claude-pipeline/t-...",
+    "base": "main",
+    "strategy": "squash-merge",
+    "preconditions_pass": true,
+    "merge_result": "success" | "conflict" | "blocked-by-precondition"
+  },
+  "verdict": "ok"
+}
+```
+
+This gives `/learn` data about which merge strategies users prefer + how often auto-merge gets blocked by preconditions.
+
+**Pros:** multiple autonomous tasks run in parallel without branch conflicts; failed tasks discardable without affecting main; auto-merge is opt-in per task with safety preconditions.
+**Cons:** worktree management adds complexity; merge conflicts on completion need handling (mitigated by dry-run + abort).
+**Effort:** ~3-4 days (worktree management ~1d, branch strategies ~1d, merge strategies + safety ~1-2d, UI controls ~0.5d).
 
 ### v2.5 acceptance
 
@@ -383,10 +506,13 @@ When task completes successfully, daemon either auto-merges to main (if config a
 7. SQLite contains `tasks`, `agent_configs`, `pipeline_config`, `plugins` tables; queryable via raw SQL for debugging.
 8. At least one non-shuttle SpawnProvider works end-to-end (e.g., a task fully driven through `AnthropicSdkSpawnProvider`).
 9. Auto-approve gate plugin lets tasks run unattended; notification fires on completion.
+10. Autonomous task submitted with `merge: auto-squash-merge` selected in the UI: completes successfully → daemon creates squash merge commit on `main` with summary message, task branch deleted (if configured). Audit log records `tool: "branch:auto-merge"` entry.
+11. Same task submitted with `merge: no-merge`: completes successfully → task branch preserved, notification shows "Merge ready: `claude-pipeline/<task_id>`" with a CTA. No write to base branch.
+12. Auto-merge precondition guard works: deliberately break a test in a task with `auto-merge` selected → daemon detects failure, falls back to `no-merge`, notification explains "auto-merge blocked: tests not green".
 
 ### v2.5 total effort
 
-**~10-13 focused days of agent work** (or 2-2.5 weeks in comfortable pace with reviews). Could be 3-4 Claude Code sessions due to scope (grew from earlier ~7-10 estimate after adding permission strategy + worktree isolation as required-for-autonomy).
+**~12-15 focused days of agent work** (or 2.5-3 weeks in comfortable pace with reviews). Could be 3-4 Claude Code sessions due to scope. Grew from earlier ~10-13 estimate after expanding v2.5.8 to cover full branch + merge strategy with auto-merge safety preconditions, audit logging, and UI controls.
 
 ### Decision gates inside v2.5
 

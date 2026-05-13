@@ -83,6 +83,8 @@ JSONL is great for audit (append-only stream) but bad for "list my last 50 tasks
 | Per-agent config | n/a | New: SQLite `agent_configs` table |
 | Pipeline config | n/a | New: SQLite `pipeline_config` table (single row) |
 | Plugin registry state | n/a | New: SQLite `plugins` table (enabled/disabled, version) |
+| **Per-spawn cost** | n/a | New: SQLite `spawn_costs` table — provider, model, input_tokens, output_tokens, est_cost_usd, ts, task_id, agent |
+| **Task budgets** | n/a | New: SQLite `task_budgets` table — limit_usd, spent_usd, status |
 
 New `StateStorePlugin` contract (8th plugin type):
 
@@ -168,6 +170,110 @@ Per-task in submit form: choose gate policy + notification target.
 
 **Effort:** ~1-2 days.
 
+### v2.5.7 — Permission strategy for autonomous mode
+
+Claude Code asks the user for permission before running Bash commands, editing files, calling MCP tools, etc. In interactive `/task` flow this is fine — user clicks through. In autonomous (daemon-submitted) tasks there's nobody to click. v2.5 must offer mechanisms that don't block on permission prompts.
+
+**Background.** Claude Code permission system:
+- `permissions.allow[]` in `~/.claude/settings.json` whitelists tools/commands.
+- `defaultMode: "acceptEdits"` auto-approves file edits.
+- `--dangerously-skip-permissions` CLI flag bypasses everything (used by ralphex).
+- Task-spawned sub-agents inherit parent session's permission grants.
+
+**Three strategies, configurable per task via `pipeline_config.permission_strategy`:**
+
+#### Strategy B — Claude Code subprocess + skip-permissions (DEFAULT for autonomous mode)
+
+`ClaudeCodeSubprocessSpawnProvider` invokes `claude --dangerously-skip-permissions --output-format stream-json --verbose` per agent (ralphex pattern). Bypasses all permission prompts.
+
+**Why this is the default:** v2.6 makes Docker isolation the default execution environment for autonomous tasks. With the container as the blast-radius boundary, `--dangerously-skip-permissions` is safe — the agent can do whatever, but it can only do it inside the throwaway container. This combination = ralphex-grade autonomy + better isolation than ralphex (per-task containers vs ralphex's optional Docker wrapper).
+
+**Pros:**
+- Uses existing Claude Code subscription (no separate API key).
+- Mirrors a battle-tested pattern (ralphex).
+- Agent behavior is identical to interactive mode (no behavioral surprises).
+- No permission-prompt deadlocks possible.
+
+**Cons:**
+- Requires `claude` CLI installed in the daemon's environment / Docker image (already true for our daemon container).
+- "dangerously" is in the flag name — pair with Docker isolation always.
+
+**Effort:** ~1 day, slots into v2.5.4 work.
+
+#### Strategy A — Anthropic SDK direct (alternative for headless or API-first setups)
+
+`AnthropicSdkSpawnProvider` calls `@anthropic-ai/sdk` directly. Claude Code permission system never engages because we're not using Claude Code at all for the spawn.
+
+Tool surface is explicit in the SDK call:
+
+```typescript
+const response = await anthropic.messages.create({
+  model: agentConfig.model,
+  tools: BUILTIN_AGENT_TOOLS,  // Read, Edit, Bash (with shell filter), Grep, etc.
+  messages: [...],
+});
+```
+
+**When to use:** running daemon on a server without Claude Code CLI installed; CI integrations; cost monitoring through Anthropic console rather than Claude Code subscription; needs explicit per-tool audit.
+
+**Pros:** explicit tool surface, no Claude Code CLI dependency, separate Anthropic billing visibility, foundation for multi-model providers in P5.
+**Cons:** requires `ANTHROPIC_API_KEY`; separate billing from Claude Code subscription; agent tools must be defined explicitly (more work than just inheriting Claude Code's defaults).
+**Effort:** already counted in v2.5.4.
+
+#### Strategy C — Pre-warmed allowlist + shuttle (alternative for paranoid users)
+
+For users who want subprocess mode WITHOUT `--dangerously-skip-permissions` even with Docker isolation: daemon generates `~/.claude-pipeline/auto-settings.json` per task with computed allowlist and spawns Claude Code subprocess with `--settings <path>`.
+
+**When to use:** belt-and-suspenders security in environments where Docker isolation is considered insufficient (e.g., shared CI runners).
+
+**Pros:** controlled blast radius even inside the container.
+**Cons:** allowlist is a guess; tasks needing unexpected commands halt; complexity.
+**Effort:** ~1-2 days, can be added later if A+B insufficient.
+
+#### Configuration
+
+```typescript
+// ClaudePipelineConfig
+permission_strategy: {
+  // Default for autonomous tasks (HTTP submission, CLI submission).
+  default_autonomous: "subprocess-skip",  // (Strategy B)
+
+  // Default for interactive tasks (Claude Code /task chat).
+  // "shuttle" = inherits Claude Code's permission system (user clicks through).
+  default_interactive: "shuttle",
+
+  // Per-agent overrides.
+  per_agent_overrides?: Record<string, "shuttle" | "subprocess-skip" | "anthropic-sdk" | "subprocess-allowlist">,
+
+  // For Strategy C only.
+  subprocess_allowlist?: string[],
+}
+```
+
+Web UI Settings page surfaces this as a radio choice per mode (autonomous/interactive) + per-agent override grid. The default values above are pre-selected; user can change but the safe defaults assume Docker isolation is on.
+
+### v2.5.8 — Worktree isolation
+
+Each autonomous task runs in a `git worktree` isolated from the main working tree:
+
+```
+<repo>/
+  .git/                                    # main git dir
+  src/                                     # main branch checkout
+  .claude-pipeline/worktrees/
+    t-2026-05-13-feature-x/                # worktree for autonomous task
+      src/                                 # isolated checkout of task branch
+      .claude/                             # task-local state
+```
+
+`pipeline_init` accepts `isolation: "worktree" | "in-place"` (default `in-place` for backward compatibility with v2; `worktree` for autonomous submissions).
+
+When task completes successfully, daemon either auto-merges to main (if config allows) or surfaces a "merge ready" notification.
+
+**Pros:** multiple autonomous tasks run in parallel without branch conflicts; failed tasks discardable without affecting main.
+**Cons:** worktree management adds complexity; merge conflicts on completion need handling.
+**Effort:** ~2-3 days (was previously P2.5 in earlier draft; promoted here because autonomous mode needs it).
+
 ### v2.5 acceptance
 
 1. `claude-pipeline daemon start` runs the daemon; `status` shows uptime + plugin counts.
@@ -182,13 +288,176 @@ Per-task in submit form: choose gate policy + notification target.
 
 ### v2.5 total effort
 
-**~7-10 focused days of agent work** (or 1.5-2 weeks in comfortable pace with reviews). Could be 2-3 Claude Code sessions due to scope.
+**~10-13 focused days of agent work** (or 2-2.5 weeks in comfortable pace with reviews). Could be 3-4 Claude Code sessions due to scope (grew from earlier ~7-10 estimate after adding permission strategy + worktree isolation as required-for-autonomy).
 
 ### Decision gates inside v2.5
 
 - After v2.5.1 (daemon): does the daemon model feel right? If not, can fall back to per-invocation Node process. Skip v2.5.2+ if user finds daemon too heavy.
 - After v2.5.4 (multi-provider): does provider switching actually help? If single provider (Claude Code) covers all needs, defer remaining providers indefinitely.
 - After v2.5.5 (Web UI MVP): is the UI actually used vs `/task` in chat? If chat covers 90% of use, treat Web UI as read-only history viewer and stop adding write features.
+- After v2.5.7 (permission strategy): which strategy gets the most use? If Strategy A dominates, can drop work on Strategy C.
+
+---
+
+## Phase v2.6 — Container isolation + Docker distribution
+
+**Prerequisite:** v2.5 shipped (daemon + autonomous mode exist).
+**Goal:** Docker isolation **is the default execution environment for autonomous tasks**, not opt-in. Ship daemon as Docker images. Per-task containers are spawned automatically. Combined with Strategy B (`--dangerously-skip-permissions` Claude Code subprocess), this gives ralphex-grade autonomy with stronger isolation than ralphex.
+
+**Design philosophy:** `--dangerously-skip-permissions` is safe ONLY because Docker is the cage. The two defaults reinforce each other:
+- Subprocess + skip-permissions → no permission prompts, fast execution, full agent capability.
+- Docker container per task → blast radius is the ephemeral container, host filesystem untouched, network egress controlled.
+
+Removing either one breaks the safety argument. Both must ship together as default.
+
+Interactive mode (Claude Code chat `/task`) does NOT change — user is in the loop, no isolation needed by default, shuttle provider with normal permissions still works.
+
+### v2.6.1 — Daemon-as-Docker-image
+
+Build and publish Docker images:
+
+```
+ghcr.io/<org>/claude-pipeline:latest        # base — Node + daemon + MCP server
+ghcr.io/<org>/claude-pipeline-ts:latest     # + TypeScript toolchain pre-installed
+ghcr.io/<org>/claude-pipeline-py:latest     # + Python toolchain
+ghcr.io/<org>/claude-pipeline-go:latest     # + Go toolchain
+ghcr.io/<org>/claude-pipeline-flutter:latest # + Flutter SDK
+```
+
+Daemon listens on `:5173` (HTTP) inside the container; user maps to host port.
+
+Standard run:
+
+```bash
+docker run -d \
+  -p 5173:5173 \
+  -v $HOME/projects:/projects \
+  -v $HOME/.claude-pipeline:/data \
+  -e ANTHROPIC_API_KEY=sk-... \
+  ghcr.io/<org>/claude-pipeline-ts:latest
+```
+
+Docker Compose template included in `examples/` for common setups (with traefik for cleaner local URLs, with persistent SQLite volume, multi-project mount).
+
+**Effort:** ~2 days. Dockerfile + GitHub Actions workflow for builds on tag.
+
+### v2.6.2 — Per-task container isolation
+
+Even when daemon runs on host, individual autonomous tasks can spawn in their own throwaway containers. New `ExecutionEnvironmentPlugin` (9th plugin type):
+
+```typescript
+export interface ExecutionEnvironmentPlugin extends PluginMeta {
+  name: string;
+  // Acquire an isolated working environment for one task.
+  acquire(task: TaskHandle): Promise<{ workspace_path: string; cleanup: () => Promise<void> }>;
+}
+```
+
+Built-in implementations:
+
+- **`DockerContainerEnvironment`** (DEFAULT for autonomous tasks): spins up a fresh container per task. Volume-mounts a worktree as `/workspace`. Resource limits (CPU, memory) configurable. Network policy: default-deny outbound except `api.anthropic.com` + per-language package registries + git remotes. Container torn down after task finalizes (kept 60 min for inspection if task failed, configurable).
+- **`InPlaceEnvironment`** (DEFAULT for interactive Claude Code chat tasks): uses `<project>/.claude-pipeline/worktrees/<task_id>/` from v2.5.8. No container — just git worktree on the host. Fast, no filesystem isolation. Safe because user is in the loop.
+- **`FirecrackerEnvironment`** (P2 era — too heavy for v2.6): VM-level isolation. Skip for now.
+
+Configuration with sane defaults:
+
+```typescript
+// ClaudePipelineConfig
+execution_environment: {
+  // Hardwired defaults reflecting the safety design:
+  default_autonomous: "docker-container",   // mandatory isolation for unattended tasks
+  default_interactive: "in-place",           // user-watched, no isolation needed
+
+  docker: {
+    image: "ghcr.io/<org>/claude-pipeline-ts:latest",  // matches detected project stack
+    network: "allowlist",                    // default
+    allowed_hosts: [
+      "api.anthropic.com",
+      "registry.npmjs.org",
+      "pypi.org",
+      "github.com",
+      // + project's git remote auto-added
+    ],
+    cpu_limit: "1.0",
+    memory_limit: "2g",
+    keep_after_failure_minutes: 60,
+    wall_time_limit_minutes: 120,
+  },
+
+  per_agent_overrides?: Record<string, "docker-container" | "in-place">,
+}
+```
+
+Web UI Settings page exposes this but the defaults above are pre-selected. Changing `default_autonomous` away from `docker-container` shows a warning: *"Without container isolation, `--dangerously-skip-permissions` (Strategy B in permission settings) is unsafe. Consider switching permission strategy to Anthropic SDK (Strategy A) if you disable container isolation."*
+
+**Effort:** ~3-4 days. Container lifecycle + network policy enforcement + volume mounts + cleanup.
+
+### v2.6.3 — Network policy
+
+Tasks executing in `DockerContainerEnvironment` get a default-deny network policy with a small allowlist:
+
+- `api.anthropic.com` (always, for SDK provider)
+- `registry.npmjs.org`, `pypi.org`, `proxy.golang.org`, etc. (per-language package managers)
+- `github.com`, the project's git remote (for clone/push)
+
+User can extend per-task or globally. Egress to anything else logged + denied. This protects against accidentally-malicious plugins or compromised dependencies trying to phone home.
+
+Implementation: Docker network in `bridge` mode + iptables rules inside container, or external DNS+proxy. Start with iptables-in-container for simplicity.
+
+**Effort:** ~2 days. Includes audit-log entries for each blocked egress attempt.
+
+### v2.6.4 — Volume-mount strategy
+
+Three tiers of access:
+
+| Mount | Purpose | Default mode |
+|-------|---------|--------------|
+| `/workspace` | Worktree containing the actual code | rw |
+| `/data` | Daemon's `~/.claude-pipeline/` | rw |
+| `/secrets` | API keys, .env (only what task explicitly needs) | ro, via env injection |
+| `/host` | Rest of host filesystem | NOT mounted by default |
+
+Tasks NEVER see arbitrary host filesystem. `~/.ssh` etc. invisible unless user explicitly maps something.
+
+If a task needs files outside the worktree (e.g., shared design system in a sibling dir), user must mount it explicitly.
+
+**Effort:** ~1 day. Already mostly determined by the run script in v2.6.1; finalized here.
+
+### v2.6.5 — Resource limits + escape valves
+
+Per-task limits, enforced at container level:
+
+- **CPU:** default `1.0` core; configurable per task or per agent.
+- **Memory:** default `2GB`; configurable.
+- **Disk:** default `5GB` ephemeral volume.
+- **Wall time:** default `2 hours`; configurable. Hard kill on exceed (records `pipeline_violation: timeout`).
+- **Network bandwidth:** optional rate limit (1 MB/s default).
+
+If a task hits any limit, daemon surfaces it via SSE + audit log + notification. Recovery: same paths as other failures (Items 5 in v2 spec — abandon / force-close / retry).
+
+**Effort:** ~1 day. Most of this is `docker run --cpus 1.0 --memory 2g` flags; some daemon-side enforcement for wall time.
+
+### v2.6 total effort
+
+**~9-11 focused days.** Could be 2 Claude Code sessions.
+
+### v2.6 acceptance
+
+1. `docker run ghcr.io/<org>/claude-pipeline-ts` starts a working daemon; Web UI accessible on mapped port.
+2. **Autonomous tasks default to Docker container execution + Strategy B (subprocess-skip-permissions).** Verified: submit a task via HTTP without specifying environment → daemon spawns container + claude subprocess with skip-permissions → task completes → container torn down.
+3. **Interactive tasks via Claude Code `/task` default to in-place + shuttle** (no container, normal permissions). Verified: same outcome as v2 when run through `/task`.
+4. Disabling Docker default in Web UI shows the safety warning explaining the dependency on Strategy A.
+5. Network policy blocks egress to non-allowlisted hosts; audit log records the attempt.
+6. Wall-time timeout kills a runaway task; pipeline-state reflects timeout violation.
+7. `--keep-container` flag preserves container for inspection after failure.
+8. `ExecutionEnvironmentPlugin` is registered like other plugins; users can add custom environments without core changes.
+9. Docker Compose template in `examples/` works end-to-end (daemon + persistent SQLite + multi-project mount).
+10. Inside a v2.6 container, an agent doing `rm -rf /tmp/foo` only affects the container's `/tmp`, not the host (proves the isolation).
+
+### v2.6 decision gates
+
+- After v2.6.1 (daemon image): is anyone running the daemon-in-Docker? If only the author, the image is a distribution detail; per-task isolation (v2.6.2) is the main value.
+- After v2.6.2 (per-task isolation): does container startup add significant latency? If >30s per task, consider container reuse (pool of warm containers) — separate optimization.
 
 ---
 

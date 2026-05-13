@@ -111,6 +111,42 @@ describe("pipeline_record_agent_run", () => {
     }
   });
 
+  it("lenient parse recovers a missing ```json fence and flags _repaired", async () => {
+    const proj = await tempProject();
+    try {
+      await bootstrapToImpl(proj.dir);
+      // No fence — raw JSON object embedded in narrative.
+      const validBody = {
+        schema_version: "1.0",
+        agent: "logic-reviewer",
+        task_id: "t-2026-05-13-test",
+        iteration: 1,
+        verdict: "APPROVE",
+        summary_line: "looks good",
+        findings: [],
+        past_misses_applied: 0,
+        past_miss_matches: [],
+        ref_rules_consulted: [],
+      };
+      const naked = `# Logic Review\n\n${JSON.stringify(validBody, null, 2)}\n\nMore prose.`;
+      const { agent_run_id } = await pipelineBeginAgent({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent: "logic-reviewer",
+      });
+      const r = await pipelineRecordAgentRun({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent_run_id,
+        agent_output: naked,
+      });
+      expect(r.agent).toBe("logic-reviewer");
+      expect(r._repaired).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("rejects when agent_run_id does not match the output's agent (INV_012)", async () => {
     const proj = await tempProject();
     try {

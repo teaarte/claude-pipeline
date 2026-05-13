@@ -52,12 +52,13 @@ export async function pipelineRecordAgentRun(input: {
   const fjsonl = findingsFile(input.project_dir);
   const summary = summaryFile(input.project_dir);
 
-  // 1. extract + parse JSON header
+  // 1. extract + parse JSON header (3-stage soft parse — item 6)
   const parsed = extractJsonHeader(input.agent_output);
   if (!parsed.ok) {
     throw new Error(`Failed to parse JSON header: ${parsed.reason}`);
   }
   const header = parsed.value;
+  const repaired = parsed.repaired;
   const agent = header.agent;
   if (!agent || typeof agent !== "string") {
     throw new Error("JSON header missing 'agent' field");
@@ -167,6 +168,7 @@ export async function pipelineRecordAgentRun(input: {
         blocking,
         non_blocking: nonBlocking,
         summary_line: header.summary_line ?? "",
+        ...(repaired ? { _repaired: true } : {}),
       },
     };
   });

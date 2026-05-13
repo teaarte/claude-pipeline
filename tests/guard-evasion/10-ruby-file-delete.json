@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ruby -e \"File.delete('PROJECT_DIR/.claude/findings.jsonl')\""
+  }
+}

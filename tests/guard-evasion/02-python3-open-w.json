@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python3 -c \"open('PROJECT_DIR/.claude/pipeline-state.json', 'w').write('{}')\""
+  }
+}

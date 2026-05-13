@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "node -e \"require('fs').writeFileSync('PROJECT_DIR/.claude/pipeline-state.json', '{}')\""
+  }
+}

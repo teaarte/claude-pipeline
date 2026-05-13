@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "deno run -A -e \"Deno.removeSync('PROJECT_DIR/.claude/findings.jsonl')\""
+  }
+}

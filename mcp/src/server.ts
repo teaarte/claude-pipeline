@@ -13,6 +13,12 @@ import { pipelineFinish, finishSchema } from "./tools/finish.js";
 import { pipelineLogAgentFeedback, logAgentFeedbackSchema } from "./tools/log-agent-feedback.js";
 import { pipelineGetPastMisses, getPastMissesSchema } from "./tools/get-past-misses.js";
 import { pipelineBeginAgent, beginAgentSchema } from "./tools/begin-agent.js";
+import {
+  pipelineUnlockWrites,
+  unlockWritesSchema,
+  pipelineRelockWrites,
+  relockWritesSchema,
+} from "./tools/unlock-writes.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -65,6 +71,8 @@ async function main() {
   register(server, "pipeline_finish", "Set verdict (accepted|rejected), run invariants, and on success append a metrics row to ~/.claude/metrics/pipeline.jsonl. Refuses on any violation.", finishSchema, pipelineFinish);
   register(server, "pipeline_log_agent_feedback", "Append a human-confirmed missed-issue entry to ~/.claude/metrics/agent-feedback.jsonl. Used by /agent-feedback.", logAgentFeedbackSchema, pipelineLogAgentFeedback);
   register(server, "pipeline_get_past_misses", "Read the last N human-confirmed entries for a given agent from ~/.claude/metrics/agent-feedback.jsonl. Used at pipeline start (rule #15) to build .claude/past-misses-{agent}.md.", getPastMissesSchema, pipelineGetPastMisses);
+  register(server, "pipeline_unlock_writes", "Temporarily allow direct writes to MCP-managed files for the given project. Creates <project>/.claude/.mcp-bypass-allowed with an expires_at timestamp. Default TTL 300s, max 3600s. Required reason logged in audit. Honored by hooks/pipeline-guard.sh.", unlockWritesSchema, pipelineUnlockWrites);
+  register(server, "pipeline_relock_writes", "Remove the bypass marker, immediately restoring guard enforcement. Idempotent.", relockWritesSchema, pipelineRelockWrites);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

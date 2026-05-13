@@ -13,8 +13,8 @@ Read `.claude/pipeline-state.json` to determine current step, what's completed, 
 
 If no pipeline-state.json: *"No active task found. Start one with `/task <description>`"*
 
-### 2. Read the complexity pipeline
-Read `~/.claude/pipelines/[complexity].md` to know the steps.
+### 2. Inspect the driver state
+The v2 driver persists its FSM state to `.claude/driver-state.json`. Read it to know which flow is active (`flow_name`), the current step (`step_index`), what spawns are in flight (`pending_spawns`), and whether the driver is awaiting a user answer (`pending_user_answer`).
 
 ### 3. Determine Resume Point
 
@@ -47,8 +47,7 @@ Read `~/.claude/pipelines/[complexity].md` to know the steps.
 - Ask user: retry, skip, provide manually, or abort
 
 ### 4. Resume
-Follow `~/.claude/pipelines/[complexity].md` from the current step.
-Update pipeline-state.json after resuming.
+Re-enter the driver by calling `pipeline_continue_task({project_dir, driver_state_id, input})` with the appropriate shuttle event (`agent-result`, `agents-results`, `user-answer`, or `recovery`). The driver picks up from `step_index` and walks forward.
 
 ---
 

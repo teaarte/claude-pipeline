@@ -7,8 +7,8 @@ Run integrity checks on the pipeline configuration. No arguments needed.
 ## Checks
 
 ### 0. MCP Server Registration
-- Run `claude mcp list` (Bash) and confirm output contains `claude-pipeline: ... ✓ Connected`. If missing or disconnected, this is a **blocking** issue — every `mcp__claude-pipeline__*` call referenced in `commands/`, `pipelines/`, and `agents/` will fail. Suggest fix: `claude mcp add --scope user claude-pipeline -- node /Users/teaarte/Programming/internal/claude-pipeline/mcp/dist/server.js`.
-- Read `mcp/README.md`. Confirm the listed MCP tool names (table under "## Tools") match what is referenced in `commands/task.md` (rules #1, #15, #22-29), `commands/done.md`, `commands/agent-feedback.md`, and the pipeline files. Any reference to a tool name not present in `mcp/README.md` is a blocking issue.
+- Run `claude mcp list` (Bash) and confirm output contains `claude-pipeline: ... ✓ Connected`. If missing or disconnected, this is a **blocking** issue. Suggest fix: `claude mcp add --scope user claude-pipeline -- node /Users/teaarte/Programming/internal/claude-pipeline/mcp/dist/server.js`.
+- Read `mcp/README.md`. Confirm the listed MCP tool names match what is referenced in `commands/task.md`, `commands/done.md`, `commands/agent-feedback.md`, and the driver framework under `mcp/src/driver/`. Any reference to a tool name not present in `mcp/README.md` is a blocking issue.
 
 ### 1. Agent Files
 For each agent in `~/.claude/agents/*.md`:
@@ -16,11 +16,11 @@ For each agent in `~/.claude/agents/*.md`:
 - Reviewer/validator agents have an Output section that documents emitting a fenced ```json block (per `templates/schemas/{reviewer,validator}-output.schema.json`)
 - No references to non-existent files (grep for paths like `~/.claude/agents/` and verify targets exist)
 
-### 2. Pipeline Files
-For each pipeline in `~/.claude/pipelines/*.md`:
-- All referenced agent paths exist (e.g. `~/.claude/agents/planner.md`)
-- STEP numbers are sequential (sub-steps like 5b are allowed, no major gaps or duplicates)
-- At least one Human Gate exists
+### 2. Driver Framework
+The v2 plugin framework lives in `mcp/src/driver/`. Confirm:
+- Every `AgentPlugin.template_path` in `mcp/src/driver/builtin/agents/index.ts` resolves to an existing `agents/*.md` file.
+- Every step referenced in a `FlowPlugin.steps` array is registered in `mcp/src/driver/builtin/steps/index.ts`.
+- `grep -rEi "planner|implementer|logic-reviewer|gate-[012]" mcp/src/driver/core/` returns no matches.
 
 ### 3. Command Files
 For each command in `~/.claude/commands/*.md`:
@@ -69,8 +69,8 @@ For each command in `~/.claude/commands/*.md`:
 - Sample rows in `metrics/pipeline.jsonl` and `metrics/agent-feedback.jsonl` (if present) carry `schema_version`.
 
 ### 11. Cross-Reference Sanity
-- For every reference cited in `commands/*.md`, `pipelines/*.md`, `agents/*.md` of the form `agents/references/<name>.md` — verify file exists.
-- For every reference cited as `templates/schemas/<name>.json` — verify file exists.
+- For every reference cited in `commands/*.md`, `agents/*.md`, or any `mcp/src/driver/builtin/decisions/*.ts` ref-loader of the form `agents/references/<name>.md` — verify the file exists.
+- For every reference cited as `templates/schemas/<name>.json` — verify the file exists.
 - Dangling references → blocking issue.
 
 ## Output

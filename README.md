@@ -299,10 +299,12 @@ cp metrics/*.jsonl ~/.claude/metrics/ 2>/dev/null || true
 cd mcp && pnpm install && pnpm build && cd ..
 claude mcp add --scope user claude-pipeline -- node "$(pwd)/mcp/dist/server.js"
 
-# Install the Stop hook (diagnostic safety net)
-cp hooks/pipeline-stop.sh ~/.claude/hooks/pipeline-stop.sh
-chmod +x ~/.claude/hooks/pipeline-stop.sh
-# then add to ~/.claude/settings.json hooks.Stop[] — see mcp/README.md
+# Install the Claude Code hooks (mechanical guardrails on top of the MCP)
+mkdir -p ~/.claude/hooks
+ln -sfn "$(pwd)/hooks/pipeline-guard.sh" ~/.claude/hooks/pipeline-guard.sh
+ln -sfn "$(pwd)/hooks/pipeline-stop.sh"  ~/.claude/hooks/pipeline-stop.sh
+# then merge the PreToolUse and Stop fragments from settings.reference.json
+# into your ~/.claude/settings.json — see hooks/README.md for details
 
 # Install RTK (recommended — 60-90% token savings)
 brew install rtk-ai/tap/rtk && rtk init -g
@@ -336,7 +338,9 @@ claude-pipeline/
     src/               10 tool implementations + lib helpers
     README.md          tool reference + invariants
   hooks/
-    pipeline-stop.sh   diagnostic Stop hook — warns on incoherent pipeline-state at session end
+    pipeline-guard.sh  PreToolUse hook — denies direct Write/Edit/Bash that mutates MCP-managed files
+    pipeline-stop.sh   Stop hook — blocks session-stop on in-flight pipeline; falls back to stderr on retry
+    README.md          install instructions + escape hatches
   metrics/
     pipeline.jsonl     append-only structured per-task metrics
     agent-feedback.jsonl  append-only structured misses with category

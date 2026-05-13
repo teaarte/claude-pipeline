@@ -3,6 +3,7 @@ import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
 const NONREVIEW_AGENTS = [
@@ -26,7 +27,10 @@ export const recordNonreviewSchema = {
     .regex(/^ar-[0-9a-f-]+$/)
     .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   output_file: z.string().optional().describe("Relative path to the file the agent produced, e.g. '.claude/plan.md'"),
-  iterations: z.number().int().min(0).optional().describe("If this is a re-spawn, current iteration count"),
+  iterations: z
+    .union([z.number(), z.string()])
+    .optional()
+    .describe("If this is a re-spawn, current iteration count. Numeric strings like '3' are coerced; approximations like '~5' or '3-4' are rejected."),
 };
 
 export async function pipelineRecordNonreviewAgent(input: {
@@ -35,8 +39,10 @@ export async function pipelineRecordNonreviewAgent(input: {
   agent: (typeof NONREVIEW_AGENTS)[number];
   agent_run_id: string;
   output_file?: string;
-  iterations?: number;
+  iterations?: number | string;
 }): Promise<any> {
+  // Item 7: coerce stringified integers; reject approximations.
+  const iterations = coerceIntegerOpt(input.iterations, "iterations");
   const file = stateFile(input.project_dir);
   const summary = summaryFile(input.project_dir);
 
@@ -58,8 +64,8 @@ export async function pipelineRecordNonreviewAgent(input: {
     phase.agents.push(input.agent);
     if (phase.status === "pending") phase.status = "in_progress";
 
-    if (input.iterations != null && "iterations" in phase) {
-      phase.iterations = input.iterations;
+    if (iterations != null && "iterations" in phase) {
+      phase.iterations = iterations;
     }
 
     state.agents_count = (state.agents_count ?? 0) + 1;

@@ -42,6 +42,46 @@ describe("pipeline_record_nonreview_agent", () => {
     }
   });
 
+  it("coerces stringified iterations '3' → 3", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      const { agent_run_id } = await pipelineBeginAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await pipelineRecordNonreviewAgent({
+        project_dir: proj.dir,
+        phase: "planning",
+        agent: "planner",
+        agent_run_id,
+        iterations: "3" as any,
+      });
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      expect(state.phases.planning.iterations).toBe(3);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("rejects approximate iterations '~5' with a helpful error", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      const { agent_run_id } = await pipelineBeginAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await expect(
+        pipelineRecordNonreviewAgent({
+          project_dir: proj.dir,
+          phase: "planning",
+          agent: "planner",
+          agent_run_id,
+          iterations: "~5" as any,
+        }),
+      ).rejects.toThrow(/approximate/);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("rejects record without a matching agent_run_id (INV_012)", async () => {
     const proj = await tempProject();
     try {

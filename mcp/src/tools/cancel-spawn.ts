@@ -2,13 +2,13 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-
-const VALID_PHASES = ["context", "planning", "test_first", "implementation", "validation", "final"] as const;
+import { PHASES, type Phase } from "../lib/phase-state-machine.js";
+import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 
 export const cancelSpawnSchema = {
   project_dir: z.string(),
-  phase: z.enum(VALID_PHASES),
-  agent_run_id: z.string().regex(/^ar-[0-9a-f-]+$/),
+  phase: z.enum(PHASES),
+  agent_run_id: z.string().regex(AGENT_RUN_ID_PATTERN),
   reason: z.string().min(1).describe("Why the spawn is being cancelled (logged for audit)."),
 };
 
@@ -19,7 +19,7 @@ export const cancelSpawnSchema = {
  */
 export async function pipelineCancelSpawn(input: {
   project_dir: string;
-  phase: (typeof VALID_PHASES)[number];
+  phase: Phase;
   agent_run_id: string;
   reason: string;
 }): Promise<{ cancelled: { id: string; agent: string; started_at: string } | null; reason: string }> {

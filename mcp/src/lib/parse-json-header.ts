@@ -8,11 +8,21 @@
  *          there means we recovered from a missing or malformed code fence.
  * Stage 3: throw with the strict reason.
  *
+ * Bounds (Logic L7):
+ *  - LENIENT_SCAN_LIMIT (500): where the opening `{` must start.
+ *  - LENIENT_OBJECT_CEILING (128 KB): max bytes we'll walk to find the
+ *    matching closing `}`. Agent outputs are realistically <100KB.
+ *  - LENIENT_RETRY_CAP (5): if a balanced candidate fails JSON.parse, we
+ *    try the next one up to this many times — defeats O(n²) on pathological
+ *    `{xxx{xxx{...` input.
+ *
  * Returns the parsed value plus a `repaired` boolean. Callers propagate
  * `_repaired: true` into their response payload for audit visibility; the
  * MCP driver treats it as informational, not an error.
  */
 const LENIENT_SCAN_LIMIT = 500;
+const LENIENT_OBJECT_CEILING = 128 * 1024;
+const LENIENT_RETRY_CAP = 5;
 
 export type ParseResult =
   | { ok: true; value: any; repaired: boolean }
@@ -50,16 +60,19 @@ export function extractJsonHeader(text: string): ParseResult {
  */
 function tryLenient(text: string): any | null {
   let cursor = 0;
-  while (cursor < text.length) {
+  let attempts = 0;
+  while (cursor < text.length && attempts < LENIENT_RETRY_CAP) {
+    attempts++;
     const head = text.slice(cursor, cursor + LENIENT_SCAN_LIMIT);
     const startRel = head.indexOf("{");
     if (startRel === -1) return null;
     const start = cursor + startRel;
+    const inspectEnd = Math.min(text.length, start + LENIENT_OBJECT_CEILING);
     let depth = 0;
     let inString = false;
     let escape = false;
     let closed = -1;
-    for (let i = start; i < text.length; i++) {
+    for (let i = start; i < inspectEnd; i++) {
       const c = text[i];
       if (escape) {
         escape = false;
@@ -91,22 +104,13 @@ function tryLenient(text: string): any | null {
     try {
       return JSON.parse(candidate);
     } catch {
-      // Advance past this candidate and try again.
       cursor = closed + 1;
     }
   }
   return null;
 }
 
-const SLUG_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
-
-export function makeFindingId(date: Date = new Date()): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  let suffix = "";
-  for (let i = 0; i < 6; i++) {
-    suffix += SLUG_CHARS[Math.floor(Math.random() * SLUG_CHARS.length)];
-  }
-  return `f-${y}-${m}-${d}-${suffix}`;
-}
+// Re-export the canonical ID helpers from lib/ids.ts. Existing call sites
+// keep importing from parse-json-header for backwards compatibility while
+// the producer lives in one place (Style #3, #4).
+export { makeFindingId } from "./ids.js";

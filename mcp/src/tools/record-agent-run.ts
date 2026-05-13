@@ -5,10 +5,11 @@ import {
   appendJsonl,
   writeText,
 } from "../lib/state-io.js";
-import { extractJsonHeader, makeFindingId } from "../lib/parse-json-header.js";
+import { extractJsonHeader } from "../lib/parse-json-header.js";
+import { makeFindingId, AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
 import { buildSummary } from "../lib/summary.js";
-import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
@@ -31,21 +32,19 @@ const VALIDATOR_AGENTS = new Set([
   "test",
 ]);
 
-const VALID_PHASES = ["context", "planning", "test_first", "implementation", "validation", "final"] as const;
-
 export const recordAgentRunSchema = {
   project_dir: z.string(),
-  phase: z.enum(VALID_PHASES).describe("Which pipeline phase this agent belongs to"),
+  phase: z.enum(PHASES).describe("Which pipeline phase this agent belongs to"),
   agent_run_id: z
     .string()
-    .regex(/^ar-[0-9a-f-]+$/)
+    .regex(AGENT_RUN_ID_PATTERN)
     .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   agent_output: z.string().describe("Full text output of the agent, including the fenced ```json header"),
 };
 
 export async function pipelineRecordAgentRun(input: {
   project_dir: string;
-  phase: (typeof VALID_PHASES)[number];
+  phase: Phase;
   agent_run_id: string;
   agent_output: string;
 }): Promise<any> {

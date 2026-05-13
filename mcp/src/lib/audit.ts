@@ -1,9 +1,12 @@
-import { readFile, writeFile, mkdir, appendFile, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, appendFile, rename, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import lockfile from "proper-lockfile";
 import { homeMetricsDir } from "./paths.js";
-import { readStateSafe } from "./state-io.js";
+import { fileExists, readStateSafe } from "./state-io.js";
 
 export const AUDIT_GLOBAL_CAP = 10_000;
+/** Per-project audit cap (Performance I1). FIFO-truncated like global. */
+export const AUDIT_PROJECT_CAP = 50_000;
 
 export type AuditVerdict = "ok" | "error" | "force_bypass";
 
@@ -59,30 +62,80 @@ async function appendUncapped(file: string, entry: unknown): Promise<void> {
 }
 
 /**
- * Append to a JSONL file but cap total entries at `cap`. When over, rewrite
- * the file with the last `cap` entries (FIFO truncation). Cheap for our scale
- * (~1MB at 10k entries).
+ * Build a global-stream audit entry with sensitive fields collapsed
+ * (Security sec007). The per-project stream keeps full project_dir + task
+ * — that file is /done-cleared. The global stream lives forever; collapsing
+ * lets us still see "what tool was called when" without persisting client
+ * names or task strings that could contain secrets.
+ */
+function redactForGlobal(entry: AuditEntry): AuditEntry {
+  const copy: AuditEntry = { ...entry, args_summary: { ...entry.args_summary } };
+  if (typeof copy.project_dir === "string") {
+    copy.project_dir = `<project-dir ${copy.project_dir.length} chars>`;
+  }
+  const args = copy.args_summary as Record<string, unknown>;
+  for (const k of ["task", "task_short", "reason"]) {
+    const v = args[k];
+    if (typeof v === "string" && v.length > 0) args[k] = `<${k} ${v.length} chars>`;
+  }
+  return copy;
+}
+
+// Cheap gate: only walk the file when its size *might* exceed cap. avg
+// audit line ≈ 300 bytes; safety multiplier of 1.5× means we read only
+// when file size is plausibly over `cap` rows. Saves ~3MB of disk read per
+// MCP call once the file is established (Performance W1).
+const AVG_BYTES_PER_ENTRY = 300;
+
+/**
+ * Append to a JSONL file but cap total entries at `cap`. When over, the
+ * read-trim-rename branch runs under a proper-lockfile lock so two
+ * concurrent audit() calls don't drop one another's entry at the cap
+ * boundary (Challenger audit01).
  */
 async function appendCapped(file: string, entry: unknown, cap: number): Promise<void> {
   await ensureDir(file);
-  let existing = "";
+  // Fast path: cheap stat to decide if rotation is even plausible.
+  let plausiblyOverCap = false;
   try {
-    existing = await readFile(file, "utf8");
+    const st = await stat(file);
+    if (st.size > cap * AVG_BYTES_PER_ENTRY) plausiblyOverCap = true;
   } catch {
-    existing = "";
+    /* file doesn't exist yet — definitely not over cap */
   }
-  const lines = existing.split("\n").filter(Boolean);
-  lines.push(JSON.stringify(entry));
-  if (lines.length > cap) {
-    const trimmed = lines.slice(lines.length - cap);
-    // Atomic rewrite.
-    const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-    await writeFile(tmp, trimmed.join("\n") + "\n", "utf8");
-    await rename(tmp, file);
+  if (!plausiblyOverCap) {
+    await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
     return;
   }
-  // Below cap: simple append is enough.
-  await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+  // Slow path: lock + read-trim-rename. Append-then-truncate avoids
+  // dropping the new entry under contention.
+  if (!(await fileExists(file))) {
+    await writeFile(file, "", "utf8");
+  }
+  const release = await lockfile.lock(file, {
+    retries: { retries: 5, minTimeout: 25, maxTimeout: 200 },
+    stale: 10_000,
+  });
+  try {
+    let existing = "";
+    try {
+      existing = await readFile(file, "utf8");
+    } catch {
+      existing = "";
+    }
+    const lines = existing.split("\n").filter(Boolean);
+    lines.push(JSON.stringify(entry));
+    if (lines.length > cap) {
+      const trimmed = lines.slice(lines.length - cap);
+      const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+      await writeFile(tmp, trimmed.join("\n") + "\n", "utf8");
+      await rename(tmp, file);
+    } else {
+      await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+    }
+  } finally {
+    await release().catch(() => undefined);
+  }
 }
 
 export type AuditCall = {
@@ -117,9 +170,12 @@ export async function audit(call: AuditCall): Promise<void> {
   };
   if (call.error) entry.error = call.error;
 
-  await appendCapped(globalAuditFile(), entry, AUDIT_GLOBAL_CAP);
+  await appendCapped(globalAuditFile(), redactForGlobal(entry), AUDIT_GLOBAL_CAP);
   if (projectDir) {
-    await appendUncapped(projectAuditFile(projectDir), entry);
+    // Per-project audit retains the unredacted entry (it's /done-cleaned).
+    // Cap at AUDIT_PROJECT_CAP to bound growth across many tasks in one
+    // project (Performance I1).
+    await appendCapped(projectAuditFile(projectDir), entry, AUDIT_PROJECT_CAP);
   }
 }
 

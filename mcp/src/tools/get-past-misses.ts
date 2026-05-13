@@ -16,26 +16,44 @@ export const getPastMissesSchema = {
 };
 
 // Decay constants (item 11):
-//   recency_weight = exp(-age_days / 60)  → half-life ≈ 42 days
+//   recency_weight = exp(-age_days / DECAY_TIMECONSTANT_DAYS)
 //   confidence     = entry.manual_confidence ?? 1.0
-//   match_rate     = (times_matched_last_20 / 20) + 0.05
+//   match_rate     = (matches_in_last_N_runs / MATCH_WINDOW) + MATCH_RATE_FLOOR
 //   score          = recency_weight × confidence × match_rate
-export const DECAY_HALFLIFE_DAYS_RAW = 60;
+//
+// DECAY_TIMECONSTANT_DAYS=60 gives half-life ≈ ln(2)*60 ≈ 41.6 days — call
+// it "~42-day half-life" in docs (Challenger #2). Old export name retained
+// as alias for backwards compatibility within the suite.
+export const DECAY_TIMECONSTANT_DAYS = 60;
+export const DECAY_HALFLIFE_DAYS_RAW = DECAY_TIMECONSTANT_DAYS;
 export const MATCH_WINDOW = 20;
 export const MATCH_RATE_FLOOR = 0.05;
 export const CATEGORY_HINT_BONUS = 0.5;
 
+/**
+ * Score one feedback entry against the recent N runs from
+ * ~/.claude/metrics/pipeline.jsonl. We match on `categories_seen[]` —
+ * that's the array of finding categories the run actually emitted
+ * (populated by pipeline_finish). The original implementation looked at
+ * row.category which doesn't exist; match_rate was effectively dead
+ * (Challenger #3).
+ */
 export function scoreEntry(
   entry: any,
   now: number,
-  recentFindings: any[],
+  recentRuns: any[],
   categoryHint?: string,
 ): number {
   const date = Date.parse(entry.date + "T00:00:00Z");
   const ageDays = Number.isFinite(date) ? Math.max(0, (now - date) / 86_400_000) : 0;
-  const recency = Math.exp(-ageDays / DECAY_HALFLIFE_DAYS_RAW);
+  const recency = Math.exp(-ageDays / DECAY_TIMECONSTANT_DAYS);
   const confidence = typeof entry.manual_confidence === "number" ? entry.manual_confidence : 1.0;
-  const matches = recentFindings.filter((f) => f.category === entry.category).length;
+  const matches = recentRuns.filter((row) => {
+    if (Array.isArray(row?.categories_seen) && row.categories_seen.includes(entry.category)) return true;
+    // Legacy back-compat: some test fixtures put `category` directly on the
+    // row instead of `categories_seen[]`.
+    return row?.category === entry.category;
+  }).length;
   const matchRate = matches / MATCH_WINDOW + MATCH_RATE_FLOOR;
   let score = recency * confidence * matchRate;
   if (categoryHint && entry.category === categoryHint) score += CATEGORY_HINT_BONUS;
@@ -56,15 +74,13 @@ export async function pipelineGetPastMisses(input: {
     return true;
   });
 
-  // Read the most recent findings.jsonl to compute times_matched_last_20.
-  // Pull from the global metrics dir's pipeline.jsonl row stream — that
-  // captures "runs". For simplicity v2 reads the agent-feedback entries
-  // themselves as a proxy when no per-task findings stream is available.
-  const recentFindings = (await readJsonl(join(homeMetricsDir, "pipeline.jsonl"))).slice(-MATCH_WINDOW);
+  // Recent runs from the global pipeline.jsonl. Each row carries
+  // categories_seen[] — the list of finding categories from that run.
+  const recentRuns = (await readJsonl(join(homeMetricsDir, "pipeline.jsonl"))).slice(-MATCH_WINDOW);
 
   const now = Date.now();
   const ranked = candidates
-    .map((e) => ({ entry: e, score: scoreEntry(e, now, recentFindings, input.category_hint) }))
+    .map((e) => ({ entry: e, score: scoreEntry(e, now, recentRuns, input.category_hint) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, input.top_n ?? 10);
 

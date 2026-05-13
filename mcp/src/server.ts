@@ -19,6 +19,8 @@ import {
   pipelineRelockWrites,
   relockWritesSchema,
 } from "./tools/unlock-writes.js";
+import { pipelineAbandon, abandonSchema } from "./tools/abandon.js";
+import { pipelineCancelSpawn, cancelSpawnSchema } from "./tools/cancel-spawn.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -73,6 +75,8 @@ async function main() {
   register(server, "pipeline_get_past_misses", "Read the last N human-confirmed entries for a given agent from ~/.claude/metrics/agent-feedback.jsonl. Used at pipeline start (rule #15) to build .claude/past-misses-{agent}.md.", getPastMissesSchema, pipelineGetPastMisses);
   register(server, "pipeline_unlock_writes", "Temporarily allow direct writes to MCP-managed files for the given project. Creates <project>/.claude/.mcp-bypass-allowed with an expires_at timestamp. Default TTL 300s, max 3600s. Required reason logged in audit. Honored by hooks/pipeline-guard.sh.", unlockWritesSchema, pipelineUnlockWrites);
   register(server, "pipeline_relock_writes", "Remove the bypass marker, immediately restoring guard enforcement. Idempotent.", relockWritesSchema, pipelineRelockWrites);
+  register(server, "pipeline_abandon", "Move <project>/.claude/pipeline-state.json to abandoned-<ts>.json. No metrics row is written. Use when the task is unsalvageable; restart with pipeline_init afterwards.", abandonSchema, pipelineAbandon);
+  register(server, "pipeline_cancel_spawn", "Remove a stuck open_spawn from phases[phase].open_spawns[]. Use when an agent crashed mid-flight and will never call pipeline_record_agent_run. Required before pipeline_set_phase_status({status:'completed'}) if open_spawns[] is non-empty.", cancelSpawnSchema, pipelineCancelSpawn);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

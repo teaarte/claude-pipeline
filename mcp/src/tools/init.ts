@@ -9,6 +9,7 @@ import {
   writeText,
 } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
+import { assertProjectDirAllowed } from "../lib/project-dir.js";
 
 export const initSchema = {
   project_dir: z.string().describe("Absolute path to the project root (contains .claude/)"),
@@ -39,6 +40,7 @@ export async function pipelineInit(input: {
   tests_mode: "tdd" | "regression-only";
   stack: any;
 }): Promise<any> {
+  await assertProjectDirAllowed(input.project_dir);
   const file = stateFile(input.project_dir);
   const fjsonl = findingsFile(input.project_dir);
   const summary = summaryFile(input.project_dir);

@@ -29,6 +29,8 @@ export default defineConfig({
     },
     env: {
       CLAUDE_PIPELINE_METRICS_DIR: metricsDir,
+      // Tests + smoke mkdtemp() under $TMPDIR; allow that as project_dir.
+      CLAUDE_PIPELINE_ALLOW_ANY_PROJECT_DIR: "1",
     },
     pool: "forks",
     poolOptions: {

@@ -13,7 +13,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "smoke": "CLAUDE_PIPELINE_METRICS_DIR=$(mktemp -d) node dist/smoke.js",
+    "smoke": "CLAUDE_PIPELINE_METRICS_DIR=$(mktemp -d) CLAUDE_PIPELINE_ALLOW_ANY_PROJECT_DIR=1 node dist/smoke.js",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -1,32 +1,24 @@
 #!/usr/bin/env bash
 # pipeline-guard.sh — PreToolUse hook that blocks direct writes to MCP-managed files.
 #
-# Protected paths (managed exclusively by the claude-pipeline MCP server):
-#   * <project>/.claude/pipeline-state.json
-#   * <project>/.claude/pipeline-state-summary.md
-#   * <project>/.claude/findings.jsonl
-#   * <project>/.claude/mcp-audit.jsonl
-#   * ~/.claude/metrics/pipeline.jsonl
-#   * ~/.claude/metrics/agent-feedback.jsonl
-#   * ~/.claude/metrics/mcp-audit.jsonl
+# Protected paths:
+#   * <project>/.claude/{pipeline-state.json, pipeline-state-summary.md,
+#       findings.jsonl, mcp-audit.jsonl, driver-state.json,
+#       .mcp-managed, .mcp-bypass-allowed}
+#   * ~/.claude/metrics/{pipeline,agent-feedback,mcp-audit}.jsonl
 #
-# Scoping (4a):
-#   A path under <project>/.claude/ is only protected when an ancestor
-#   directory contains a `.mcp-managed` marker file (created by pipeline_init,
-#   removed by /done). Without the marker, guard fails-open. Home-metrics
-#   paths are always protected.
+# Scoping: project paths are protected when a `.mcp-managed` marker exists
+# in the project root (created by pipeline_init). Home-metrics paths are
+# always protected.
 #
-# Bypass (4c, replaces PIPELINE_ALLOW_RAW):
-#   <project>/.claude/.mcp-bypass-allowed{schema_version,expires_at,reason,issued_by_task_id}
-#   created by pipeline_unlock_writes({ttl_seconds, reason}). Honored only
-#   while `now < expires_at`. Removed by pipeline_relock_writes or /done.
+# Bypass: <project>/.claude/.mcp-bypass-allowed{expires_at, ...} created by
+# pipeline_unlock_writes. Guard honors only while now < expires_at AND
+# (expires_at - issued_at) <= UNLOCK_MAX_TTL_SECONDS.
 #
-# Coverage (4b):
-#   Beyond shell mutators, blocks Python/Node/Deno/Perl/Ruby/dd write-ops
-#   that target a protected file. Reads (cat, grep, jq, less, etc.) pass.
+# Performance: protected-path short-circuit uses bash `[[ =~ ]]` (no subshell),
+# saving ~15ms per Bash call where the pattern doesn't match.
 
 if ! command -v jq &>/dev/null; then
-  # Without jq we can't parse the payload; fail-open so Claude Code stays usable.
   exit 0
 fi
 
@@ -34,24 +26,32 @@ INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 [ -z "$TOOL" ] && exit 0
 
-# Protected basenames in <proj>/.claude/ and ~/.claude/metrics/.
-PROTECTED_RE='(\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl))|(\.claude/metrics/(pipeline|agent-feedback|mcp-audit)\.jsonl)'
+# Match-on-substring; covers the protected basenames in <proj>/.claude/ and
+# ~/.claude/metrics/. driver-state.json, .mcp-managed, .mcp-bypass-allowed
+# added per Challenger guard01 — losing the marker or forging the bypass
+# would silently disable enforcement.
+PROTECTED_RE='(\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed))|(\.claude/metrics/(pipeline|agent-feedback|mcp-audit)\.jsonl)'
 
-# Write-op detection across shells and embedded interpreters.
-# Each entry MUST be paired with PROTECTED_RE elsewhere in the command to fire.
+UNLOCK_MAX_TTL_SECONDS=3600
+
+# Write-op detection. Each entry must pair with PROTECTED_RE in the command.
+# Loosened mutator anchor `[^[:alnum:]_]` lets quoted/paren'd `rm` inside
+# `bash -c "rm ..."` or `$(rm ...)` fire (Security sec001).
 WRITE_OP_PATTERNS=(
-  '(^|[^0-9])>{1,2}'                                                    # redirects
-  '\|[[:space:]]*tee([[:space:]]|$)'                                    # | tee
-  '(^|[[:space:]])sed[[:space:]]+-i'                                    # sed -i / sed -i''
-  '(^|[[:space:]])awk[[:space:]]+-i'                                    # awk -i inplace
-  '(^|[[:space:]])(cp|mv|rm|truncate|install|chmod|chown)([[:space:]]|$)' # mutators
-  # Interpreted -c / -e patterns. Use .* (not [^|;&]*) because the protected
-  # file path inside the script body may follow embedded semicolons; the
-  # accidental cost is matching mutator verbs that appear in grep/jq pipes,
-  # which is acceptable in a default-deny security hook.
-  'python(3)?[[:space:]]+-c[[:space:]].*(unlink|remove|rmtree|os\.remove|os\.unlink|shutil\.rmtree|open\([^)]*['\''"]w)'
-  'node(js)?[[:space:]]+-e[[:space:]].*(unlinkSync|writeFileSync|appendFileSync|rmSync|truncateSync|createWriteStream)'
-  'deno[[:space:]]+(run[[:space:]]+)?(-A[[:space:]]+)?-e[[:space:]].*(removeSync|writeTextFileSync|writeFileSync|truncateSync)'
+  '(^|[^0-9])>{1,2}'
+  '(^|[[:space:]])tee([[:space:]]|$)'
+  '\|[[:space:]]*tee([[:space:]]|$)'
+  '(^|[[:space:]])sed[[:space:]]+-i'
+  '(^|[[:space:]])awk[[:space:]]+-i'
+  '(^|[^[:alnum:]_/.])(cp|mv|rm|truncate|install|chmod|chown|Remove-Item|Set-Content|Add-Content|Out-File)([^[:alnum:]_]|$)'
+  '(^|[[:space:]])(gzip|gunzip|bzip2|xz|zstd)[[:space:]]'
+  '(^|[[:space:]])find[[:space:]]+.*(-delete|-exec[[:space:]]+(rm|mv|cp|truncate))'
+  '(^|[[:space:]])(bash|sh|zsh)[[:space:]]+-c[[:space:]]'
+  '(^|[[:space:]])(pwsh|powershell)[[:space:]]+-(c|Command)[[:space:]]'
+  '(^|[[:space:]])eval[[:space:]]'
+  'python(3)?[[:space:]]+-c[[:space:]].*(unlink|remove|rmtree|os\.remove|os\.unlink|shutil\.rmtree|os\.system|subprocess\.|popen|Path\([^)]*\)\.(write_text|write_bytes|unlink)|open[[:space:]]*\([^)]*['\''"](w|a))'
+  'node(js)?[[:space:]]+-e[[:space:]].*(unlinkSync|writeFileSync|appendFileSync|rmSync|truncateSync|createWriteStream|fs\.promises\.(writeFile|unlink|appendFile|rm|truncate))'
+  'deno[[:space:]]+(run[[:space:]]+)?(-A[[:space:]]+)?-e[[:space:]].*(removeSync|writeTextFileSync|writeFileSync|truncateSync|Deno\.remove|Deno\.writeFile)'
   'perl[[:space:]]+-e[[:space:]].*(unlink|open[[:space:]]*\([^)]*['\''">]+)'
   'ruby[[:space:]]+-e[[:space:]].*(File\.(delete|write|truncate|open)|FileUtils\.rm)'
   '(^|[[:space:]])dd[[:space:]]+.*\bof='
@@ -70,10 +70,11 @@ deny() {
 }
 
 # Walk upwards from a path until we either find a .mcp-managed marker or hit
-# the filesystem root. Echoes the marker dir on success, empty on failure.
+# root. Echoes the marker dir on success, empty on failure. NEAREST marker
+# wins (Security sec005 — a parent bypass must not implicitly unlock a child
+# project with its own marker).
 find_marker_dir() {
   local p="$1"
-  # Convert to absolute path if possible (best-effort)
   case "$p" in
     /*) ;;
     *) p="$PWD/$p" ;;
@@ -86,7 +87,6 @@ find_marker_dir() {
       return 0
     fi
     if [ -f "$dir/.mcp-managed" ]; then
-      # also accept marker directly in a managed dir (rare)
       echo "$(dirname "$dir")"
       return 0
     fi
@@ -95,19 +95,19 @@ find_marker_dir() {
   return 1
 }
 
-# Returns 0 if the bypass marker is present and unexpired for a given project root.
+# Returns 0 if the bypass marker is present, unexpired, AND its claimed TTL
+# is within UNLOCK_MAX_TTL_SECONDS of issued_at (or never-issued falls back
+# to expires_at within now+max). Defends against forged markers with
+# expires_at=9999 (Challenger guard02).
 bypass_allowed_for() {
   local project_root="$1"
   local marker="$project_root/.claude/.mcp-bypass-allowed"
   [ -f "$marker" ] || return 1
-  # Best-effort: parse expires_at, compare to now.
-  local exp now
+  local exp iss now
   exp=$(jq -r '.expires_at // empty' < "$marker" 2>/dev/null)
+  iss=$(jq -r '.issued_at // empty' < "$marker" 2>/dev/null)
   [ -z "$exp" ] && return 1
-  # date parsing: macOS BSD date vs GNU date differ. Try GNU first, fall back.
   local exp_epoch
-  # GNU date understands the ISO 8601 Z suffix directly.
-  # macOS BSD date does not — strip subsecond+TZ and parse as UTC explicitly.
   if exp_epoch=$(date -u -d "$exp" +%s 2>/dev/null); then
     :
   elif exp_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${exp%%.*}" +%s 2>/dev/null); then
@@ -116,10 +116,26 @@ bypass_allowed_for() {
     return 1
   fi
   now=$(date +%s)
-  [ "$now" -lt "$exp_epoch" ]
+  [ "$now" -lt "$exp_epoch" ] || return 1
+  if [ -n "$iss" ]; then
+    local iss_epoch
+    if iss_epoch=$(date -u -d "$iss" +%s 2>/dev/null); then
+      :
+    elif iss_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${iss%%.*}" +%s 2>/dev/null); then
+      :
+    else
+      return 1
+    fi
+    local span=$((exp_epoch - iss_epoch))
+    [ "$span" -le "$UNLOCK_MAX_TTL_SECONDS" ] || return 1
+  else
+    # No issued_at — accept only if exp is within max TTL of now.
+    local span=$((exp_epoch - now))
+    [ "$span" -le "$UNLOCK_MAX_TTL_SECONDS" ] || return 1
+  fi
+  return 0
 }
 
-# Emit an audit line to ~/.claude/metrics/mcp-audit.jsonl describing the bypass.
 audit_bypass() {
   local tool="$1" path="$2" project_root="$3"
   local global="${CLAUDE_PIPELINE_METRICS_DIR:-$HOME/.claude/metrics}"
@@ -135,19 +151,15 @@ audit_bypass() {
     >> "$global/mcp-audit.jsonl" 2>/dev/null || true
 }
 
-# Check whether path P is a protected file AND covered by an mcp-managed marker
-# OR a home-metrics path. Echoes the project root used for bypass-check.
 check_protected() {
   local path="$1"
-  # Home-metrics paths are always protected.
   if echo "$path" | grep -qE '\.claude/metrics/(pipeline|agent-feedback|mcp-audit)\.jsonl'; then
     echo "$HOME"
     return 0
   fi
-  # Project-scoped paths require a .mcp-managed marker upchain.
-  if echo "$path" | grep -qE '\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl)'; then
+  if echo "$path" | grep -qE '\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed)'; then
     find_marker_dir "$path" && return 0
-    return 1  # no marker → fail-open
+    return 1
   fi
   return 1
 }
@@ -161,15 +173,22 @@ case "$TOOL" in
         audit_bypass "$TOOL" "$FP" "$PROJECT_ROOT"
         exit 0
       fi
-      deny "Direct $TOOL on '$FP' is blocked. This file is managed by the claude-pipeline MCP server. Use mcp__claude-pipeline__* tools instead (pipeline_record_agent_run, pipeline_set_phase_status, pipeline_finish, ...). To temporarily unlock for debugging, call pipeline_unlock_writes({ttl_seconds, reason}); /done re-locks automatically."
+      deny "Direct $TOOL on '$FP' is blocked. This file is managed by the claude-pipeline MCP server. Use mcp__claude-pipeline__* tools instead. To temporarily unlock for debugging, call pipeline_unlock_writes({ttl_seconds, reason}); /done re-locks automatically."
     fi
     ;;
   Bash)
     CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
     [ -z "$CMD" ] && exit 0
-    # Only block when the command both *names* a protected file AND looks like a write.
-    if ! echo "$CMD" | grep -qE "$PROTECTED_RE"; then
-      exit 0
+    # Fast bash-builtin short-circuit (Perf W2). Avoids fork+grep on ~95% of
+    # Bash calls where the protected pattern doesn't match. Two paths:
+    #   (a) contiguous: `.claude/<protected-basename>` mentioned directly.
+    #   (b) split: `.claude` directory + a protected basename appear
+    #       separately (e.g. `find /x/.claude -name pipeline-state.json`).
+    PROT_BASENAMES_RE='(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed|metrics/(pipeline|agent-feedback|mcp-audit)\.jsonl)'
+    if ! [[ "$CMD" =~ \.claude/$PROT_BASENAMES_RE ]]; then
+      if ! { [[ "$CMD" =~ \.claude($|[/[:space:]]) ]] && [[ "$CMD" =~ $PROT_BASENAMES_RE ]]; }; then
+        exit 0
+      fi
     fi
     writeop=0
     for pat in "${WRITE_OP_PATTERNS[@]}"; do
@@ -179,12 +198,27 @@ case "$TOOL" in
       fi
     done
     [ "$writeop" = "0" ] && exit 0
-    # Extract the first protected absolute path mentioned for the bypass scope
-    # check. Path must start with / (absolute) and end at a protected basename;
-    # we exclude quote/paren chars so embedded calls like
-    #   python -c "os.unlink('/tmp/x/.claude/pipeline-state.json')"
-    # extract just `/tmp/x/.claude/pipeline-state.json`.
-    PROTECTED_PATH=$(echo "$CMD" | grep -oE '/[^[:space:]"'"'"'\(\)]*\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|metrics/[a-z-]+\.jsonl)' | head -1)
+    # Extract first protected path: absolute (leading /) OR relative
+    # (.claude/ at start of token). For relative we prepend $PWD so the
+    # marker walk has a real ancestor chain (Security sec003).
+    PROTECTED_PATH=$(echo "$CMD" | grep -oE '/[^[:space:]"'"'"'\(\)]*\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed|metrics/[a-z-]+\.jsonl)' | head -1)
+    if [ -z "$PROTECTED_PATH" ]; then
+      REL_PATH=$(echo "$CMD" | grep -oE '(^|[^/[:alnum:]_])(\.claude/(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed))' | head -1 | sed -E 's/^[^/.]+//')
+      if [ -n "$REL_PATH" ]; then
+        PROTECTED_PATH="$PWD/$REL_PATH"
+      fi
+    fi
+    if [ -z "$PROTECTED_PATH" ]; then
+      # Split-form path (find /x/.claude -name pipeline-state.json -delete).
+      # Extract the .claude directory reference; the protected basename
+      # appears elsewhere on the line. Use a synthetic path-under-marker so
+      # check_protected + find_marker_dir resolve to the project root.
+      CLAUDE_DIR=$(echo "$CMD" | grep -oE '/[^[:space:]"'"'"'\(\)]*\.claude($|[/[:space:]])' | head -1 | sed -E 's#[/[:space:]]*$##')
+      BASENAME=$(echo "$CMD" | grep -oE '(pipeline-state\.json|pipeline-state-summary\.md|findings\.jsonl|mcp-audit\.jsonl|driver-state\.json|\.mcp-managed|\.mcp-bypass-allowed)' | head -1)
+      if [ -n "$CLAUDE_DIR" ] && [ -n "$BASENAME" ]; then
+        PROTECTED_PATH="$CLAUDE_DIR/$BASENAME"
+      fi
+    fi
     if PROJECT_ROOT=$(check_protected "${PROTECTED_PATH:-/dev/null}"); then
       if bypass_allowed_for "$PROJECT_ROOT"; then
         audit_bypass "Bash" "$PROTECTED_PATH" "$PROJECT_ROOT"

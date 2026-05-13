@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "find PROJECT_DIR/.claude -name pipeline-state.json -delete"
+  }
+}

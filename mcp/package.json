@@ -1,0 +1,33 @@
+{
+  "name": "@claude-pipeline/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server that enforces pipeline-state.json + findings.jsonl invariants",
+  "main": "dist/server.js",
+  "bin": {
+    "claude-pipeline-mcp": "dist/server.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "smoke": "CLAUDE_PIPELINE_METRICS_DIR=$(mktemp -d) node dist/smoke.js",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "proper-lockfile": "^4.1.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

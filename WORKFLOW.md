@@ -167,16 +167,24 @@ Every line loads on every message. Move reference tables to `docs/`.
 ## How Issues Flow
 
 ```
-Reviewer/validator finds issue → emits JSON finding
+Reviewer/validator finds issue → emits JSON header with findings[]
   ↓
-Appended to .claude/findings.jsonl (id, agent, severity, category, summary, ...)
+Orchestrator calls mcp__claude_pipeline__pipeline_record_agent_run with agent output text
   ↓
-Out-of-scope findings collected; /done persists to KB tech-debt.md or docs/tech-debt.md
+MCP parses fenced ```json, validates against reviewer-output / validator-output schema
+  ↓
+Each finding validated against finding.schema.json + category-vocab and appended to .claude/findings.jsonl
+  ↓
+reviewer_verdicts[] entry written, agents_count++, summary.md rebuilt
+  ↓
+Out-of-scope findings collected; /done → mcp__claude_pipeline__pipeline_finish → metrics/pipeline.jsonl
   ↓
 /sweep reads, categorizes by severity, auto-detects resolved
   ↓
 Fix simple issues directly, defer complex ones to /task
 ```
+
+**State integrity (MCP enforced):** every mutation to `pipeline-state.json` and `findings.jsonl` goes through `mcp__claude_pipeline__*` tools. Direct Write/Edit on those files is a workflow violation. The MCP server refuses incoherent transitions (e.g. marking a phase `completed` with no agents recorded) and `pipeline_finish` refuses to write metrics on any invariant violation. See `mcp/README.md` for the full invariant list and tool reference.
 
 ```
 Reviewer misses a real bug (caught later in prod / by human / by test)
@@ -199,3 +207,4 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 - **Don't write CLAUDE.md once and forget.** Run `/validate-claudemd` periodically.
 - **Don't keep stale working files.** `.claude/` has plan.md from a previous session? Run `/done` to clean up.
 - **Don't use /task for exploration.** "What would it take to add X?" → `/brainstorm`.
+- **Don't Write/Edit `.claude/pipeline-state.json` or `.claude/findings.jsonl` directly.** Use the `mcp__claude_pipeline__*` tools. Direct edits bypass schema validation and invariant checks. If the MCP server is unavailable, fix the server — don't fall back to manual edits.

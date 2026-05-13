@@ -4,6 +4,8 @@ Multi-agent development pipeline for Claude Code. Supports **React, Next.js, Nes
 
 Project-specific rules live in each project's CLAUDE.md. Platform-specific agent knowledge lives in `agents/references/`.
 
+State integrity is enforced by an **MCP server** (`mcp/`) — orchestrator writes to `.claude/pipeline-state.json` and `.claude/findings.jsonl` only through validated tool calls. See [`mcp/README.md`](mcp/README.md).
+
 ## Commands (16)
 
 ### Core Workflow
@@ -250,9 +252,9 @@ Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents.
 Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persists to `tech-debt.md` → `/sweep` reviews and fixes.
 
 ### Self-Improvement Loop (structured, schema-driven)
-1. **Findings are first-class structured data.** Every reviewer/validator emits a fenced ```json header validated against `templates/schemas/{reviewer,validator}-output.schema.json`. Each finding has `severity`, `category` (controlled vocab in `templates/schemas/category-vocab.json`), `pattern_id`, `summary`, `evidence_excerpt`, `suggested_fix`, `ref_rule_id`. Findings stream to `.claude/findings.jsonl`.
-2. `/done` writes one JSON object per task to `~/.claude/metrics/pipeline.jsonl` — purely mechanical JSON-to-JSON transform from `pipeline-state.json`. Includes plan_drift, gate1_revisions, acceptance_first_pass, grounding_mismatches, reviewer_disagreements, categories_seen.
-3. `/agent-feedback` logs missed issues to `~/.claude/metrics/agent-feedback.jsonl` with required `category` + `pattern_to_look_for` + `human_confirmed`. Increments `reviewer_misses_post_merge` on the linked `pipeline.jsonl` row.
+1. **Findings are first-class structured data.** Every reviewer/validator emits a fenced ```json header validated against `templates/schemas/{reviewer,validator}-output.schema.json`. Each finding has `severity`, `category` (controlled vocab in `templates/schemas/category-vocab.json`), `pattern_id`, `summary`, `evidence_excerpt`, `suggested_fix`, `ref_rule_id`. Findings stream to `.claude/findings.jsonl` **via `mcp__claude_pipeline__pipeline_record_agent_run` — orchestrator no longer writes the file manually.**
+2. `/done` writes one JSON object per task to `~/.claude/metrics/pipeline.jsonl` via `mcp__claude_pipeline__pipeline_finish` — mechanical JSON-to-JSON transform from `pipeline-state.json`, refused if invariants fail. Includes plan_drift, gate1_revisions, acceptance_first_pass, grounding_mismatches, reviewer_disagreements, categories_seen.
+3. `/agent-feedback` logs missed issues to `~/.claude/metrics/agent-feedback.jsonl` via `mcp__claude_pipeline__pipeline_log_agent_feedback` with required `category` + `pattern_to_look_for` + `human_confirmed`. Increments `reviewer_misses_post_merge` on the linked `pipeline.jsonl` row.
 4. **Future runs auto-load each agent's last 10 confirmed patterns** as a `## Past Misses` block on every spawn (orchestrator rule #15). Diff-aware filtering optionally re-ranks by relevant category.
 5. `/learn` clusters categories × agent, computes effectiveness ratios, detects drift trends, surfaces vocab promotion candidates and pattern auto-promotion candidates. Mostly mechanical; final step optionally suggests prompt edits for human review.
 6. `/metrics-report` retains its role for human-readable narrative summary of recent performance.
@@ -291,7 +293,16 @@ ln -sf "$(pwd)/templates" ~/.claude/templates
 
 # Copy metrics (don't symlink — they're per-machine)
 mkdir -p ~/.claude/metrics
-cp metrics/*.md ~/.claude/metrics/
+cp metrics/*.jsonl ~/.claude/metrics/ 2>/dev/null || true
+
+# Build and register the MCP enforcement server
+cd mcp && pnpm install && pnpm build && cd ..
+claude mcp add --scope user claude-pipeline -- node "$(pwd)/mcp/dist/server.js"
+
+# Install the Stop hook (diagnostic safety net)
+cp hooks/pipeline-stop.sh ~/.claude/hooks/pipeline-stop.sh
+chmod +x ~/.claude/hooks/pipeline-stop.sh
+# then add to ~/.claude/settings.json hooks.Stop[] — see mcp/README.md
 
 # Install RTK (recommended — 60-90% token savings)
 brew install rtk-ai/tap/rtk && rtk init -g
@@ -321,6 +332,11 @@ claude-pipeline/
     schemas/           JSON Schemas — finding, reviewer-output, validator-output, pipeline-state, agent-feedback, category-vocab
     pipeline-state.json (machine state), pipeline-state-summary.md (human glance)
     agent-output-formats.md
+  mcp/                 MCP enforcement server (TypeScript, stdio transport)
+    src/               10 tool implementations + lib helpers
+    README.md          tool reference + invariants
+  hooks/
+    pipeline-stop.sh   diagnostic Stop hook — warns on incoherent pipeline-state at session end
   metrics/
     pipeline.jsonl     append-only structured per-task metrics
     agent-feedback.jsonl  append-only structured misses with category
@@ -329,5 +345,6 @@ claude-pipeline/
 
 ## Requirements
 - Claude Code CLI
+- Node 20+ and pnpm (for the MCP server in `mcp/`)
 - Recommended: [RTK](https://github.com/rtk-ai/rtk) (60-90% CLI token savings)
 - Recommended plugins: `context7` (library docs)

@@ -9,6 +9,7 @@ import { extractJsonHeader, makeFindingId } from "../lib/parse-json-header.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
 import { buildSummary } from "../lib/summary.js";
 import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { consumeOpenSpawn } from "./begin-agent.js";
 
 const REVIEWER_AGENTS = new Set([
   "logic-reviewer",
@@ -34,12 +35,17 @@ const VALID_PHASES = ["context", "planning", "test_first", "implementation", "va
 export const recordAgentRunSchema = {
   project_dir: z.string(),
   phase: z.enum(VALID_PHASES).describe("Which pipeline phase this agent belongs to"),
+  agent_run_id: z
+    .string()
+    .regex(/^ar-[0-9a-f-]+$/)
+    .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   agent_output: z.string().describe("Full text output of the agent, including the fenced ```json header"),
 };
 
 export async function pipelineRecordAgentRun(input: {
   project_dir: string;
   phase: (typeof VALID_PHASES)[number];
+  agent_run_id: string;
   agent_output: string;
 }): Promise<any> {
   const file = stateFile(input.project_dir);
@@ -119,6 +125,9 @@ export async function pipelineRecordAgentRun(input: {
     if (phase.status === "pending") {
       assertPrereqSatisfied(state, input.phase as Phase, "in_progress");
     }
+    // INV_012: agent_run_id MUST match an open_spawn begun for this agent.
+    consumeOpenSpawn(phase, input.agent_run_id, agent);
+
     phase.agents = Array.isArray(phase.agents) ? phase.agents : [];
     phase.agents.push(agent);
     if (phase.status === "pending") phase.status = "in_progress";

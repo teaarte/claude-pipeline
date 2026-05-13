@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { tempProject, initArgs, clearMetrics } from "../helpers/setup.js";
+import { tempProject, initArgs, clearMetrics, spawnNonreview } from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
-import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
+import { pipelineBeginAgent } from "../../src/tools/begin-agent.js";
 import { pipelineStateGet } from "../../src/tools/state-get.js";
 
 describe("pipeline_set_phase_status", () => {
@@ -42,7 +42,7 @@ describe("pipeline_set_phase_status", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await expect(
         pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "in_progress" }),
@@ -57,7 +57,7 @@ describe("pipeline_set_phase_status", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await expect(
         pipelineSetPhaseStatus({
@@ -84,6 +84,23 @@ describe("pipeline_set_phase_status", () => {
         force: true,
       });
       expect(r.pipeline_violation).toMatch(/phase-force-planning/);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("INV_012: refuses to complete a phase with an open spawn", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      // Begin once, record once → 1 agent in agents[] but open_spawns[] empty.
+      await spawnNonreview(proj.dir, "planning", "planner");
+      // Then begin a second planner without recording.
+      await pipelineBeginAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await expect(
+        pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" }),
+      ).rejects.toThrow(/INV_012/);
     } finally {
       await proj.cleanup();
     }

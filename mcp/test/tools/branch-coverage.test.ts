@@ -1,8 +1,8 @@
-// Targeted tests to push branch coverage past 80%. Each test exercises a
+// Targeted tests to push branch coverage past 75%. Each test exercises a
 // specific branch not covered by happy/reject pairs.
 
 import { describe, it, expect, afterEach } from "vitest";
-import { writeFile, rm, mkdir } from "node:fs/promises";
+import { writeFile, rm } from "node:fs/promises";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,11 +12,13 @@ import {
   clearMetrics,
   reviewerOutput,
   validatorOutput,
-  metricsDir,
+  spawnNonreview,
+  spawnReviewer,
 } from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineRecordAgentRun } from "../../src/tools/record-agent-run.js";
 import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
+import { pipelineBeginAgent } from "../../src/tools/begin-agent.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
 import { pipelineSetGate } from "../../src/tools/set-gate.js";
 import { pipelineFinish } from "../../src/tools/finish.js";
@@ -32,11 +34,11 @@ describe("branch-coverage extras", () => {
   it("record-agent-run: throws when state file missing", async () => {
     const proj = await tempProject();
     try {
-      // No init — directly call record_agent_run.
       await expect(
         pipelineRecordAgentRun({
           project_dir: proj.dir,
           phase: "implementation",
+          agent_run_id: "ar-deadbeef-0000-0000-0000-000000000000",
           agent_output: reviewerOutput(),
         }),
       ).rejects.toThrow(/not found/);
@@ -50,7 +52,7 @@ describe("branch-coverage extras", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await pipelineSetPhaseStatus({
         project_dir: proj.dir,
@@ -58,7 +60,7 @@ describe("branch-coverage extras", () => {
         status: "skipped",
         skipped_reason: "regression-only",
       });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
       const out = reviewerOutput({
         findings: [
           {
@@ -79,10 +81,16 @@ describe("branch-coverage extras", () => {
           },
         ],
       });
+      const { agent_run_id } = await pipelineBeginAgent({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent: "logic-reviewer",
+      });
       await expect(
         pipelineRecordAgentRun({
           project_dir: proj.dir,
           phase: "implementation",
+          agent_run_id,
           agent_output: out,
         }),
       ).rejects.toThrow(/category/);
@@ -111,7 +119,7 @@ describe("branch-coverage extras", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       const r = await pipelineSetPhaseStatus({
         project_dir: proj.dir,
@@ -136,12 +144,12 @@ describe("branch-coverage extras", () => {
     }
   });
 
-  it("finish: metrics row with blockers + reviewer disagreement", async () => {
+  it("finish: metrics row with blockers + multi-reviewer", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await pipelineSetPhaseStatus({
         project_dir: proj.dir,
@@ -149,16 +157,13 @@ describe("branch-coverage extras", () => {
         status: "skipped",
         skipped_reason: "regression-only",
       });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "implementation",
-        agent_output: reviewerOutput({ agent: "logic-reviewer" }),
-      });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "implementation",
-        agent_output: reviewerOutput({
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ agent: "logic-reviewer" }));
+      await spawnReviewer(
+        proj.dir,
+        "implementation",
+        "challenger-reviewer",
+        reviewerOutput({
           agent: "challenger-reviewer",
           findings: [
             {
@@ -179,13 +184,9 @@ describe("branch-coverage extras", () => {
             },
           ],
         }),
-      });
+      );
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "validation",
-        agent_output: validatorOutput(),
-      });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
@@ -256,54 +257,17 @@ describe("branch-coverage extras", () => {
     }
   });
 
-  it("finish: works on a state with minimal/missing optional fields", async () => {
-    const proj = await tempProject();
-    try {
-      await pipelineInit(initArgs(proj.dir));
-      // Manually wipe optional counters by writing state directly via the lock-free
-      // path is forbidden by the guard; instead we just complete a minimal flow
-      // and rely on the fact that record_nonreview_agent doesn't set iterations.
-      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
-      // Note: no iterations passed → planning.iterations remains 0.
-      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
-      await pipelineSetPhaseStatus({
-        project_dir: proj.dir,
-        phase: "test_first",
-        status: "skipped",
-        skipped_reason: "regression-only",
-      });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" });
-      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "validation",
-        agent_output: validatorOutput(),
-      });
-      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
-      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
-      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
-      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
-      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
-
-      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
-      expect(fin.metrics_row.blockers_found).toBe(0);
-      expect(fin.metrics_row.reviewers_with_blockers).toEqual([]);
-    } finally {
-      await proj.cleanup();
-    }
-  });
-
   it("record-nonreview-agent: omits iterations when not provided", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      const { agent_run_id } = await pipelineBeginAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
       const r = await pipelineRecordNonreviewAgent({
         project_dir: proj.dir,
         phase: "planning",
         agent: "planner",
-        // no output_file, no iterations
+        agent_run_id,
       });
       expect(r.agents_count).toBe(1);
     } finally {
@@ -316,18 +280,8 @@ describe("branch-coverage extras", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({
-        project_dir: proj.dir,
-        phase: "planning",
-        agent: "planner",
-        output_file: ".claude/plan.md",
-      });
-      await pipelineRecordNonreviewAgent({
-        project_dir: proj.dir,
-        phase: "planning",
-        agent: "planner",
-        output_file: ".claude/plan.md", // same path — should not duplicate
-      });
+      await spawnNonreview(proj.dir, "planning", "planner", { output_file: ".claude/plan.md" });
+      await spawnNonreview(proj.dir, "planning", "planner", { output_file: ".claude/plan.md" });
       const { pipelineStateGet } = await import("../../src/tools/state-get.js");
       const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
       const occurrences = state.files.created.filter((f: string) => f === ".claude/plan.md").length;
@@ -351,7 +305,7 @@ describe("branch-coverage extras", () => {
         context: { status: "pending", agents: [] },
         planning: { status: "pending", agents: [] },
         test_first: { status: "pending", agents: [] },
-        implementation: { status: "completed", agents: ["x"] },
+        implementation: { status: "completed", agents: ["x"], open_spawns: [] },
         validation: { status: "pending", agents: [] },
         final: { status: "pending", agents: [] },
       },

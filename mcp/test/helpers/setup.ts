@@ -61,6 +61,49 @@ export function initArgs(projectDir: string, overrides: Partial<InitArgs> = {}):
   };
 }
 
+/**
+ * Spawn the begin/record dance for a non-reviewer agent. Returns the record
+ * result (so tests can assert on agents_count, etc.).
+ */
+export async function spawnNonreview(
+  projectDir: string,
+  phase: "context" | "planning" | "test_first" | "implementation" | "validation" | "final",
+  agent: "planner" | "implementer" | "architect" | "code-analyzer" | "dependency-auditor" | "research" | "migration",
+  extras: { output_file?: string; iterations?: number } = {},
+): Promise<any> {
+  const { pipelineBeginAgent } = await import("../../src/tools/begin-agent.js");
+  const { pipelineRecordNonreviewAgent } = await import("../../src/tools/record-nonreview-agent.js");
+  const { agent_run_id } = await pipelineBeginAgent({ project_dir: projectDir, phase, agent });
+  return pipelineRecordNonreviewAgent({
+    project_dir: projectDir,
+    phase,
+    agent,
+    agent_run_id,
+    ...extras,
+  });
+}
+
+/**
+ * Spawn the begin/record dance for a reviewer/validator agent. Returns the
+ * record result.
+ */
+export async function spawnReviewer(
+  projectDir: string,
+  phase: "context" | "planning" | "test_first" | "implementation" | "validation" | "final",
+  agent: string,
+  agentOutput: string,
+): Promise<any> {
+  const { pipelineBeginAgent } = await import("../../src/tools/begin-agent.js");
+  const { pipelineRecordAgentRun } = await import("../../src/tools/record-agent-run.js");
+  const { agent_run_id } = await pipelineBeginAgent({ project_dir: projectDir, phase, agent });
+  return pipelineRecordAgentRun({
+    project_dir: projectDir,
+    phase,
+    agent_run_id,
+    agent_output: agentOutput,
+  });
+}
+
 export const reviewerOutput = (overrides: {
   agent?: string;
   verdict?: string;

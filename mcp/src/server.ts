@@ -12,6 +12,7 @@ import { pipelineValidate, validateSchema } from "./tools/validate.js";
 import { pipelineFinish, finishSchema } from "./tools/finish.js";
 import { pipelineLogAgentFeedback, logAgentFeedbackSchema } from "./tools/log-agent-feedback.js";
 import { pipelineGetPastMisses, getPastMissesSchema } from "./tools/get-past-misses.js";
+import { pipelineBeginAgent, beginAgentSchema } from "./tools/begin-agent.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -54,6 +55,7 @@ async function main() {
   });
 
   register(server, "pipeline_init", "Initialize .claude/pipeline-state.json + findings.jsonl + summary.md for a new task. Refuses to overwrite if a finished task is present.", initSchema, pipelineInit);
+  register(server, "pipeline_begin_agent", "Reserve an agent_run_id and append an open_spawn entry to the given phase. Must be called BEFORE the agent is spawned; the returned agent_run_id is required by pipeline_record_agent_run / pipeline_record_nonreview_agent.", beginAgentSchema, pipelineBeginAgent);
   register(server, "pipeline_state_get", "Read the current .claude/pipeline-state.json. Returns {exists, state?}.", stateGetSchema, pipelineStateGet);
   register(server, "pipeline_record_agent_run", "Parse a reviewer/validator agent's fenced ```json header, validate against schemas, append findings to .claude/findings.jsonl, append reviewer_verdicts entry, increment agents_count, rebuild summary.", recordAgentRunSchema, pipelineRecordAgentRun);
   register(server, "pipeline_record_nonreview_agent", "Record a non-reviewer agent (planner, implementer, architect, code-analyzer, dependency-auditor, research, migration). Adds the agent to phases[phase].agents and bumps agents_count.", recordNonreviewSchema, pipelineRecordNonreviewAgent);

@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { pipelineInit } from "./tools/init.js";
 import { pipelineStateGet } from "./tools/state-get.js";
+import { pipelineBeginAgent } from "./tools/begin-agent.js";
 import { pipelineRecordAgentRun } from "./tools/record-agent-run.js";
 import { pipelineRecordNonreviewAgent } from "./tools/record-nonreview-agent.js";
 import { pipelineSetPhaseStatus } from "./tools/set-phase-status.js";
@@ -33,6 +34,16 @@ async function expectThrow(fn: () => Promise<any>, contains: string, label: stri
     if (String(e.message ?? e).includes(contains)) ok(`${label} (threw as expected)`);
     else fail(`${label}: threw "${e.message}", expected to contain "${contains}"`);
   }
+}
+
+async function spawnNonreview(project: string, phase: any, agent: any, extras: { output_file?: string; iterations?: number } = {}) {
+  const { agent_run_id } = await pipelineBeginAgent({ project_dir: project, phase, agent });
+  return pipelineRecordNonreviewAgent({ project_dir: project, phase, agent, agent_run_id, ...extras });
+}
+
+async function spawnReviewer(project: string, phase: any, agent: string, agent_output: string) {
+  const { agent_run_id } = await pipelineBeginAgent({ project_dir: project, phase, agent });
+  return pipelineRecordAgentRun({ project_dir: project, phase, agent_run_id, agent_output });
 }
 
 async function main() {
@@ -63,17 +74,16 @@ async function main() {
     if (!got.exists || got.state.task_id !== "t-2026-05-13-smoke") fail("state_get");
     else ok("state_get returns initialized state");
 
-    section("INV_011: refuses agent recording when prereq not satisfied");
-    // implementation requires test_first; both still pending, context still pending.
+    section("INV_011: refuses begin_agent when prereq not satisfied");
     await expectThrow(
       () =>
-        pipelineRecordNonreviewAgent({
+        pipelineBeginAgent({
           project_dir: project,
           phase: "implementation",
           agent: "implementer",
         }),
       "INV_011",
-      "record implementer before test_first done",
+      "begin_agent implementer before test_first done",
     );
 
     section("complete context (no-agent exemption)");
@@ -81,23 +91,36 @@ async function main() {
     ok("context completed");
 
     section("INV_002: refuses to complete phase with no agents");
-    // Context is done so INV_011 prereq is satisfied for planning; the only thing
-    // left blocking completion is the empty agents[] — exactly INV_002.
     await expectThrow(
       () => pipelineSetPhaseStatus({ project_dir: project, phase: "planning", status: "completed" }),
       "INV_002",
       "set_phase_status planning=completed (no agents)",
     );
 
-    section("record planner (planning auto-transitions to in_progress)");
+    section("begin + record planner");
+    await spawnNonreview(project, "planning", "planner", { output_file: ".claude/plan.md", iterations: 1 });
+    ok("recorded planner");
+
+    section("INV_012: cannot complete planning with an open spawn");
+    // Begin a second planner without recording, then attempt to complete planning.
+    const { agent_run_id: hangingPlanner } = await pipelineBeginAgent({
+      project_dir: project,
+      phase: "planning",
+      agent: "planner",
+    });
+    await expectThrow(
+      () => pipelineSetPhaseStatus({ project_dir: project, phase: "planning", status: "completed" }),
+      "INV_012",
+      "set_phase_status planning=completed with 1 open_spawn",
+    );
+    // Resolve by recording.
     await pipelineRecordNonreviewAgent({
       project_dir: project,
       phase: "planning",
       agent: "planner",
-      output_file: ".claude/plan.md",
-      iterations: 1,
+      agent_run_id: hangingPlanner,
     });
-    ok("recorded planner");
+    ok(`resolved leaked spawn ${hangingPlanner}`);
 
     section("walk through phases in legal order");
     await pipelineSetPhaseStatus({ project_dir: project, phase: "planning", status: "completed" });
@@ -107,11 +130,7 @@ async function main() {
       status: "skipped",
       skipped_reason: "regression-only",
     });
-    await pipelineRecordNonreviewAgent({
-      project_dir: project,
-      phase: "implementation",
-      agent: "implementer",
-    });
+    await spawnNonreview(project, "implementation", "implementer");
     ok("recorded implementer (implementation in_progress)");
 
     section("record reviewer agent");
@@ -148,15 +167,8 @@ async function main() {
 \`\`\`
 
 # Logic Review — Iteration 1
-
-## Verdict: REQUEST_CHANGES
-narrative here
 `;
-    const rec = await pipelineRecordAgentRun({
-      project_dir: project,
-      phase: "implementation",
-      agent_output: reviewerOutput,
-    });
+    const rec = await spawnReviewer(project, "implementation", "logic-reviewer", reviewerOutput);
     if (rec.findings_written !== 1) fail(`expected 1 finding, got ${rec.findings_written}`);
     else ok(`recorded logic-reviewer with 1 blocking finding`);
 
@@ -167,6 +179,19 @@ narrative here
     } else {
       fail("findings.jsonl content unexpected");
     }
+
+    section("INV_012: record with mismatched agent_run_id is rejected");
+    await expectThrow(
+      () =>
+        pipelineRecordAgentRun({
+          project_dir: project,
+          phase: "implementation",
+          agent_run_id: "ar-00000000-0000-0000-0000-000000000000",
+          agent_output: reviewerOutput,
+        }),
+      "INV_012",
+      "record_agent_run with unknown agent_run_id",
+    );
 
     section("complete implementation");
     await pipelineSetPhaseStatus({
@@ -199,11 +224,7 @@ narrative here
 
 # Acceptance Report
 `;
-    await pipelineRecordAgentRun({
-      project_dir: project,
-      phase: "validation",
-      agent_output: acceptanceOutput,
-    });
+    await spawnReviewer(project, "validation", "acceptance", acceptanceOutput);
     ok("recorded acceptance");
 
     await pipelineSetPhaseStatus({
@@ -229,8 +250,6 @@ narrative here
     else ok("all invariants pass");
 
     section("finish");
-    // Use a dummy metrics destination — overwrite homeMetrics via env-less; we let it write to ~/.claude/metrics
-    // For smoke we just call finish and check it returns a metrics_row.
     const fin = await pipelineFinish({
       project_dir: project,
       verdict: "accepted",

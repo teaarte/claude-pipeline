@@ -5,11 +5,10 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInvariants } from "../../src/lib/invariants.js";
-import { clearMetrics, tempProject, initArgs, reviewerOutput, validatorOutput } from "../helpers/setup.js";
+import { clearMetrics, tempProject, initArgs, reviewerOutput, validatorOutput, spawnNonreview, spawnReviewer } from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
-import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
-import { pipelineRecordAgentRun } from "../../src/tools/record-agent-run.js";
+import { pipelineBeginAgent } from "../../src/tools/begin-agent.js";
 import { pipelineSetGate } from "../../src/tools/set-gate.js";
 
 function baseState(): any {
@@ -25,12 +24,12 @@ function baseState(): any {
     refs_loaded: [],
     refs_dropped_due_to_cap: [],
     phases: {
-      context: { status: "pending", agents: [] },
-      planning: { status: "pending", iterations: 0, gate1_revisions: 0, grounding_check: null, grounding_mismatches: 0, agents: [] },
-      test_first: { status: "pending", skipped_reason: null, test_spec_count_in_plan: null, tests_written_count: null, test_files_written: [], test_files_hashes_post_red: {}, agents: [] },
-      implementation: { status: "pending", iterations: 0, antipattern_candidates_count: 0, caller_context_sites_count: 0, logic_vs_challenger_disagreement: false, plan_conformance: null, drift_files_count: 0, test_files_modified_by_implementer: [], checkpoint_results: [], agents: [] },
-      validation: { status: "pending", acceptance_first_pass: false, agents: [] },
-      final: { status: "pending", agents: [] },
+      context: { status: "pending", agents: [], open_spawns: [] },
+      planning: { status: "pending", iterations: 0, gate1_revisions: 0, grounding_check: null, grounding_mismatches: 0, agents: [], open_spawns: [] },
+      test_first: { status: "pending", skipped_reason: null, test_spec_count_in_plan: null, tests_written_count: null, test_files_written: [], test_files_hashes_post_red: {}, agents: [], open_spawns: [] },
+      implementation: { status: "pending", iterations: 0, antipattern_candidates_count: 0, caller_context_sites_count: 0, logic_vs_challenger_disagreement: false, plan_conformance: null, drift_files_count: 0, test_files_modified_by_implementer: [], checkpoint_results: [], agents: [], open_spawns: [] },
+      validation: { status: "pending", acceptance_first_pass: false, agents: [], open_spawns: [] },
+      final: { status: "pending", agents: [], open_spawns: [] },
     },
     reviewer_verdicts: [],
     findings_path: ".claude/findings.jsonl",
@@ -175,7 +174,7 @@ describe("invariants property + targeted tests", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await expect(
         pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "in_progress" }),
@@ -185,16 +184,45 @@ describe("invariants property + targeted tests", () => {
     }
   });
 
-  it("INV_011 (throw): cannot advance implementation when test_first pending", async () => {
+  it("INV_011 (throw): cannot begin agent in implementation when test_first pending", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
       await expect(
-        pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" }),
+        pipelineBeginAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" }),
       ).rejects.toThrow(/INV_011/);
     } finally {
       await proj.cleanup();
     }
+  });
+
+  it("INV_012: completed phase with non-empty open_spawns → violation", async () => {
+    const s = baseState();
+    s.phases.implementation.status = "completed";
+    s.phases.implementation.agents = ["implementer"];
+    s.phases.implementation.open_spawns = [
+      { id: "ar-aaaa-bbbb-cccc-dddd-eeeeeeeeeeee", agent: "logic-reviewer", model: null, started_at: new Date().toISOString() },
+    ];
+    emptyFindings = await freshFindings();
+    const v = await runInvariants(s, emptyFindings);
+    expect(v.map((x) => x.code)).toContain("INV_012");
+  });
+
+  it("stale-spawn: open_spawn older than threshold → violation", async () => {
+    const s = baseState();
+    s.phases.planning.status = "in_progress";
+    s.phases.planning.agents = ["planner"];
+    s.phases.planning.open_spawns = [
+      {
+        id: "ar-stale-0000-0000-0000-000000000000",
+        agent: "planner",
+        model: null,
+        started_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
+      },
+    ];
+    emptyFindings = await freshFindings();
+    const v = await runInvariants(s, emptyFindings);
+    expect(v.map((x) => x.code)).toContain("stale-spawn");
   });
 
   // Property: a freshly-initialized state with no progress beyond pending phases
@@ -243,13 +271,13 @@ describe("invariants property + targeted tests", () => {
     );
   });
 
-  // Property: any record_agent_run followed by validate ⇒ ok=true (state machine integrity).
+  // Property: a happy walk-through is invariant-clean.
   it("property: a happy walk-through is invariant-clean", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await pipelineSetPhaseStatus({
         project_dir: proj.dir,
@@ -257,10 +285,10 @@ describe("invariants property + targeted tests", () => {
         status: "skipped",
         skipped_reason: "regression-only",
       });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "implementation", agent: "implementer" });
-      await pipelineRecordAgentRun({ project_dir: proj.dir, phase: "implementation", agent_output: reviewerOutput() });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      await pipelineRecordAgentRun({ project_dir: proj.dir, phase: "validation", agent_output: validatorOutput() });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });

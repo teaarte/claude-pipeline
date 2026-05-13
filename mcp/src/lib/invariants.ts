@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { readJsonl } from "./state-io.js";
 import { validate } from "./schemas.js";
 
@@ -8,6 +11,22 @@ export type Violation = {
 };
 
 const REQUIRED_PHASES = ["context", "planning", "implementation", "validation", "final"] as const;
+
+export const DEFAULT_STALE_SPAWN_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+async function readStaleSpawnTimeout(): Promise<number> {
+  // Read ~/.claude/settings.json once per invariant pass. Best-effort; fall
+  // back to the default if anything goes wrong.
+  try {
+    const raw = await readFile(join(homedir(), ".claude", "settings.json"), "utf8");
+    const cfg = JSON.parse(raw);
+    const t = cfg?.pipeline?.stale_spawn_timeout_ms;
+    if (typeof t === "number" && t > 0) return t;
+  } catch {
+    /* default */
+  }
+  return DEFAULT_STALE_SPAWN_TIMEOUT_MS;
+}
 
 export async function runInvariants(state: any, findingsFile: string): Promise<Violation[]> {
   const violations: Violation[] = [];
@@ -127,6 +146,32 @@ export async function runInvariants(state: any, findingsFile: string): Promise<V
         message: `findings.jsonl line ${i + 1} failed schema validation`,
         detail: r.errors,
       });
+    }
+  }
+
+  // INV_012: open_spawns[] must be empty in any completed phase.
+  // Plus stale-spawn detection across in-progress phases.
+  const staleTimeoutMs = await readStaleSpawnTimeout();
+  const now = Date.now();
+  for (const [name, p] of Object.entries<any>(phases)) {
+    if (!p) continue;
+    const open: any[] = Array.isArray(p.open_spawns) ? p.open_spawns : [];
+    if (p.status === "completed" && open.length > 0) {
+      violations.push({
+        code: "INV_012",
+        message: `phase '${name}' is completed but has ${open.length} open spawn(s)`,
+        detail: open.map((s) => ({ id: s.id, agent: s.agent })),
+      });
+    }
+    for (const s of open) {
+      const startedAt = Date.parse(s.started_at);
+      if (Number.isFinite(startedAt) && now - startedAt > staleTimeoutMs) {
+        violations.push({
+          code: "stale-spawn",
+          message: `spawn '${s.id}' (agent='${s.agent}', phase='${name}') has been open for ${Math.floor((now - startedAt) / 60000)} min, exceeding the stale-spawn threshold`,
+          detail: { id: s.id, agent: s.agent, phase: name, started_at: s.started_at, age_ms: now - startedAt },
+        });
+      }
     }
   }
 

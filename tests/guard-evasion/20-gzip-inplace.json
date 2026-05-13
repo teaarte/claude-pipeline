@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "gzip -f PROJECT_DIR/.claude/pipeline-state.json"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "PROJECT_DIR/.claude/driver-state.json"
+  }
+}

@@ -21,6 +21,8 @@ import {
 } from "./tools/unlock-writes.js";
 import { pipelineAbandon, abandonSchema } from "./tools/abandon.js";
 import { pipelineCancelSpawn, cancelSpawnSchema } from "./tools/cancel-spawn.js";
+import { pipelineRunTask, runTaskSchema } from "./driver/tools/run-task.js";
+import { pipelineContinueTask, continueTaskSchema } from "./driver/tools/continue-task.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -77,6 +79,8 @@ async function main() {
   register(server, "pipeline_relock_writes", "Remove the bypass marker, immediately restoring guard enforcement. Idempotent.", relockWritesSchema, pipelineRelockWrites);
   register(server, "pipeline_abandon", "Move <project>/.claude/pipeline-state.json to abandoned-<ts>.json. No metrics row is written. Use when the task is unsalvageable; restart with pipeline_init afterwards.", abandonSchema, pipelineAbandon);
   register(server, "pipeline_cancel_spawn", "Remove a stuck open_spawn from phases[phase].open_spawns[]. Use when an agent crashed mid-flight and will never call pipeline_record_agent_run. Required before pipeline_set_phase_status({status:'completed'}) if open_spawns[] is non-empty.", cancelSpawnSchema, pipelineCancelSpawn);
+  register(server, "pipeline_run_task", "Driver entry point. Initialize a driver-state and run the FSM forward until the first pause. Returns one of: spawn-agent, spawn-agents-parallel, ask-user, complete, error. The shuttle (commands/task.md) routes the result back via pipeline_continue_task.", runTaskSchema, pipelineRunTask);
+  register(server, "pipeline_continue_task", "Driver resume. Apply a shuttle response (agent-result, agents-results, user-answer, or recovery) to the persisted driver-state and run the FSM forward.", continueTaskSchema, pipelineContinueTask);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

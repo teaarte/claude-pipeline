@@ -1,0 +1,36 @@
+name: mcp-test
+
+on:
+  pull_request:
+    paths:
+      - "mcp/**"
+      - "templates/**"
+      - ".github/workflows/mcp-test.yml"
+  push:
+    branches: [main]
+    paths:
+      - "mcp/**"
+      - "templates/**"
+      - ".github/workflows/mcp-test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: mcp/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm smoke

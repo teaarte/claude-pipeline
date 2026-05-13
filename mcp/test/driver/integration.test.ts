@@ -61,6 +61,110 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
     }
   });
 
+  it("each agent-result advances step_index — successive spawns name DIFFERENT agents (regression for re-spawn loop)", async () => {
+    const NONREVIEW = new Set([
+      "planner",
+      "implementer",
+      "architect",
+      "code-analyzer",
+      "dependency-auditor",
+      "research",
+      "migration",
+    ]);
+    const REVIEWER = new Set([
+      "logic-reviewer",
+      "challenger-reviewer",
+      "style-reviewer",
+      "security",
+      "performance",
+    ]);
+    function buildOutput(agent: string, taskId: string): string {
+      if (NONREVIEW.has(agent)) {
+        return `# ${agent} reply\n\nnarrative only — no JSON header parsed for nonreview agents.\n`;
+      }
+      if (REVIEWER.has(agent)) {
+        return (
+          "```json\n" +
+          JSON.stringify({
+            schema_version: "1.0",
+            agent,
+            task_id: taskId,
+            iteration: 1,
+            verdict: "APPROVE",
+            summary_line: "looks good",
+            findings: [],
+            past_misses_applied: 0,
+            past_miss_matches: [],
+            ref_rules_consulted: [],
+          }) +
+          "\n```\n"
+        );
+      }
+      // validator
+      return (
+        "```json\n" +
+        JSON.stringify({
+          schema_version: "1.0",
+          agent,
+          task_id: taskId,
+          iteration: 1,
+          verdict: "PASS",
+          summary_line: "ok",
+          findings: [],
+          details: {},
+        }) +
+        "\n```\n"
+      );
+    }
+
+    const proj = await tempProject();
+    try {
+      let res = await pipelineRunTask({
+        project_dir: proj.dir,
+        task: "rename a single function",
+        complexity_hint: "simple",
+        stack: { language: "TypeScript" },
+      });
+      const agentsSeen: string[] = [];
+      let safety = 30;
+      while (res.status !== "complete" && res.status !== "error" && safety-- > 0) {
+        if (res.status === "spawn-agent") {
+          agentsSeen.push(res.agent);
+          const out = buildOutput(res.agent, "t-2026-05-13-rename-a-single-function");
+          res = await pipelineContinueTask({
+            project_dir: proj.dir,
+            driver_state_id: res.driver_state_id,
+            input: {
+              driver_state_id: res.driver_state_id,
+              type: "agent-result",
+              agent_run_id: res.agent_run_id,
+              agent_output: out,
+            },
+          });
+        } else if (res.status === "ask-user") {
+          res = await pipelineContinueTask({
+            project_dir: proj.dir,
+            driver_state_id: res.driver_state_id,
+            input: {
+              driver_state_id: res.driver_state_id,
+              type: "user-answer",
+              answer: "approved",
+            },
+          });
+        }
+      }
+      expect(safety, `FSM did not converge — agents seen: ${agentsSeen.join(", ")}`).toBeGreaterThan(0);
+      // Different STEPS may spawn the same agent (e.g. logic-reviewer at
+      // plan-review AND review), but in the simple flow each agent runs
+      // exactly once — duplicate names here indicate the re-spawn loop bug
+      // is back.
+      const dupes = agentsSeen.filter((a, i) => agentsSeen.indexOf(a) !== i);
+      expect(dupes, `duplicate agent spawns indicate re-spawn loop: ${dupes.join(", ")}`).toEqual([]);
+    } finally {
+      await proj.cleanup();
+    }
+  }, 15_000);
+
   it("rejects continue with mismatched driver_state_id", async () => {
     const proj = await tempProject();
     try {

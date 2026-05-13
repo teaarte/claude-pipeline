@@ -1,38 +1,116 @@
 /**
- * The 17 built-in FSM steps. Each is a small StepPlugin; orchestration
- * choices live here rather than in markdown. The driver core (fsm.ts)
- * runs them in the order specified by the active FlowPlugin.
+ * Built-in FSM steps (≥17 per spec; currently 23). Each is a small
+ * StepPlugin; orchestration choices live here rather than in markdown. The
+ * driver core (fsm.ts) runs them in the order specified by the active
+ * FlowPlugin.
  *
  * Steps are intentionally simple — most either advance unconditionally (a
  * marker step), branch on a DecisionPlugin, emit an ask-user shuttle (gate
  * steps), or call beginSpawn → return a shuttle response. Real LLM work
  * happens inside spawned agents; steps coordinate them.
+ *
+ * If an agent_output for the agent_run_id this step issued is already in
+ * scratch (set by pipeline_continue_task), the step returns "advance" so
+ * the FSM doesn't re-spawn. This is the canonical resume contract for
+ * spawn-emitting steps; gate steps use the parallel `${gateName}_decision`
+ * key (see gateStep).
  */
 
-import type { StepPlugin, StepResult, DriverState, StepContext } from "../../types/plugin.js";
+import type {
+  StepPlugin,
+  StepResult,
+  DriverState,
+  StepContext,
+} from "../../types/plugin.js";
 import { askUser, complete } from "../../core/shuttle.js";
 import { requireGate, requireDecision, requireSpawnProvider, requireAgent } from "../../core/registry.js";
 import { resolveAgentModel } from "../agents/resolve-model.js";
 import { defaultConfig } from "../../types/config.js";
+import { PHASES, type Phase } from "../../../lib/phase-state-machine.js";
+import { pipelineSetPhaseStatus } from "../../../tools/set-phase-status.js";
+import { readStateSafe } from "../../../lib/state-io.js";
+import { stateFile } from "../../../lib/paths.js";
 
-// Helper: spawn one agent through the registered spawn provider.
+/**
+ * Mark every phase strictly before `currentPhase` as closed in pipeline-state.
+ * Idempotent — INV_010 re-entry attempts are swallowed silently. Context and
+ * final are exempt from INV_002 (no-agent rule). For test_first when
+ * tests_mode=regression-only we skip with the canonical reason; otherwise
+ * complete. Best-effort; if pipeline-state is absent (smoke/test path with
+ * no spawnRecorder) we silently return.
+ */
+async function closePriorPhases(state: DriverState, currentPhase: Phase): Promise<void> {
+  const file = stateFile(state.project_dir);
+  const ps = await readStateSafe(file).catch(() => null);
+  if (!ps) return;
+  const testsMode = (state.decisions["tests_mode"] as string | undefined) ?? "regression-only";
+  const idxOf = (p: Phase) => PHASES.indexOf(p);
+  const currentIdx = idxOf(currentPhase);
+  for (const phase of PHASES) {
+    if (idxOf(phase) >= currentIdx) break;
+    const phStatus = ps.phases?.[phase]?.status;
+    if (phStatus === "completed" || phStatus === "skipped") continue;
+    // All best-effort. INV_002 means we haven't recorded an agent in this
+    // phase yet (real `pipeline_finish` will block, surfacing the bug at
+    // the right place). INV_010 means the phase is already terminal.
+    // INV_011 means our prior closure attempt in this loop failed and the
+    // prereq chain is broken — propagating would be a spurious throw.
+    const swallow = (e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/INV_002|INV_010|INV_011/.test(msg)) return undefined;
+      throw e;
+    };
+    if (phase === "test_first" && testsMode === "regression-only") {
+      await pipelineSetPhaseStatus({
+        project_dir: state.project_dir,
+        phase,
+        status: "skipped",
+        skipped_reason: "regression-only",
+      }).catch(swallow);
+      continue;
+    }
+    await pipelineSetPhaseStatus({
+      project_dir: state.project_dir,
+      phase,
+      status: "completed",
+    }).catch(swallow);
+  }
+}
+
+const SPAWN_RESULT_KEY = (id: string) => `agent_output_${id}`;
+const SPAWN_ISSUED_KEY = (stepName: string) => `__spawn_issued_${stepName}`;
+
+// Helper: spawn one agent through the registered spawn provider. The step's
+// phase is passed in explicitly — no template_path string-match, no scratch
+// indirection. The agent model is resolved through
+// resolveAgentModel(agent, phase, config) per item 8 user-nudge #2.
 async function spawnOne(
   state: DriverState,
   ctx: StepContext,
   agentName: string,
+  phase: Phase,
+  stepName: string,
 ): Promise<StepResult> {
+  // Resume short-circuit: if we already issued a spawn for this step in this
+  // run and the result has been routed in (via pipeline_continue_task), don't
+  // re-spawn. This is the fix for the FSM resume bug found in code review.
+  const issuedId = state.scratch[SPAWN_ISSUED_KEY(stepName)] as string | undefined;
+  if (issuedId && state.scratch[SPAWN_RESULT_KEY(issuedId)] !== undefined) {
+    delete state.scratch[SPAWN_ISSUED_KEY(stepName)];
+    return { type: "advance" };
+  }
   const agent = requireAgent(ctx.registry, agentName);
   if (agent.applies_to && !agent.applies_to(state)) {
     return { type: "advance" };
   }
+  // Close prior phases so INV_011's prereq check passes when we begin the
+  // first agent in `phase`. Idempotent + best-effort.
+  await closePriorPhases(state, phase);
   const provider = requireSpawnProvider(ctx.registry);
-  // Effective model resolution (item 8 user-nudge).
   const config = (state.scratch.config as any) ?? defaultConfig;
-  const model = resolveAgentModel(agent, agent.template_path.includes("planner") || agent.template_path.includes("implementer") ? "implementation" : "validation", config);
-  // Phase is part of the step's own metadata in real flows; we use the
-  // step phase that called us via beginSpawn.
-  const phase = state.scratch["__current_phase"] as any ?? "implementation";
+  const model = resolveAgentModel(agent, phase, config);
   const agent_run_id = await ctx.beginSpawn(agentName, phase);
+  state.scratch[SPAWN_ISSUED_KEY(stepName)] = agent_run_id;
   return provider.spawn({
     agent: agentName,
     agent_run_id,
@@ -72,17 +150,13 @@ function gateStep(name: string, gateName: string, phase: StepPlugin["phase"]): S
     name,
     phase,
     async run(state, ctx) {
-      // If the user already answered this gate (FSM is being resumed), advance.
-      if (state.pending_user_answer === null && state.scratch[`${gateName}_decision`]) {
+      // Resume: if pipeline_continue_task already routed in a user-answer
+      // for this gate, advance.
+      if (state.scratch[`${gateName}_decision`] !== undefined) {
         return { type: "advance" };
       }
-      if (state.pending_user_answer && state.pending_user_answer.gate === gateName) {
-        // Awaiting the same gate — re-emit (idempotent).
-        return {
-          type: "shuttle",
-          response: askUser(state.driver_state_id, gateName, state.pending_user_answer.message),
-        };
-      }
+      // Close any prior phases (idempotent) before pausing for the human.
+      await closePriorPhases(state, phase);
       const gate = requireGate(ctx.registry, gateName);
       const msg = gate.message(state);
       state.pending_user_answer = { gate: gateName, message: msg };
@@ -99,8 +173,7 @@ const ENRICH: StepPlugin = {
   name: "enrich",
   phase: "context",
   async run(state, ctx) {
-    state.scratch["__current_phase"] = "context";
-    return spawnOne(state, ctx, "code-analyzer");
+    return spawnOne(state, ctx, "code-analyzer", "context", "enrich");
   },
 };
 
@@ -109,8 +182,7 @@ const CONTEXT_VERIFY: StepPlugin = {
   phase: "context",
   async run(state, ctx) {
     if (state.decisions["complexity"] === "simple") return { type: "advance" };
-    state.scratch["__current_phase"] = "context";
-    return spawnOne(state, ctx, "context-doc-verifier");
+    return spawnOne(state, ctx, "context-doc-verifier", "context", "context-verify");
   },
 };
 
@@ -119,8 +191,7 @@ const ARCHITECT_STEP: StepPlugin = {
   phase: "context",
   async run(state, ctx) {
     if (state.decisions["complexity"] !== "complex") return { type: "advance" };
-    state.scratch["__current_phase"] = "context";
-    return spawnOne(state, ctx, "architect");
+    return spawnOne(state, ctx, "architect", "context", "architect");
   },
 };
 
@@ -128,8 +199,7 @@ const PLAN: StepPlugin = {
   name: "plan",
   phase: "planning",
   async run(state, ctx) {
-    state.scratch["__current_phase"] = "planning";
-    return spawnOne(state, ctx, "planner");
+    return spawnOne(state, ctx, "planner", "planning", "plan");
   },
 };
 
@@ -138,8 +208,7 @@ const PLAN_GROUNDING: StepPlugin = {
   phase: "planning",
   async run(state, ctx) {
     if (state.decisions["complexity"] === "simple") return { type: "advance" };
-    state.scratch["__current_phase"] = "planning";
-    return spawnOne(state, ctx, "plan-grounding-check");
+    return spawnOne(state, ctx, "plan-grounding-check", "planning", "plan-grounding");
   },
 };
 
@@ -148,8 +217,7 @@ const PLAN_REVIEW: StepPlugin = {
   phase: "planning",
   async run(state, ctx) {
     if (state.decisions["complexity"] === "simple") return { type: "advance" };
-    state.scratch["__current_phase"] = "planning";
-    return spawnOne(state, ctx, "logic-reviewer");
+    return spawnOne(state, ctx, "logic-reviewer", "planning", "plan-review");
   },
 };
 
@@ -158,8 +226,7 @@ const TEST_FIRST: StepPlugin = {
   phase: "test_first",
   async run(state, ctx) {
     if (state.decisions["tests_mode"] !== "tdd") return { type: "advance" };
-    state.scratch["__current_phase"] = "test_first";
-    return spawnOne(state, ctx, "test");
+    return spawnOne(state, ctx, "test", "test_first", "test-first");
   },
 };
 
@@ -176,8 +243,7 @@ const IMPLEMENT: StepPlugin = {
   name: "implement",
   phase: "implementation",
   async run(state, ctx) {
-    state.scratch["__current_phase"] = "implementation";
-    return spawnOne(state, ctx, "implementer");
+    return spawnOne(state, ctx, "implementer", "implementation", "implement");
   },
 };
 
@@ -203,8 +269,7 @@ const REVIEW: StepPlugin = {
   name: "review",
   phase: "implementation",
   async run(state, ctx) {
-    state.scratch["__current_phase"] = "implementation";
-    return spawnOne(state, ctx, "logic-reviewer");
+    return spawnOne(state, ctx, "logic-reviewer", "implementation", "review");
   },
 };
 
@@ -240,8 +305,7 @@ const FINAL_CHECKS: StepPlugin = {
   name: "final-checks",
   phase: "validation",
   async run(state, ctx) {
-    state.scratch["__current_phase"] = "validation";
-    return spawnOne(state, ctx, "acceptance");
+    return spawnOne(state, ctx, "acceptance", "validation", "final-checks");
   },
 };
 
@@ -258,6 +322,8 @@ const FINALIZE: StepPlugin = {
   name: "finalize",
   phase: "final",
   async run(state) {
+    // Close every prior phase before declaring the task complete.
+    await closePriorPhases(state, "final");
     state.complete = true;
     state.verdict = state.verdict ?? "accepted";
     return {

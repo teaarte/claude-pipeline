@@ -33,15 +33,19 @@ For each command in `~/.claude/commands/*.md`:
 - `~/.claude/templates/agent-output-formats.md` exists
 - Agent output formats table matches actual agent files (same status values)
 
-### 5. Model Routing Consistency
-- Model routing table in `task.md` lists all agents that appear in pipeline files
-- No agent appears in pipeline files but missing from routing table
-- No agent in routing table that doesn't exist as a file
+### 5. Agent / Model Resolution (v2 driver surface)
+- Every `AgentPlugin` registered in `mcp/src/driver/builtin/agents/index.ts` has a `default_model` of `"haiku" | "sonnet" | "opus"`.
+- Every `AgentPlugin.template_path` resolves to an existing `agents/*.md` file.
+- `mcp/src/driver/builtin/agents/resolve-model.ts` exports `resolveAgentModel(plugin, phase, config)` that follows the cascade `agent_overrides[name].model ?? default_models_by_phase[phase] ?? plugin.default_model`.
+- `mcp/src/driver/types/config.ts` `ClaudePipelineConfig` includes `agent_overrides` and `default_models_by_phase` fields.
 
-### 6. Feature Consistency
-- `task.md` mentions background enrichment → pipeline files (medium.md, complex.md) reference it in STEP 3
-- `complex.md` mentions TeamCreate for planners → fallback to parallel planners is documented
-- `task.md` Global Rules count matches actual rule numbers (no gaps)
+### 6. Framework Consistency (v2 plugin surface)
+- Every step name referenced in any `FlowPlugin.steps[]` array exists in `mcp/src/driver/builtin/steps/index.ts`.
+- Every `FlowPlugin.complexity` value is one of `"simple" | "medium" | "complex"` (or registered custom complexity).
+- Every `AgentPlugin` referenced in built-in steps is registered in `mcp/src/driver/builtin/agents/index.ts`.
+- Grep gate: `grep -rEi "planner|implementer|logic-reviewer|gate-[012]|simple-flow|medium-flow|complex-flow" mcp/src/driver/core/` returns no matches (core stays plugin-name-free).
+- Plugin contract types in `mcp/src/driver/types/plugin.ts` exports `StepPlugin`, `AgentPlugin`, `FlowPlugin`, `GatePlugin`, `DecisionPlugin`, `HookPlugin`, `SpawnProviderPlugin`, `PLUGIN_API_VERSION`.
+- All 7 plugin types have at least one built-in registered in `loaders/builtins.ts`.
 
 ### 7. Metrics Integrity
 - `~/.claude/metrics/pipeline.jsonl` exists and every line is a valid JSON object with `schema_version: "1.0"`. The MCP server enforces validity on every write via `pipeline_finish` — any malformed line predates the MCP integration or was hand-written and should be flagged.

@@ -14,7 +14,7 @@ Small change? (1-3 files, existing patterns)
 
 Feature, refactor, or multi-file change?
   → /task (auto-classifies complexity and tests_mode)
-  → /task --no-tests (force skip TDD; orchestrator confirms when business logic is touched)
+  → /task --no-tests (force skip TDD; driver confirms when business logic is touched)
   → /task --with-tests (force TDD on frontend)
 
 New idea or need to pick a library?
@@ -81,20 +81,20 @@ The pipeline auto-detects `tests_mode` at STEP 1 based on project type:
 **Why?** TDD on frontend UI mostly produces "renders without errors" + API mock tests that don't catch real bugs. Backend business logic AND server-side surfaces in frontend repos benefit from test-first because edge cases are caught before implementation.
 
 **Override when needed:**
-- `--no-tests` on a backend project — orchestrator REQUIRES explicit confirmation when the task touches auth, payments, data persistence, or API endpoints.
+- `--no-tests` on a backend project — driver REQUIRES explicit confirmation when the task touches auth, payments, data persistence, or API endpoints.
 - `--with-tests` on a frontend-only project (shared component library with contract tests).
 
 **TDD enforcement** (when `tests_mode=tdd`):
 - Plan MUST include Test Specifications with executable AAA blocks; "tests not applicable" escape clause is removed.
-- Test Agent's `failing_expected` count MUST match plan's T-case count (orchestrator verifies; mismatch → ERROR).
-- Test files are SACRED post-RED — orchestrator hashes them; any modification by implementer is blocking unless human approves.
+- Test Agent's `failing_expected` count MUST match plan's T-case count (driver verifies; mismatch → ERROR).
+- Test files are SACRED post-RED — driver hashes them; any modification by implementer is blocking unless human approves.
 - Acceptance fails (BLOCKING, not warning) on missing test coverage.
 
 `tests_mode` is stored in `pipeline-state.json` and read by all pipeline steps — single source of truth.
 
 ## How the Pipeline Detects Your Stack
 
-STEP 1 of `/task` reads CLAUDE.md "Validation Commands" section and project files:
+`classify` step (in `mcp/src/driver/builtin/steps/`) reads CLAUDE.md "Validation Commands" section and project files. Decision logic lives in `mcp/src/driver/builtin/decisions/`:
 
 ```
 pubspec.yaml      → Flutter/Dart    → loads references/perf-flutter.md, ui-flutter.md, etc.
@@ -105,7 +105,7 @@ pyproject.toml    → Python/FastAPI  → loads references/perf-python.md, test-
 
 All agents receive `project_stack` and load the correct platform reference files. You never need to tell agents what language you're using.
 
-**Senior-pattern references** (Tier 1/2/3) are conditionally loaded by the orchestrator at STEP 1 based on stack + diff content + task keywords. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. Capped at 5 senior-pattern files per agent per task to avoid prompt bloat. The list lands in `.claude/refs-to-load.md`.
+**Senior-pattern references** (Tier 1/2/3) are conditionally loaded by the `refs-to-load` decision plugin based on stack + diff content + task keywords. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. Capped at 5 senior-pattern files per agent per task to avoid prompt bloat. The list lands in `.claude/refs-to-load.md`.
 
 ## Adding a New Platform
 
@@ -164,6 +164,22 @@ Not just cleanup — it saves metrics and persists issues found by agents. Witho
 ### 6. Keep CLAUDE.md under 150 lines
 Every line loads on every message. Move reference tables to `docs/`.
 
+## Under the Hood (v2 plugin framework)
+
+`/task` is a ≤30-line shuttle in `commands/task.md`. It hands off to `mcp__claude-pipeline__pipeline_run_task` which runs a TypeScript FSM driver in `mcp/src/driver/`. The driver consumes plugins from `mcp/src/driver/builtin/` — there are 7 plugin contracts in `types/plugin.ts`:
+
+| Contract | What it controls | Where built-ins live |
+|----------|------------------|----------------------|
+| `StepPlugin` | One FSM step (classify, plan, review, finalize, …) | `builtin/steps/` |
+| `AgentPlugin` | One LLM role wrapping an `agents/*.md` template | `builtin/agents/` |
+| `FlowPlugin` | Ordered list of steps per complexity | `builtin/flows/` |
+| `GatePlugin` | A human gate (gate-0/1/2 or custom) | `builtin/gates/` |
+| `DecisionPlugin<T>` | Pure decision (complexity, tests_mode, …) | `builtin/decisions/` |
+| `HookPlugin` | Cross-cutting side effect (past-misses load, anti-pattern grep, …) | `builtin/hooks/` |
+| `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / SubprocessClaude / Ollama later) | `builtin/spawn/` |
+
+Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in a `FlowPlugin.steps`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. See [`v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) for the planned extension trajectory.
+
 ## How Issues Flow
 
 ```
@@ -184,14 +200,14 @@ Out-of-scope findings collected; /done → mcp__claude-pipeline__pipeline_finish
 Fix simple issues directly, defer complex ones to /task
 ```
 
-**State integrity (MCP + hooks enforced):** every mutation to `pipeline-state.json` and `findings.jsonl` goes through `mcp__claude-pipeline__*` tools. The MCP server refuses incoherent transitions (terminal-state reopen, completed phase with no agents, agent recorded before prereqs are done — see invariants `INV_001`–`INV_011` in `mcp/README.md`) and `pipeline_finish` refuses to write metrics on any invariant violation. On top of that, the `pipeline-guard.sh` PreToolUse hook mechanically denies any `Write`/`Edit`/`Bash` that would touch these files outside the MCP — even if the orchestrator tries. Escape hatch: `PIPELINE_ALLOW_RAW=1` (debugging only). See `hooks/README.md`.
+**State integrity (MCP + hooks enforced):** every mutation to `pipeline-state.json`, `findings.jsonl`, `driver-state.json`, and `mcp-audit.jsonl` goes through `mcp__claude-pipeline__*` tools. The MCP server refuses incoherent transitions (terminal-state reopen, completed/skipped phase with open spawns, agent recorded before prereqs are done — see invariants `INV_001`–`INV_012` in `mcp/README.md`) and `pipeline_finish` refuses to write metrics on any invariant violation. On top of that, the `pipeline-guard.sh` PreToolUse hook mechanically denies any `Write`/`Edit`/`Bash` that would touch these files outside the MCP — even if the driver tries (20 evasion patterns blocked, including `bash -c`, command substitution, `find -delete`, Python/Node/Deno/Perl/Ruby file ops, `dd of=`, `gzip` in-place). Escape hatch: call `pipeline_unlock_writes({ttl_seconds, reason})` for a TTL-bounded, audit-logged, forgery-resistant marker. See `hooks/README.md` and `mcp/README.md`.
 
 ```
 Reviewer misses a real bug (caught later in prod / by human / by test)
   ↓
 /agent-feedback → metrics/agent-feedback.jsonl (with category + pattern_to_look_for + human_confirmed)
   ↓
-Next pipeline run: orchestrator caches per-agent past-misses files; reviewers Read on every spawn
+Next pipeline run: driver caches per-agent past-misses files; reviewers Read on every spawn
   ↓
 Reviewer flags matching diff patterns automatically going forward
   ↓
@@ -207,4 +223,4 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 - **Don't write CLAUDE.md once and forget.** Run `/validate-claudemd` periodically.
 - **Don't keep stale working files.** `.claude/` has plan.md from a previous session? Run `/done` to clean up.
 - **Don't use /task for exploration.** "What would it take to add X?" → `/brainstorm`.
-- **Don't Write/Edit `.claude/pipeline-state.json` or `.claude/findings.jsonl` directly.** Use the `mcp__claude-pipeline__*` tools. The `pipeline-guard.sh` PreToolUse hook will mechanically deny direct edits anyway — but design for the rule, not the catch. If the MCP server is unavailable, fix the server; don't reach for `PIPELINE_ALLOW_RAW=1`.
+- **Don't Write/Edit `.claude/pipeline-state.json`, `.claude/findings.jsonl`, `.claude/driver-state.json`, or any MCP-managed file directly.** Use the `mcp__claude-pipeline__*` tools. The `pipeline-guard.sh` PreToolUse hook mechanically denies direct edits — including via `bash -c`, command substitution, `find -delete`, embedded `python/node/perl/ruby` write-ops, and `gzip` in-place compression. If you genuinely need a one-shot bypass for debugging, call `pipeline_unlock_writes({ttl_seconds: 300, reason: "..."})`; `/done` and `pipeline_relock_writes` re-lock. Don't try to forge a bypass marker — it carries `issued_at` and the guard rejects anything where `expires_at - issued_at > 3600s`.

@@ -5,7 +5,7 @@ Multi-agent development pipeline for Claude Code. Supports **React, Next.js, Nes
 Project-specific rules live in each project's CLAUDE.md. Platform-specific agent knowledge lives in `agents/references/`.
 
 State integrity is enforced in two layers:
-- **MCP server** (`mcp/`) — `.claude/pipeline-state.json` and `.claude/findings.jsonl` mutations only happen through validated tool calls. Schema validation, phase state machine, and 11 invariants (`INV_001`–`INV_011`) are enforced at write time. See [`mcp/README.md`](mcp/README.md).
+- **MCP server** (`mcp/`) — `.claude/pipeline-state.json`, `.claude/findings.jsonl`, `.claude/driver-state.json`, and `.claude/mcp-audit.jsonl` mutations only happen through validated tool calls. Schema validation, phase state machine, and 12 invariants (`INV_001`–`INV_012`) are enforced at write time. See [`mcp/README.md`](mcp/README.md).
 - **Claude Code hooks** (`hooks/`) — `pipeline-guard.sh` (PreToolUse) blocks any direct `Write`/`Edit`/`Bash` mutation of MCP-owned files; `pipeline-stop.sh` (Stop) blocks session exit while a task is in flight. See [`hooks/README.md`](hooks/README.md).
 
 ## Commands (16)

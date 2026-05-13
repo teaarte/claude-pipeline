@@ -10,16 +10,42 @@ This document is **strategic, not tactical**. Each phase here gets its own detai
 
 ## Where v2 leaves us
 
-After v2 hardening ships, `claude-pipeline` has:
+v2 has shipped (commit range `67d736f`…`128ab51`, 13 spec items + handoff commits + **4 code-review fix commits** `20a626e`/`ed828f8`/`817a09d`/`128ab51`). Actual delivered state:
 
-- Plugin framework architecture (`StepPlugin`, `AgentPlugin`, `FlowPlugin`, `GatePlugin`, `DecisionPlugin`, `HookPlugin`, `SpawnProviderPlugin`)
-- 7 built-in plugins of each type
-- MCP-enforced state invariants (`INV_001`–`INV_012`)
-- Audit log (per-project + global)
-- 17 MCP tools
-- Test infrastructure (vitest + property-based + CI)
-- Protocol versioning (`PLUGIN_API_VERSION = "1.0"`, `mcp/package.json 2.0.0`)
-- Recovery paths (`pipeline_abandon`, `pipeline_cancel_spawn`, `pipeline_unlock_writes`)
+- **Plugin framework architecture:** all 7 plugin contracts in `mcp/src/driver/types/plugin.ts` (`StepPlugin`, `AgentPlugin`, `FlowPlugin`, `GatePlugin`, `DecisionPlugin`, `HookPlugin`, `SpawnProviderPlugin`) + `PLUGIN_API_VERSION = "1.0"`.
+- **Built-in plugins:** 23 steps, 20 agents, 3 flows, 3 gates, 6 decisions, 3 hooks, 1 spawn provider (`shuttle`). All spec minima met.
+- **MCP-enforced state invariants:** `INV_001`–`INV_012` (added INV_012 open-spawn leak in Item 3).
+- **MCP tool count:** **19** (spec target 17; +2 from acceptance criteria that required `pipeline_set_pattern_confidence` and `pipeline_meta`).
+- **Audit log:** per-project (`.claude/mcp-audit.jsonl`) + global (`~/.claude/metrics/mcp-audit.jsonl`).
+- **Test infrastructure:** vitest + fast-check property tests + CI workflow. **179 tests across 29 files, 94.33% line coverage, 79.39% branch coverage** (slightly under 80% spec target — 5% gap is unreachable `?? default` branches in metrics builders; documented and accepted).
+- **Protocol versioning:** `PLUGIN_API_VERSION = "1.0"`, `mcp/package.json 2.0.0`, frontmatter pin `mcp_protocol_required: "^2.0"` in `commands/task.md`.
+- **Recovery paths:** `pipeline_abandon` + `pipeline_cancel_spawn` + `commands/done.md` (21 lines) with INV_001–INV_012 + stale-spawn recovery hints inline.
+- **Guard hook hardened:** Item 4 added marker-based scoping (`.mcp-managed`), TTL bypass via `.mcp-bypass-allowed`, regex coverage expansion. **Code review extended this to 20 evasion fixtures** all blocked, including: `bash -c "rm ..."`, command substitution `$(rm ...)`, `os.system('rm ...')`, `subprocess.*`, `find -delete`, `find -exec rm`, relative paths (resolved against `$PWD`), split-form `find /x/.claude -name pipeline-state.json -delete`, `gzip/bzip2/xz/zstd` in-place, `pwsh -Command "Remove-Item"`, attempts to delete `.mcp-managed` itself. Protected basenames now include `driver-state.json`, `.mcp-managed`, `.mcp-bypass-allowed` (so the marker files protect themselves). **Bypass marker forgery prevented** via `issued_at + TTL cap` check (3600s max from issue time; `pipeline_unlock_writes` refuses to extend active marker without `force=true`). **Path traversal blocked** by new `mcp/src/lib/project-dir.ts:assertProjectDirAllowed()` (restricts `project_dir` to cwd / `TMPDIR` / `~/.claude/settings.json:pipeline.allowed_project_roots`).
+- **Foundation for later phases** already in place (no need to redo in v2.5+):
+  - `mcp/src/driver/types/config.ts` exports `ClaudePipelineConfig` with `default_models_by_phase`, `agent_overrides`, `gate_policy`, `notification_targets`, `plugin_enabled`.
+  - `mcp/src/driver/builtin/agents/resolve-model.ts` implements the `agent_overrides[name].model ?? default_models_by_phase[phase] ?? plugin.default_model` cascade. **Phase is passed explicitly from caller** (review fix L2 — no more string-matching `template_path` heuristic).
+  - State IO encapsulated: `pipeline-state.json`, `findings.jsonl`, `mcp-audit.jsonl`, `driver-state.json` written ONLY inside `mcp/src/tools/*` and `mcp/src/driver/core/state.ts`.
+  - Driver transport-agnostic: `runFSM(state, registry)` in `driver/core/fsm.ts` does not depend on MCP; `pipeline_run_task` and `pipeline_continue_task` are thin wrappers.
+  - **Driver↔pipeline-state wiring closed (review fix arch01/02):** `pipelineRunTask` calls `pipelineInit`; `runFSM` accepts an injected `SpawnRecorder`; `mcpSpawnRecorder` routes every `beginSpawn` through `pipelineBeginAgent`; `pipelineContinueTask` calls `pipelineRecordAgentRun`/`pipelineRecordNonreviewAgent` for `agent-result` / `agents-results` — `open_spawns[]` close correctly.
+  - **Concurrency-safe (review fix conc01):** both `pipelineRunTask` and `pipelineContinueTask` wrapped in `withDriverStateLock`; concurrent invocations cannot clobber driver state. `pipelineRunTask` refuses to overwrite in-flight state (returns `IN_FLIGHT_TASK` shuttle response with recovery options).
+  - **`lib/ids.ts` consolidates** `makeFindingId`, `makeFeedbackId`, `makeAgentRunId`, `AGENT_RUN_ID_PATTERN`. v2.5+ should import from here, not reinvent.
+  - **`lib/audit.ts` is concurrency-safe and bounded:** `proper-lockfile.lock` around read-trim-rename; stat-based fast path skips read when file fits in 3MB; global stream redacts `project_dir`/`task`/`task_short`/`reason` to length markers (`redactForGlobal`); per-project stream capped at 50k entries; IO errors go to stderr (not silent).
+  - **`lib/parse-json-header.ts` bounded:** `LENIENT_OBJECT_CEILING=128KB`, `LENIENT_RETRY_CAP=5` — patological inputs no longer cause O(n²).
+
+### Known follow-ups from v2 execution (defer to v2.5 or v2.1 hot-fix)
+
+1. **`agents/*.md` cleanup** — 4 files still mention "orchestrator" (Item 10 was light-touch). Template loading verified working; cosmetic cleanup deferred. Fold into v2.5 (when agents/*.md gets new model-resolution metadata anyway).
+2. **`pipelines/` symlink in `~/.claude/`** — pointed at deleted `repo/pipelines/`. Removed during v2 post-flight. New installs won't have this issue.
+3. **`pipeline-guard.sh` is a copy in `~/.claude/hooks/`** (not a symlink to repo). Means hook updates require manual sync. Consider symlinking in v2.5 (or document `ln -sf` in install script).
+4. **`set-phase-status.ts` coercion** — Item 7 spec named this file as a coercion site, but it has no integer args today. Left untouched.
+
+### Deliberately deferred from code review (track for v2.5+)
+
+These were flagged in the v2 code review and consciously deferred — fix when their cost/benefit improves:
+
+1. **Sec sec005 — nested-project marker walk.** `find_marker_dir` takes the NEAREST `.mcp-managed`. No real leak (bypass marker reads from same dir as `.mcp-managed`), but documented edge case if user has nested projects with conflicting markers.
+2. **Perf I2 — `get-past-misses` reads whole `pipeline.jsonl`.** Fine at <5MB scale (~500KB per 1000 tasks). Convert to streaming tail-N when file grows. v2.5+ candidate.
+3. **Challenger #8 — audit reads pipeline-state on every call.** 5-15ms on hot cache. Threading `task_id` through 19 tool signatures was not justified at v2. Revisit when audit becomes a hot path (P3 team-scale era).
 
 What's missing for **product**:
 
@@ -37,10 +63,36 @@ The roadmap below addresses these gaps in order of leverage.
 
 ## Phase v2.5 — Daemon + Web UI + Multi-provider foundation
 
-**Prerequisite:** v2 shipped.
+**Prerequisite:** v2 shipped (confirmed at commit `95f3f90`).
 **Goal:** turn the in-process MCP-tool driver into a **long-running daemon** with HTTP API + minimal Web UI for configuration. Add the first non-shuttle `SpawnProviderPlugin` (Anthropic SDK direct) so model selection becomes meaningful. Keep Claude Code as a first-class entry point.
 
 This phase is the bridge from "personal tool used in a Claude Code chat" to "self-hosted dev tool with multiple entry points and configurable LLM backends".
+
+### What's already in place from v2 (don't redo)
+
+These pieces were nudged into v2 ahead of time so v2.5 doesn't need rework:
+
+- ✓ `ClaudePipelineConfig` type in `mcp/src/driver/types/config.ts` — the schema Web UI will edit.
+- ✓ `resolveAgentModel(plugin, phase, config)` cascade — phase passed explicitly (no template_path heuristic).
+- ✓ State IO encapsulated through `tools/*.ts` + `driver/core/state.ts` — SQLite swap is a state-layer-only change.
+- ✓ Driver transport-agnostic (`runFSM(state, registry)` accepts injected `SpawnRecorder`; HTTP API will inject its own).
+- ✓ Driver↔pipeline-state fully wired via `mcpSpawnRecorder` — open spawns close correctly through `pipelineBeginAgent` + `pipelineRecord*`.
+- ✓ Concurrency-safe driver (`withDriverStateLock` on both `pipelineRunTask` and `pipelineContinueTask`).
+- ✓ `pipeline_set_pattern_confidence` MCP tool (Item 11) — past-misses confidence override already works.
+- ✓ `pipeline_meta` MCP tool (Item 12) — Web UI can call this to discover protocol version + tool list.
+- ✓ `lib/ids.ts` consolidates id generators (don't write new ones; import).
+- ✓ `lib/audit.ts` is lock-safe + bounded + redacted in global stream.
+- ✓ `lib/project-dir.ts:assertProjectDirAllowed()` — **MUST be used by HTTP API in v2.5.3 for every incoming `project_dir`** (Web UI is a path-traversal vector otherwise).
+- ✓ Bypass marker is forgery-resistant (`issued_at + TTL cap` ≤ 3600s) — Web UI "Unlock writes" button calls existing `pipeline_unlock_writes`; do not reinvent the marker format.
+
+v2.5 builds **on top of** these; reuse them, don't reinvent.
+
+### Security must-haves carried over from v2
+
+1. **HTTP API endpoints accepting `project_dir`** (POST /api/tasks, GET /api/tasks/:id, etc.): wrap every `project_dir` extraction through `assertProjectDirAllowed()` before passing to MCP tools. Without this, a malicious request can target paths outside the user's projects (e.g. `~/.ssh/`).
+2. **Web UI "Unlock writes" button**: bound TTL to the same 3600s max enforced by `pipeline_unlock_writes`. Don't bypass.
+3. **HTTP API task submission must use the SAME `mcpSpawnRecorder`** as MCP entry points — guarantees pipeline-state stays consistent regardless of which client submitted.
+4. **`INV_012` fires on both `completed` AND `skipped`** (review fix L3). If v2.5 adds gate-policy plugins that auto-skip phases, they MUST cancel open spawns first or hit this invariant.
 
 ### Target architecture after v2.5
 
@@ -461,6 +513,227 @@ If a task hits any limit, daemon surfaces it via SSE + audit log + notification.
 
 ---
 
+## Phase v2.7 — Cost-aware multi-provider routing
+
+**Prerequisite:** v2.6 shipped (daemon + Docker isolation + at least Strategy A/B SpawnProviders).
+**Goal:** make hybrid LLM routing economically viable. Premium models (Claude Opus/Sonnet) for quality-critical roles (planner, implementer, security). Cheap models (DeepSeek, Qwen via Ollama) for mechanical roles (style-reviewer, plan-conformance). Long-context models (Gemini 2.5 Pro) for diff-heavy roles (api-contract, ui-consistency). Cost tracking + budget caps so autonomous mode doesn't burn through money silently.
+
+This phase is what makes autonomous mode **sustainable**. ~4-10× cost reduction on typical MEDIUM tasks while preserving quality on critical agents.
+
+### Why now (before P1 open-source)
+
+Once the tool is autonomous, the bill comes fast:
+- Opus-only MEDIUM task: $8-15
+- Sonnet-only: $3-5
+- Tier-based hybrid: $1-2
+- Hybrid with local Ollama for cheap tier: $0.5-1
+
+For a personal tool used 5-10x/week → $50-150/month savings.
+For any product use → the difference between viable and not.
+
+### v2.7.1 — Additional SpawnProviderPlugins
+
+Ship 5 more providers beyond v2.5's Anthropic SDK + Claude Code subprocess:
+
+- **`OpenRouterSpawnProvider`** (RECOMMENDED for multi-provider users) — single API key, access to 200+ models (Anthropic, OpenAI, Google, DeepSeek, Mistral, Llama variants, etc.) via OpenAI-compatible API at `https://openrouter.ai/api/v1`. Eliminates need for separate provider integrations for 90% of users.
+- **`OpenAiSpawnProvider`** — GPT-5.x via OpenAI Responses API directly. For users with existing OpenAI credits or who want direct billing.
+- **`DeepSeekSpawnProvider`** — DeepSeek V3.x via DeepSeek's OpenAI-compatible API directly. For direct billing or when OpenRouter overhead matters.
+- **`GeminiSpawnProvider`** — Gemini 2.5 Pro / Flash via Google AI Studio SDK directly. Special handling for huge context window (1M+ tokens).
+- **`OllamaSpawnProvider`** — local models via Ollama HTTP API (`localhost:11434`). Auto-detects available models (`/api/tags`).
+
+All cloud providers share a `BaseLLMSpawnProvider` abstract class (~150 LoC). Concrete adapters: OpenRouter and OpenAI essentially identical (different baseURL); DeepSeek = OpenAI with different baseURL; Gemini has its own SDK; Ollama uses fetch().
+
+**Why OpenRouter as the recommended multi-provider entry point:**
+
+| Aspect | Direct SDKs | OpenRouter |
+|--------|-------------|------------|
+| API keys to manage | 1 per provider | **1 total** |
+| Billing dashboards | 1 per provider | **1 total** |
+| Access to newly released models | Wait for SpawnProvider update | **Immediate** (change model string) |
+| Auto-fallback on unavailable model | Manual | **Built-in** (`models: [...]` array) |
+| Cost overhead | $0 | ~5-10% margin |
+| Latency | Direct | One extra hop |
+| OSS models (Llama, Qwen, etc.) | Need Ollama or Together/Groq | **Hosted natively** |
+
+For users with high volume (>$50/mo on a single provider): direct SDK saves the OpenRouter margin. For everyone else: OpenRouter is the simpler choice.
+
+**Recommended hybrid configuration** (subscription + OpenRouter + local):
+
+```typescript
+tiers: {
+  // Subscription — $0 marginal cost
+  premium:  { provider: "claude-code-subprocess", model: "claude-opus-4-7" },
+  balanced: { provider: "claude-code-subprocess", model: "claude-sonnet-4-6" },
+
+  // OpenRouter — one key, multiple models
+  cheap:        { provider: "openrouter", model: "deepseek/deepseek-v3.2" },
+  long_context: { provider: "openrouter", model: "google/gemini-2.5-pro" },
+
+  // Local — free, requires GPU
+  local: { provider: "ollama", model: "qwen3-coder:32b" },
+}
+```
+
+**Effort:** ~3-4 days total. OpenRouter + OpenAI are essentially the same plugin (different baseURL); DeepSeek same again; only Gemini SDK and Ollama require unique code paths.
+
+### v2.7.2 — Tier abstraction + routing decision
+
+New config schema (lives in `ClaudePipelineConfig.routing`):
+
+```typescript
+type Tier =
+  | "premium"      // Opus, GPT-5.5 Pro
+  | "balanced"     // Sonnet, GPT-5.5
+  | "cheap"        // DeepSeek V3, Qwen
+  | "long_context" // Gemini 2.5 Pro
+  | "local"        // Ollama local model
+  | string;        // user-defined tier name
+
+type TierConfig = {
+  provider: string;          // SpawnProvider name
+  model: string;             // model id
+  max_tokens_per_spawn?: number;
+  timeout_ms?: number;
+};
+
+type RoutingConfig = {
+  tiers: Record<Tier, TierConfig>;
+  agent_tiers: Record<string, Tier>;   // agent name → tier
+  fallback_tier?: Tier;                 // when tier unreachable (e.g., Ollama down)
+  cost_aware_downgrade?: {
+    enabled: boolean;
+    threshold_percent: number;          // 70% = downgrade tier when 70% of budget spent
+    downgrade_map: Record<Tier, Tier>;  // premium → balanced, balanced → cheap, etc.
+  };
+};
+```
+
+New `DecisionPlugin<RouteSelection>` resolves an agent name + current state into `{provider, model}`:
+
+```typescript
+function decide({ agent, state, config }) {
+  const tier = config.routing.agent_tiers[agent.name] ?? agent.default_tier ?? "balanced";
+
+  // Cost-aware downgrade
+  if (config.routing.cost_aware_downgrade?.enabled) {
+    const spent_pct = state.task_costs.spent_usd / state.task_costs.limit_usd;
+    if (spent_pct > config.routing.cost_aware_downgrade.threshold_percent / 100) {
+      const downgraded = config.routing.cost_aware_downgrade.downgrade_map[tier];
+      if (downgraded) tier = downgraded;
+    }
+  }
+
+  return config.routing.tiers[tier];
+}
+```
+
+Built-in default tiers + agent_tiers in `loaders/builtins.ts` reflecting the market reality (see preset below). User can override per-project via Web UI.
+
+**Default preset (recommended starting point):**
+
+```typescript
+tiers: {
+  premium:      { provider: "anthropic-sdk", model: "claude-opus-4-7" },
+  balanced:     { provider: "anthropic-sdk", model: "claude-sonnet-4-6" },
+  cheap:        { provider: "deepseek-sdk",  model: "deepseek-v3.2" },
+  long_context: { provider: "gemini-sdk",    model: "gemini-2.5-pro" },
+  local:        { provider: "ollama",        model: "qwen3-coder:32b" },
+},
+agent_tiers: {
+  planner:               "balanced",     // quality matters
+  implementer:           "balanced",
+  architect:             "premium",
+  logic-reviewer:        "balanced",
+  challenger-reviewer:   "balanced",
+  security:              "premium",
+  performance:           "premium",
+  style-reviewer:        "cheap",        // mechanical
+  acceptance:            "cheap",
+  plan-conformance:      "cheap",
+  plan-grounding-check:  "cheap",
+  context-doc-verifier:  "cheap",
+  api-contract:          "long_context", // big diffs
+  ui-consistency:        "long_context",
+  research:              "balanced",
+  migration:             "premium",
+  code-analyzer:         "balanced",
+  dependency-auditor:    "cheap",
+  test:                  "balanced",
+  playwright:            "balanced",
+}
+```
+
+**Effort:** ~2 days.
+
+### v2.7.3 — Cost tracking infrastructure
+
+Already partly added in v2.5.2 (SQLite `spawn_costs` and `task_budgets` tables). v2.7.3 wires them up:
+
+**HookPlugin: `costTrackingHook`** (event=`after-agent-result`):
+- Receives spawn result with `usage: {input_tokens, output_tokens}` from the SpawnProvider.
+- Looks up price per 1M tokens from `tiers` config (each TierConfig has `pricing: {input_per_1m_usd, output_per_1m_usd}`).
+- Computes `est_cost_usd = (input_tokens / 1e6 * input_price) + (output_tokens / 1e6 * output_price)`.
+- Appends to SQLite `spawn_costs` table.
+- Updates `task_budgets.spent_usd` for the current task.
+
+**HookPlugin: `budgetGuardHook`** (event=`before-agent-spawn`):
+- Reads `task_budgets.spent_usd` and `limit_usd`.
+- If `spent_usd >= limit_usd`: emit `status: "error"` with code `BUDGET_EXCEEDED`, recovery options `["raise-budget", "abandon", "downgrade-tier"]`.
+- If `spent_usd >= 0.8 * limit_usd`: emit warning to audit log (no halt).
+
+**MCP tools:**
+- `pipeline_get_costs({task_id?, since?, group_by?})` → cost report (per task, per agent, per provider, per model).
+- `pipeline_set_budget({task_id, limit_usd})` → set/update per-task budget.
+- `pipeline_set_global_budget({limit_usd_per_day, limit_usd_per_month})` → global caps.
+
+**Effort:** ~2 days.
+
+### v2.7.4 — Cost dashboard in Web UI
+
+New Web UI section (`/costs`):
+
+- **Per-task cost breakdown:** waterfall chart showing each agent spawn with its cost.
+- **Provider/model attribution:** pie chart — where the money goes.
+- **Trend chart:** $/day, $/week over last N tasks.
+- **Budget configuration:** per-task default budget, global daily/monthly caps.
+- **Routing editor:** drag-and-drop matrix of [agent × tier]; preview cost estimate for a hypothetical MEDIUM task with current routing.
+
+**Effort:** ~3-4 days.
+
+### v2.7.5 — Local model integration (Ollama)
+
+Special attention because local models have unique characteristics:
+
+- Slower than cloud (no rate limits but limited by hardware).
+- Free but capacity-constrained (one model at a time on consumer GPU; need queueing).
+- Detection: daemon polls `localhost:11434/api/tags` on startup, auto-populates available models in Web UI.
+- Fallback handling: if Ollama unreachable, fall back to `fallback_tier` (default: "cheap" → DeepSeek).
+
+**Effort:** ~2 days. Mostly UX polish on top of v2.7.1's `OllamaSpawnProvider`.
+
+### v2.7 total effort
+
+**~10-13 days** focused work. Could be 2-3 Claude Code sessions.
+
+### v2.7 acceptance
+
+1. All 7 SpawnProvider plugins registered (`shuttle`, `claude-code-subprocess`, `anthropic-sdk`, `openrouter`, `openai-sdk`, `deepseek-sdk`, `gemini-sdk`, `ollama`).
+2. Tier abstraction works end-to-end: changing `agent_tiers.style-reviewer` from "cheap" to "balanced" in Web UI causes next spawn of `style-reviewer` to use Claude Sonnet via `anthropic-sdk` provider (verified in audit log).
+3. Cost tracking populates SQLite for every spawn; Web UI dashboard shows accurate per-task totals.
+4. Setting `task_budget.limit_usd = 0.50` and running a task that would exceed it → driver halts at the spawn that would breach budget, surfaces error with recovery options.
+5. Cost-aware downgrade works: when `spent_pct > 70%`, next spawn of a "premium" agent is automatically downgraded to "balanced" tier.
+6. Ollama integration: with Ollama running locally and `qwen3-coder:32b` available, setting `agent_tiers.style-reviewer = "local"` routes that agent to local model; works offline.
+7. Provider fallback: take Ollama down mid-task → next spawn requiring "local" tier falls back to `fallback_tier` and continues.
+8. Cost dashboard shows ~80%+ correlation with actual provider billing (validated by cross-checking Anthropic console + DeepSeek dashboard at end of week).
+
+### v2.7 decision gates
+
+- After v2.7.1 (providers added): which providers does the user actually use? If only Anthropic + Ollama, defer OpenAI/Gemini work to P5 era.
+- After v2.7.2 (tier routing): does the default preset hold up in practice? Re-tune based on real cost data after 2-4 weeks.
+- After v2.7.5 (Ollama): is local model quality sufficient for "cheap" tier agents? If consistently producing junk findings, reroute "cheap" tier to DeepSeek cloud and demote local to opt-in only.
+
+---
+
 ## Phase P1 — Open source + npm distribution
 
 **Goal:** anyone with Claude Code can install in ≤5 minutes.
@@ -630,23 +903,11 @@ export const manifest: PluginManifest = {
 
 ---
 
-## Phase P5 — Multi-harness portability
+## Phase P5 — Editor integrations beyond Claude Code
 
-**Goal:** run outside Claude Code.
+**Goal:** run from environments other than Claude Code chat. Multi-LLM provider support lives in v2.7 (shipped before this phase).
 
-### P5.1 — Direct SDK spawn provider
-
-- Ship `builtin/spawn/direct-sdk-provider.ts` that uses Anthropic SDK directly.
-- CLI mode: `claude-pipeline run "task description"` — fully standalone, no Claude Code.
-- Same plugins work; only the spawn mechanism differs.
-
-### P5.2 — Multi-model support
-
-- New `LLMClient` interface (above SpawnProvider).
-- Ship clients for: Anthropic, OpenAI (Responses API), Google Gemini, open models via OpenRouter, local Ollama.
-- Per-agent model preferences become abstract: "fast" / "balanced" / "deep" — mapped to provider-specific models.
-
-### P5.3 — Editor integrations beyond Claude Code
+### P5.1 — Editor integrations beyond Claude Code
 
 - VS Code extension that exposes `/task` via command palette.
 - JetBrains plugin.
@@ -698,23 +959,39 @@ These are not phases themselves — they're standing concerns that need investme
 Strict prerequisite order, but each phase is independently shippable:
 
 ```
-v2 hardening (specs/hardening-v2.md) ← required first
+v2 hardening (specs/hardening-v2.md) ← currently being implemented
   │
   ▼
-P1 (open source + npm + docs site)  ← biggest leverage; week 1-4
+v2.5 (daemon + Web UI + multi-provider basics)  ← week 1-3
   │
-  ├──▶ P2 (plugin distribution + trust)  ← unlocks ecosystem; week 5-7
+  ▼
+v2.6 (Docker isolation, default for autonomous mode)  ← week 4-5
   │
-  └──▶ P3 (team features)  ← unlocks paid customers; week 8-13
+  ▼
+v2.7 (cost-aware multi-provider routing + cost dashboard)  ← week 6-8
+  │  ↑ critical for autonomous mode economics
+  │
+  ▼
+P1 (open source + npm + docs site)  ← week 9-12; biggest external leverage
+  │
+  ├──▶ P2 (plugin distribution + trust)  ← week 13-15
+  │
+  └──▶ P3 (team features)  ← week 16-21
          │
          ▼
-       P4 (hosted tier + commercialization)  ← month 4-6
+       P4 (hosted tier + commercialization)  ← month 6-9
          │
          ▼
-       P5 (multi-harness)  ← month 7+ if data supports
+       P5 (editor integrations: VSCode/JetBrains)  ← month 10+
 ```
 
-**Total horizon:** ~6 months solo to reach product with paying customers. ~3 months with one collaborator.
+**Total horizon:**
+- ~5-6 weeks to first usable autonomous mode with Web UI (v2.5).
+- ~10-12 weeks to a financially sustainable autonomous tool with cost controls (v2.7).
+- ~6 months to product with paying customers (P4).
+- ~3 months with one collaborator working in parallel.
+
+**Why v2.7 before P1:** going public (P1) with a tool that burns through API budget without controls = bad first impression + unhappy users. Cost-aware routing is what makes external adoption viable.
 
 ---
 

@@ -6,20 +6,63 @@ MCP server that makes `pipeline-state.json` and `findings.jsonl` updates mechani
 
 Without enforcement, the orchestrator can mark a task `accepted` while never spawning a single agent — `findings.jsonl` stays empty, `/learn` has nothing to cluster, past-misses injection collapses to a no-op. This server replaces every "Write to .claude/pipeline-state.json" instruction with a tool call that validates inputs against the existing schemas and refuses incoherent transitions.
 
-## Tools (10)
+## Tools (19)
+
+Grouped by role:
+
+### Core state mutations (5)
 
 | Tool | Purpose |
 |------|---------|
-| `pipeline_init` | Copy `templates/pipeline-state.json` into `.claude/`, create empty `findings.jsonl`, generate task_id. Refuses to overwrite a finished task. |
-| `pipeline_state_get` | Read current `.claude/pipeline-state.json` in one call (avoids manual Read). |
-| `pipeline_record_agent_run` | Core. Parse a reviewer/validator agent's fenced ```json header, validate against `reviewer-output.schema.json` / `validator-output.schema.json`, stream each finding into `findings.jsonl` (validated against `finding.schema.json`), append to `reviewer_verdicts[]`, increment `agents_count`, rebuild `pipeline-state-summary.md`. |
-| `pipeline_record_nonreview_agent` | Same accounting for Planner/Implementer/Architect/Code-Analyzer/Dep-Auditor/Research/Migration (no JSON header). |
-| `pipeline_set_phase_status` | Update `phases[phase].status`. Rejects `completed` with empty `agents[]` (INV_002). Requires `skipped_reason` for `test_first`/`context`. `force=true` records `pipeline_violation`. |
+| `pipeline_init` | Copy `templates/pipeline-state.json` into `.claude/`, create empty `findings.jsonl` + `driver-state.json` + `.mcp-managed` marker, generate task_id. Refuses to overwrite a finished task. |
+| `pipeline_state_get` | Read current `.claude/pipeline-state.json` in one call. |
+| `pipeline_set_phase_status` | Update `phases[phase].status`. Enforces INV_002 (empty agents), INV_003 (skipped_reason), INV_010 (transitions), INV_011 (prereqs), INV_012 (open spawns on both `completed` and `skipped`). `force=true` records `pipeline_violation`. |
 | `pipeline_set_gate` | Approve/reject gates 0/1/2 + feedback. |
 | `pipeline_validate` | Run all coherence invariants. Returns `{ok, violations[]}`. |
-| `pipeline_finish` | Set verdict, validate, append a mechanical metrics row to `~/.claude/metrics/pipeline.jsonl`. **Refuses on any violation.** |
-| `pipeline_log_agent_feedback` | Append a human-confirmed missed-issue row to `~/.claude/metrics/agent-feedback.jsonl` (for `/agent-feedback`). |
-| `pipeline_get_past_misses` | Read last N confirmed entries for an agent (for past-misses injection at pipeline start, rule #15). |
+
+### Agent spawn-record contract (3)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_begin_agent` | Returns `{agent_run_id: "ar-<uuid>"}` and appends to `phases[phase].open_spawns[]`. Required before any `pipeline_record_*` call. |
+| `pipeline_record_agent_run` | For reviewer/validator agents. Validates fenced ```json header against `reviewer-output.schema.json` / `validator-output.schema.json`, streams findings into `findings.jsonl` (validated against `finding.schema.json`), appends to `reviewer_verdicts[]`, closes matching `open_spawn`, increments `agents_count`. **Requires `agent_run_id`.** |
+| `pipeline_record_nonreview_agent` | For Planner/Implementer/Architect/Code-Analyzer/Dependency-Auditor/Research/Migration. Same accounting, no JSON header. **Requires `agent_run_id`.** |
+
+### Driver entry points (2)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_run_task` | Driver entry. Calls `pipelineInit`, runs FSM until next shuttle pause (spawn-agent / ask-user / complete / error). Refuses to overwrite in-flight state (`withDriverStateLock`). |
+| `pipeline_continue_task` | Driver resume. Accepts `agent-result`, `agents-results`, `user-answer`, `recovery` inputs. Routes spawn results through `pipelineRecord*` (closes `open_spawns`). |
+
+### Recovery (4)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_cancel_spawn` | Removes an `open_spawn` entry without recording an agent result. Used when an agent crashed or was killed before completing. Audited. |
+| `pipeline_abandon` | Moves `pipeline-state.json` → `abandoned-<ts>.json`, deletes `.mcp-managed` and `.mcp-bypass-allowed` markers, writes one final audit-log entry. Does NOT append to `pipeline.jsonl`. |
+| `pipeline_unlock_writes` | Writes `.mcp-bypass-allowed` marker with `{schema_version, issued_at, expires_at, reason, issued_by_task_id}`. Default TTL 300s, max 3600s, max active marker lifetime ≤ 3600s from issue (HMAC-style cap — refuses to extend active marker without `force=true`). |
+| `pipeline_relock_writes` | Deletes `.mcp-bypass-allowed` marker immediately. |
+
+### Metrics + finalization (2)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_finish` | Set verdict, run `pipeline_validate`, append a mechanical metrics row (computed from `pipeline-state.json`) to `~/.claude/metrics/pipeline.jsonl`. **Refuses on any invariant violation.** |
+| `pipeline_log_agent_feedback` | Append a human-confirmed missed-issue row to `~/.claude/metrics/agent-feedback.jsonl` (called by `/agent-feedback`). |
+
+### Past-misses (2)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_get_past_misses` | Returns top-N past misses for an agent ranked by `recency × confidence × match_rate` score (halflife ≈ 42 days, time constant 60). Match rate computed from `categories_seen[]` in the last 20 `pipeline.jsonl` rows. |
+| `pipeline_set_pattern_confidence` | Sets `manual_confidence` on an `agent-feedback.jsonl` entry. Allows demoting stale patterns to score = 0. |
+
+### Meta (1)
+
+| Tool | Purpose |
+|------|---------|
+| `pipeline_meta` | Returns `{ protocol_version, plugin_api_version, schema_versions, tools[] }`. Used by orchestrators / Web UI for protocol-version assertion and tool discovery. |
 
 ## Invariants (enforced by `pipeline_validate` + `pipeline_finish`)
 
@@ -59,14 +102,41 @@ claude mcp list
 
 ### `~/.claude/hooks/pipeline-guard.sh` — PreToolUse
 
-Blocks direct `Write` / `Edit` / `MultiEdit` / `NotebookEdit` and Bash mutations targeting MCP-managed files:
+Blocks direct `Write` / `Edit` / `MultiEdit` / `NotebookEdit` and write-shaped Bash mutations targeting MCP-managed files.
+
+**Protected paths:**
 - `<project>/.claude/pipeline-state.json`
 - `<project>/.claude/pipeline-state-summary.md`
 - `<project>/.claude/findings.jsonl`
+- `<project>/.claude/mcp-audit.jsonl`
+- `<project>/.claude/driver-state.json`
+- `<project>/.claude/.mcp-managed` (marker protects itself — can't be deleted)
+- `<project>/.claude/.mcp-bypass-allowed` (same)
 - `~/.claude/metrics/pipeline.jsonl`
 - `~/.claude/metrics/agent-feedback.jsonl`
+- `~/.claude/metrics/mcp-audit.jsonl`
 
-Reads (`cat`, `jq <file>`, `grep`, etc.) pass through. Write-shaped Bash (`>`, `>>`, `tee`, `sed -i`, `awk -i`, `rm`, `mv`, `cp`, `truncate`, `chmod`, `chown`) targeting any of those paths is denied with a JSON `permissionDecision: deny`. Escape hatch: set `PIPELINE_ALLOW_RAW=1` (intended for MCP-author debugging only).
+**Scoping (Item 4a):** project paths are protected only when an ancestor directory contains a `.mcp-managed` marker (created by `pipeline_init`, removed by `pipeline_abandon` / `/done`). Home-metrics paths are always protected.
+
+**Write-op detection (Item 4b + review-fix expansion):** beyond shell mutators (`>`, `>>`, `| tee`, `sed -i`, `awk -i`, `rm`, `mv`, `cp`, `truncate`), the guard also blocks:
+- Python: `os.remove`, `os.unlink`, `shutil.rmtree`, `open(..., 'w')`, `os.system`, `subprocess.*`, `pathlib.Path().write_text`
+- Node: `unlinkSync`, `writeFileSync`, `appendFileSync`, `rmSync`, `truncateSync`, `createWriteStream`, `fs.promises.*`
+- Deno: `removeSync`, `writeTextFileSync`, `writeFileSync`, `truncateSync`
+- Perl: `unlink`, `open` with write mode
+- Ruby: `File.delete`, `File.write`, `FileUtils.rm`
+- `find ... -delete`, `find ... -exec rm/mv/cp/truncate`
+- `dd ... of=<protected>`
+- `bash/sh/zsh -c "..."` containing any of the above
+- `pwsh -Command "Remove-Item"`
+- `gzip/gunzip/bzip2/xz/zstd` in-place compression that would overwrite a protected file
+- Command substitution `$(...)` / `` `...` `` containing mutators
+- Relative paths (resolved against `$PWD`) + split-form (`find /x/.claude -name pipeline-state.json -delete`)
+
+20 evasion fixtures in `tests/guard-evasion/` regression-protect this surface.
+
+**Bypass (Item 4c):** call `pipeline_unlock_writes({ttl_seconds, reason})` to write `<project>/.claude/.mcp-bypass-allowed`. The guard honors it only while `now < expires_at`. The marker is **forgery-resistant**: it stores `issued_at` and the guard rejects markers where `expires_at - issued_at > 3600s` (cap), so `expires_at=9999` does nothing. Bypass usage is audited to `~/.claude/metrics/mcp-audit.jsonl`. Call `pipeline_relock_writes` to remove the marker; `/done` removes it automatically.
+
+**Path traversal:** `mcp/src/lib/project-dir.ts:assertProjectDirAllowed()` restricts `project_dir` arguments to `cwd` / `TMPDIR` / `~/.claude/settings.json:pipeline.allowed_project_roots`. Override for tests via `CLAUDE_PIPELINE_ALLOW_ANY_PROJECT_DIR=1`.
 
 Registered in `~/.claude/settings.json` under `hooks.PreToolUse` with matcher `Write|Edit|MultiEdit|NotebookEdit|Bash`.
 
@@ -74,10 +144,17 @@ Registered in `~/.claude/settings.json` under `hooks.PreToolUse` with matcher `W
 
 Runs at session-stop:
 - `verdict != null` AND `agents_count == 0` AND `complexity != simple` → prints pipeline-violation warning to stderr.
-- `verdict == null` AND a state file exists AND `stop_hook_active == false` → **blocks the stop** by emitting `{"decision": "block", "reason": "..."}` so Claude is prompted to run `/done`. On the next stop (`stop_hook_active == true`) or when `PIPELINE_ALLOW_RAW=1`, the hook falls back to stderr so the user can actually exit.
+- `verdict == null` AND a state file exists AND `stop_hook_active == false` → **blocks the stop** by emitting `{"decision": "block", "reason": "..."}` so Claude is prompted to run `/done`. On the next stop (`stop_hook_active == true`) the hook falls back to stderr so the user can exit.
 - `pipeline_violation` field set → echoes to stderr.
 
 Together these hooks turn "never `Write` pipeline-state.json" and "always run `/done`" from soft markdown rules into mechanical enforcement.
+
+## Invariants — addendum (v2 review hardening)
+
+- `INV_012` enforced on both `completed` AND `skipped` (review fix L3 — previously fired only on `completed`).
+- `pipeline_record_*` tools require `agent_run_id` and atomically close the matching `open_spawn[]` entry.
+- `lib/audit.ts` is concurrency-safe via `proper-lockfile.lock`. Global audit stream redacts `project_dir` / `task` / `task_short` / `reason` to length markers. Per-project stream capped at 50k entries with FIFO rotation. IO errors go to stderr (not silent).
+- `lib/parse-json-header.ts` lenient stage bounded: `LENIENT_OBJECT_CEILING=128KB`, `LENIENT_RETRY_CAP=5`.
 
 ## Testing
 

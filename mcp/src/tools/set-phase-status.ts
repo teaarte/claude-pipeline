@@ -54,6 +54,15 @@ export async function pipelineSetPhaseStatus(input: {
             `Spawn at least one agent or use 'skipped' with a reason. Pass force=true to override (records pipeline_violation).`,
         );
       }
+      // INV_012: open_spawns[] must be empty before completing a phase.
+      const open: any[] = phase.open_spawns ?? [];
+      if (open.length > 0) {
+        const ids = open.map((s) => `${s.id}(${s.agent})`).join(", ");
+        throw new Error(
+          `INV_012: cannot set phase '${input.phase}' to 'completed' while ${open.length} spawn(s) are still open: ${ids}. ` +
+            `Record them with pipeline_record_agent_run / pipeline_record_nonreview_agent, or cancel with pipeline_cancel_spawn (item 5).`,
+        );
+      }
     }
 
     if (input.status === "skipped") {

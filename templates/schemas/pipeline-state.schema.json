@@ -211,7 +211,22 @@
         "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "skipped"] },
         "started_at": { "type": ["string", "null"], "format": "date-time" },
         "completed_at": { "type": ["string", "null"], "format": "date-time" },
-        "agents": { "type": "array", "items": { "type": "string" } }
+        "agents": { "type": "array", "items": { "type": "string" } },
+        "open_spawns": {
+          "type": "array",
+          "description": "Spawns that have been begun (via pipeline_begin_agent) but not yet recorded. Must be empty before the phase can transition to 'completed' (INV_012).",
+          "items": {
+            "type": "object",
+            "required": ["id", "agent", "started_at"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^ar-[0-9a-f-]+$" },
+              "agent": { "type": "string" },
+              "model": { "type": ["string", "null"] },
+              "started_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": true
     }

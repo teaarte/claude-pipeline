@@ -3,6 +3,7 @@ import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { consumeOpenSpawn } from "./begin-agent.js";
 
 const NONREVIEW_AGENTS = [
   "planner",
@@ -20,6 +21,10 @@ export const recordNonreviewSchema = {
   project_dir: z.string(),
   phase: z.enum(VALID_PHASES),
   agent: z.enum(NONREVIEW_AGENTS),
+  agent_run_id: z
+    .string()
+    .regex(/^ar-[0-9a-f-]+$/)
+    .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   output_file: z.string().optional().describe("Relative path to the file the agent produced, e.g. '.claude/plan.md'"),
   iterations: z.number().int().min(0).optional().describe("If this is a re-spawn, current iteration count"),
 };
@@ -28,6 +33,7 @@ export async function pipelineRecordNonreviewAgent(input: {
   project_dir: string;
   phase: (typeof VALID_PHASES)[number];
   agent: (typeof NONREVIEW_AGENTS)[number];
+  agent_run_id: string;
   output_file?: string;
   iterations?: number;
 }): Promise<any> {
@@ -45,6 +51,9 @@ export async function pipelineRecordNonreviewAgent(input: {
     if (phase.status === "pending") {
       assertPrereqSatisfied(state, input.phase as Phase, "in_progress");
     }
+    // INV_012: agent_run_id MUST match an open_spawn begun for this agent.
+    consumeOpenSpawn(phase, input.agent_run_id, input.agent);
+
     phase.agents = Array.isArray(phase.agents) ? phase.agents : [];
     phase.agents.push(input.agent);
     if (phase.status === "pending") phase.status = "in_progress";

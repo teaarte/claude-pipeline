@@ -1,10 +1,16 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { tempProject, initArgs, clearMetrics, reviewerOutput, validatorOutput } from "../helpers/setup.js";
+import {
+  tempProject,
+  initArgs,
+  clearMetrics,
+  reviewerOutput,
+  validatorOutput,
+  spawnNonreview,
+  spawnReviewer,
+} from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
 import { pipelineSetGate } from "../../src/tools/set-gate.js";
-import { pipelineRecordAgentRun } from "../../src/tools/record-agent-run.js";
-import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
 import { pipelineValidate } from "../../src/tools/validate.js";
 
 describe("pipeline_validate", () => {
@@ -40,7 +46,7 @@ describe("pipeline_validate", () => {
     try {
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
-      await pipelineRecordNonreviewAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      await spawnNonreview(proj.dir, "planning", "planner");
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
       await pipelineSetPhaseStatus({
         project_dir: proj.dir,
@@ -48,22 +54,10 @@ describe("pipeline_validate", () => {
         status: "skipped",
         skipped_reason: "regression-only",
       });
-      await pipelineRecordNonreviewAgent({
-        project_dir: proj.dir,
-        phase: "implementation",
-        agent: "implementer",
-      });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "implementation",
-        agent_output: reviewerOutput(),
-      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "validation",
-        agent_output: validatorOutput(),
-      });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });

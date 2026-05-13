@@ -1,16 +1,24 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tempProject, initArgs, clearMetrics, reviewerOutput, validatorOutput } from "../helpers/setup.js";
+import {
+  tempProject,
+  initArgs,
+  clearMetrics,
+  reviewerOutput,
+  validatorOutput,
+  spawnNonreview,
+  spawnReviewer,
+} from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
 import { pipelineRecordAgentRun } from "../../src/tools/record-agent-run.js";
-import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
+import { pipelineBeginAgent } from "../../src/tools/begin-agent.js";
 
 async function bootstrapToImpl(dir: string) {
   await pipelineInit(initArgs(dir));
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "context", status: "completed" });
-  await pipelineRecordNonreviewAgent({ project_dir: dir, phase: "planning", agent: "planner" });
+  await spawnNonreview(dir, "planning", "planner");
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "planning", status: "completed" });
   await pipelineSetPhaseStatus({
     project_dir: dir,
@@ -18,7 +26,7 @@ async function bootstrapToImpl(dir: string) {
     status: "skipped",
     skipped_reason: "regression-only",
   });
-  await pipelineRecordNonreviewAgent({ project_dir: dir, phase: "implementation", agent: "implementer" });
+  await spawnNonreview(dir, "implementation", "implementer");
 }
 
 describe("pipeline_record_agent_run", () => {
@@ -30,11 +38,7 @@ describe("pipeline_record_agent_run", () => {
     const proj = await tempProject();
     try {
       await bootstrapToImpl(proj.dir);
-      const res = await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "implementation",
-        agent_output: reviewerOutput(),
-      });
+      const res = await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput());
       expect(res.agent).toBe("logic-reviewer");
       expect(res.findings_written).toBe(1);
       expect(res.blocking).toBe(1);
@@ -54,11 +58,7 @@ describe("pipeline_record_agent_run", () => {
     try {
       await bootstrapToImpl(proj.dir);
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      const res = await pipelineRecordAgentRun({
-        project_dir: proj.dir,
-        phase: "validation",
-        agent_output: validatorOutput(),
-      });
+      const res = await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
       expect(res.agent).toBe("acceptance");
       expect(res.verdict).toBe("PASS");
       expect(res.findings_written).toBe(0);
@@ -71,10 +71,16 @@ describe("pipeline_record_agent_run", () => {
     const proj = await tempProject();
     try {
       await bootstrapToImpl(proj.dir);
+      const { agent_run_id } = await pipelineBeginAgent({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent: "logic-reviewer",
+      });
       await expect(
         pipelineRecordAgentRun({
           project_dir: proj.dir,
           phase: "implementation",
+          agent_run_id,
           agent_output: "# just markdown body, no json",
         }),
       ).rejects.toThrow(/no fenced/);
@@ -87,13 +93,64 @@ describe("pipeline_record_agent_run", () => {
     const proj = await tempProject();
     try {
       await bootstrapToImpl(proj.dir);
+      const { agent_run_id } = await pipelineBeginAgent({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent: "made-up-agent",
+      });
       await expect(
         pipelineRecordAgentRun({
           project_dir: proj.dir,
           phase: "implementation",
+          agent_run_id,
           agent_output: reviewerOutput({ agent: "made-up-agent" }),
         }),
       ).rejects.toThrow(/Unknown agent class/);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("rejects when agent_run_id does not match the output's agent (INV_012)", async () => {
+    const proj = await tempProject();
+    try {
+      await bootstrapToImpl(proj.dir);
+      // Begin for logic-reviewer, but feed a security agent output (with a
+      // security-valid category so category-vocab check doesn't fire first).
+      const { agent_run_id } = await pipelineBeginAgent({
+        project_dir: proj.dir,
+        phase: "implementation",
+        agent: "logic-reviewer",
+      });
+      const out = reviewerOutput({
+        agent: "security",
+        findings: [
+          {
+            schema_version: "1.0",
+            id: "f-2026-05-13-sec123",
+            agent: "security",
+            task_id: "t-2026-05-13-test",
+            iteration: 1,
+            file: "src/auth.ts",
+            line_start: 10,
+            line_end: 20,
+            severity: "blocking",
+            category: "auth-bypass",
+            summary: "x",
+            evidence_excerpt: "x",
+            suggested_fix: "x",
+            status: "open",
+          },
+        ],
+      });
+      await expect(
+        pipelineRecordAgentRun({
+          project_dir: proj.dir,
+          phase: "implementation",
+          agent_run_id,
+          agent_output: out,
+        }),
+      ).rejects.toThrow(/INV_012/);
     } finally {
       await proj.cleanup();
     }

@@ -8,6 +8,7 @@ export const finishSchema = {
   verdict: z.enum(["accepted", "rejected"]),
   project_short: z.string().optional().describe("Short project name for metrics row, e.g. 's3-panel'"),
   task_short: z.string().optional().describe("Short task title for metrics row"),
+  force: z.boolean().optional().describe("Force finish even with stale-spawn violations. Records pipeline_violation."),
 };
 
 function shortFromTaskId(taskId: string): { date: string; short: string } {
@@ -22,6 +23,7 @@ export async function pipelineFinish(input: {
   verdict: "accepted" | "rejected";
   project_short?: string;
   task_short?: string;
+  force?: boolean;
 }): Promise<any> {
   const file = stateFile(input.project_dir);
   const fjsonl = findingsFile(input.project_dir);
@@ -33,13 +35,22 @@ export async function pipelineFinish(input: {
     state.verdict = input.verdict;
 
     const violations = await runInvariants(state, fjsonl);
-    if (violations.length > 0) {
+    // Stale-spawn alone is bypassable with force=true. Any other violation is hard-blocked.
+    const blocking = input.force
+      ? violations.filter((v) => v.code !== "stale-spawn")
+      : violations;
+    if (blocking.length > 0) {
       // Revert verdict to avoid leaving partial state.
       state.verdict = null;
       throw new Error(
-        `pipeline_finish refused: ${violations.length} invariant violation(s).\n` +
-          violations.map((v) => `  [${v.code}] ${v.message}`).join("\n"),
+        `pipeline_finish refused: ${blocking.length} invariant violation(s).\n` +
+          blocking.map((v) => `  [${v.code}] ${v.message}`).join("\n"),
       );
+    }
+    if (input.force && violations.length > 0) {
+      state.pipeline_violation = state.pipeline_violation
+        ? `${state.pipeline_violation}; finish-force-stale-spawn`
+        : "finish-force-stale-spawn";
     }
 
     // Build mechanical metrics row.

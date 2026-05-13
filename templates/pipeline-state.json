@@ -17,14 +17,15 @@
   "refs_loaded": [],
   "refs_dropped_due_to_cap": [],
   "phases": {
-    "context": { "status": "pending", "agents": [] },
+    "context": { "status": "pending", "agents": [], "open_spawns": [] },
     "planning": {
       "status": "pending",
       "iterations": 0,
       "gate1_revisions": 0,
       "grounding_check": null,
       "grounding_mismatches": 0,
-      "agents": []
+      "agents": [],
+      "open_spawns": []
     },
     "test_first": {
       "status": "pending",
@@ -33,7 +34,8 @@
       "tests_written_count": null,
       "test_files_written": [],
       "test_files_hashes_post_red": {},
-      "agents": []
+      "agents": [],
+      "open_spawns": []
     },
     "implementation": {
       "status": "pending",
@@ -45,10 +47,11 @@
       "drift_files_count": 0,
       "test_files_modified_by_implementer": [],
       "checkpoint_results": [],
-      "agents": []
+      "agents": [],
+      "open_spawns": []
     },
-    "validation": { "status": "pending", "acceptance_first_pass": false, "agents": [] },
-    "final": { "status": "pending", "agents": [] }
+    "validation": { "status": "pending", "acceptance_first_pass": false, "agents": [], "open_spawns": [] },
+    "final": { "status": "pending", "agents": [], "open_spawns": [] }
   },
   "reviewer_verdicts": [],
   "findings_path": ".claude/findings.jsonl",

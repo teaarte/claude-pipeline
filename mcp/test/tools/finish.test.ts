@@ -6,20 +6,20 @@ import {
   clearMetrics,
   reviewerOutput,
   validatorOutput,
+  spawnNonreview,
+  spawnReviewer,
   readJsonl,
   metricsDir,
 } from "../helpers/setup.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { pipelineSetPhaseStatus } from "../../src/tools/set-phase-status.js";
 import { pipelineSetGate } from "../../src/tools/set-gate.js";
-import { pipelineRecordAgentRun } from "../../src/tools/record-agent-run.js";
-import { pipelineRecordNonreviewAgent } from "../../src/tools/record-nonreview-agent.js";
 import { pipelineFinish } from "../../src/tools/finish.js";
 
 async function runFullPipeline(dir: string) {
   await pipelineInit(initArgs(dir));
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "context", status: "completed" });
-  await pipelineRecordNonreviewAgent({ project_dir: dir, phase: "planning", agent: "planner" });
+  await spawnNonreview(dir, "planning", "planner");
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "planning", status: "completed" });
   await pipelineSetPhaseStatus({
     project_dir: dir,
@@ -27,18 +27,10 @@ async function runFullPipeline(dir: string) {
     status: "skipped",
     skipped_reason: "regression-only",
   });
-  await pipelineRecordNonreviewAgent({ project_dir: dir, phase: "implementation", agent: "implementer" });
-  await pipelineRecordAgentRun({
-    project_dir: dir,
-    phase: "implementation",
-    agent_output: reviewerOutput(),
-  });
+  await spawnNonreview(dir, "implementation", "implementer");
+  await spawnReviewer(dir, "implementation", "logic-reviewer", reviewerOutput());
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "implementation", status: "completed" });
-  await pipelineRecordAgentRun({
-    project_dir: dir,
-    phase: "validation",
-    agent_output: validatorOutput(),
-  });
+  await spawnReviewer(dir, "validation", "acceptance", validatorOutput());
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "validation", status: "completed" });
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "final", status: "completed" });
   await pipelineSetGate({ project_dir: dir, gate: "gate0", status: "approved" });
@@ -76,7 +68,6 @@ describe("pipeline_finish", () => {
   it("refuses to finish when invariants fail", async () => {
     const proj = await tempProject();
     try {
-      // Bootstrap up to gate2-approved, but force gate2 with implementation incomplete.
       await pipelineInit(initArgs(proj.dir));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });

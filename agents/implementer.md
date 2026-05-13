@@ -10,10 +10,10 @@ Approved `.claude/plan.md` + `.claude/context-doc.md` + CLAUDE.md + `.claude/ref
 - **Failing tests already exist** — written by the Test Agent before you start.
 - **Your primary goal:** make all tests in `.claude/test-files-must-stay-green.json` pass by implementing the plan. No exceptions.
 - **Skeleton files exist** — replace `NotImplementedException`/null stubs with real logic.
-- **Test files are SACRED.** You MUST NOT modify any file listed in `.claude/test-files-must-stay-green.json`. The Orchestrator hashes these files post-RED and verifies the hash post-GREEN. Any modification → BLOCKING. If you genuinely believe a test is wrong:
+- **Test files are SACRED.** You MUST NOT modify any file listed in `.claude/test-files-must-stay-green.json`. The driver hashes these files post-RED and verifies the hash post-GREEN. Any modification → BLOCKING. If you genuinely believe a test is wrong:
   1. STOP implementing.
   2. Emit a finding via your output: `category: "test-modification-needed"`, severity `blocking`, with the exact wrong assertion + reason.
-  3. The Orchestrator surfaces this to the human at the next gate. Test Agent re-spawns to correct, OR human approves the modification explicitly.
+  3. The driver surfaces this to the human at the next gate. Test Agent re-spawns to correct, OR human approves the modification explicitly.
   4. Do NOT silently edit and continue.
 - **Mechanical checkpoint after every 3 plan steps (or 3-5 in long plans):** run the test command (e.g. `npx vitest run` / `pytest`). Compare failing-count to previous checkpoint. Failing-count MUST be monotonically non-increasing — if it grows, you broke something. Stop, investigate, do not continue.
 - If all plan steps complete but tests still fail → investigate and fix implementation. Tests stay sacred.
@@ -126,4 +126,4 @@ When pausing at a checkpoint, output:
 Pausing for review before continuing with Step [N+1].
 ```
 
-Output this inline (not as a file). Wait for Orchestrator to confirm before continuing.
+Output this inline (not as a file). Wait for the driver to confirm before continuing.

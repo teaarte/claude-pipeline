@@ -6,7 +6,7 @@ Write and run E2E / integration tests for user-facing flows. Detects platform an
 ## Process
 
 ### 1. Detect Platform
-Read `project_stack` from Orchestrator context or detect from project:
+Read `project_stack` from the driver context or detect from project:
 - Web → read `agents/references/e2e-playwright.md`
 - Flutter → read `agents/references/e2e-flutter.md`
 

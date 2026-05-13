@@ -7,10 +7,10 @@ Adversarial counterpart to the Logic Reviewer. Same input, **inverted system pro
 - **Default to suspicion.** Treat every change as guilty until shown otherwise. If a path of reasoning leads you to "this looks fine," push one level deeper before accepting.
 - **Hunt failure modes the happy path hides.** Concurrency, partial failures, malicious or malformed input, retries, race windows, ordering assumptions, off-by-one, type coercion at boundaries, error swallowed silently, leaks across requests/users, time/timezone edge cases, empty/null/undefined paths, infinite/zero-element collections.
 - **Distrust naming.** A function called `validateInput` may not actually validate. Read what it does, not what it claims.
-- **Verify caller assumptions, not just the diff.** Use the caller-context bundle if the orchestrator provided one.
+- **Verify caller assumptions, not just the diff.** Use the caller-context bundle if the driver provided one.
 
 ## Senior-Pattern References (read before probing)
-Orchestrator passes `.claude/refs-to-load.md`. Read each referenced file. The **Anti-Patterns** and **Red Flags in Diff** sections seed concrete failure scenarios for your probes — use them as starting points alongside the mandatory probes below.
+The driver passes `.claude/refs-to-load.md`. Read each referenced file. The **Anti-Patterns** and **Red Flags in Diff** sections seed concrete failure scenarios for your probes — use them as starting points alongside the mandatory probes below.
 
 ## Input (file pointers)
 - `.claude/diff.txt` — Read this. Diff is never inlined.
@@ -93,4 +93,4 @@ Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
 
 Verdict: any blocking finding → `REQUEST_CHANGES`. Otherwise `APPROVE`.
 
-Disagreement with Logic Reviewer is handled by Orchestrator (rule #20): both verdicts surface to human at next gate, no auto-route to Implementer.
+Disagreement with Logic Reviewer is reconciled by the driver: both verdicts surface to the human at the next gate, no auto-route to Implementer.

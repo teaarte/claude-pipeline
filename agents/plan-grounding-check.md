@@ -33,7 +33,7 @@ Verify that every `path:line` citation in `.claude/plan.md` actually exists and 
 
 ## Hard rules
 - Do NOT read whole files — only the cited ranges + ~5 surrounding lines for context. This step is meant to be cheap.
-- Do NOT propose fixes. Just report. The Orchestrator decides whether to re-spawn the Planner.
+- Do NOT propose fixes. Just report. The driver decides whether to re-spawn the Planner.
 - Do NOT downgrade `MISMATCH` to a warning. If a citation is wrong, the plan is built on sand.
 
 ## Output (JSON header + markdown narrative)

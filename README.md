@@ -328,26 +328,37 @@ cd your-project/
 
 ```
 claude-pipeline/
-  agents/              23 agent definitions (thin — role + detect + JSON output schema)
-    references/        12 platform-specific + 13 senior-pattern (Tier 1/2/3) knowledge files
-  commands/            16 slash commands (includes /learn for self-improvement analyzer)
-  pipelines/           3 complexity flows (simple/medium/complex)
+  agents/              20 agent prompt templates (role + checklist + JSON output schema).
+    references/        platform-specific + senior-pattern knowledge files loaded by agents.
+  commands/            slash commands (task is a pure ≤30-line shuttle; orchestration lives in mcp/driver).
   templates/
-    schemas/           JSON Schemas — finding, reviewer-output, validator-output, pipeline-state, agent-feedback, category-vocab
-    pipeline-state.json (machine state), pipeline-state-summary.md (human glance)
+    schemas/           JSON Schemas — finding, reviewer-output, validator-output, pipeline-state, agent-feedback, category-vocab.
+    pipeline-state.json (machine state), pipeline-state-summary.md (human glance).
     agent-output-formats.md
-  mcp/                 MCP enforcement server (TypeScript, stdio transport)
-    src/               10 tool implementations + lib helpers
-    README.md          tool reference + invariants
+  mcp/                 MCP enforcement server (TypeScript, stdio transport).
+    src/tools/         17 MCP tool implementations.
+    src/driver/        v2 plugin framework — types, core FSM (plugin-name-free),
+                       built-in plugins (steps, agents, flows, gates, decisions,
+                       hooks, spawn), loaders, and the two MCP driver tools
+                       (pipeline_run_task, pipeline_continue_task).
+    README.md          tool reference + invariants.
   hooks/
-    pipeline-guard.sh  PreToolUse hook — denies direct Write/Edit/Bash that mutates MCP-managed files
-    pipeline-stop.sh   Stop hook — blocks session-stop on in-flight pipeline; falls back to stderr on retry
-    README.md          install instructions + escape hatches
+    pipeline-guard.sh  PreToolUse hook — denies direct Write/Edit/Bash that mutates MCP-managed files (item 4: marker-scoped, Python/Node/Deno/Perl/Ruby/dd coverage, bypass via pipeline_unlock_writes).
+    pipeline-stop.sh   Stop hook — blocks session-stop on in-flight pipeline.
+    README.md          install instructions + escape hatches.
   metrics/
-    pipeline.jsonl     append-only structured per-task metrics
-    agent-feedback.jsonl  append-only structured misses with category
+    pipeline.jsonl     append-only structured per-task metrics.
+    agent-feedback.jsonl  append-only structured misses with category.
+    mcp-audit.jsonl    append-only audit of every MCP tool call (item 2; FIFO-capped at 10k).
   settings.reference.json
 ```
+
+The v2 plugin framework lives in `mcp/src/driver/`. The core FSM
+(`driver/core/fsm.ts`) is generic — every plugin-specific name lives in
+`driver/builtin/` and is registered exclusively in `driver/loaders/builtins.ts`.
+A `grep -rEi "planner|implementer|logic-reviewer|gate-[012]" mcp/src/driver/core/`
+must return zero matches. To extend the pipeline, add a new plugin file and a
+single registry line — no core changes.
 
 ## Requirements
 - Claude Code CLI

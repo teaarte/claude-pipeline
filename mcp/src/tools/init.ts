@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { z } from "zod";
 import { join } from "node:path";
 import { templatesDir } from "../lib/paths.js";
-import { stateFile, findingsFile, summaryFile } from "../lib/paths.js";
+import { stateFile, findingsFile, summaryFile, claudeDir } from "../lib/paths.js";
 import {
   withStateLock,
   ensureEmptyJsonl,
@@ -65,6 +65,11 @@ export async function pipelineInit(input: {
     };
     await ensureEmptyJsonl(fjsonl);
     await writeText(summary, await buildSummary(state));
+    // 4a: drop the .mcp-managed marker so pipeline-guard.sh scopes its checks
+    // to this project. Without the marker the guard fails-open.
+    const cdir = claudeDir(input.project_dir);
+    await mkdir(cdir, { recursive: true });
+    await writeFile(join(cdir, ".mcp-managed"), "", "utf8");
     return {
       state,
       result: {
@@ -72,6 +77,7 @@ export async function pipelineInit(input: {
         state_file: file,
         findings_file: fjsonl,
         summary_file: summary,
+        marker_file: join(cdir, ".mcp-managed"),
       },
     };
   });

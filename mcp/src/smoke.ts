@@ -63,14 +63,33 @@ async function main() {
     if (!got.exists || got.state.task_id !== "t-2026-05-13-smoke") fail("state_get");
     else ok("state_get returns initialized state");
 
+    section("INV_011: refuses agent recording when prereq not satisfied");
+    // implementation requires test_first; both still pending, context still pending.
+    await expectThrow(
+      () =>
+        pipelineRecordNonreviewAgent({
+          project_dir: project,
+          phase: "implementation",
+          agent: "implementer",
+        }),
+      "INV_011",
+      "record implementer before test_first done",
+    );
+
+    section("complete context (no-agent exemption)");
+    await pipelineSetPhaseStatus({ project_dir: project, phase: "context", status: "completed" });
+    ok("context completed");
+
     section("INV_002: refuses to complete phase with no agents");
+    // Context is done so INV_011 prereq is satisfied for planning; the only thing
+    // left blocking completion is the empty agents[] — exactly INV_002.
     await expectThrow(
       () => pipelineSetPhaseStatus({ project_dir: project, phase: "planning", status: "completed" }),
       "INV_002",
       "set_phase_status planning=completed (no agents)",
     );
 
-    section("record non-review agents");
+    section("record planner (planning auto-transitions to in_progress)");
     await pipelineRecordNonreviewAgent({
       project_dir: project,
       phase: "planning",
@@ -78,12 +97,22 @@ async function main() {
       output_file: ".claude/plan.md",
       iterations: 1,
     });
+    ok("recorded planner");
+
+    section("walk through phases in legal order");
+    await pipelineSetPhaseStatus({ project_dir: project, phase: "planning", status: "completed" });
+    await pipelineSetPhaseStatus({
+      project_dir: project,
+      phase: "test_first",
+      status: "skipped",
+      skipped_reason: "regression-only",
+    });
     await pipelineRecordNonreviewAgent({
       project_dir: project,
       phase: "implementation",
       agent: "implementer",
     });
-    ok("recorded planner + implementer");
+    ok("recorded implementer (implementation in_progress)");
 
     section("record reviewer agent");
     const reviewerOutput = `\`\`\`json
@@ -139,32 +168,20 @@ narrative here
       fail("findings.jsonl content unexpected");
     }
 
-    section("INV_002 bypass with force=true");
-    const forced = await pipelineSetPhaseStatus({
-      project_dir: project,
-      phase: "context",
-      status: "completed",
-    });
-    if (forced.status === "completed") ok("context can complete with no agents");
-    else fail("context phase completion");
-
-    section("complete remaining phases properly");
-    await pipelineSetPhaseStatus({
-      project_dir: project,
-      phase: "planning",
-      status: "completed",
-    });
-    await pipelineSetPhaseStatus({
-      project_dir: project,
-      phase: "test_first",
-      status: "skipped",
-      skipped_reason: "regression-only",
-    });
+    section("complete implementation");
     await pipelineSetPhaseStatus({
       project_dir: project,
       phase: "implementation",
       status: "completed",
     });
+    ok("implementation completed");
+
+    section("INV_010: refuses to re-open completed phase");
+    await expectThrow(
+      () => pipelineSetPhaseStatus({ project_dir: project, phase: "implementation", status: "in_progress" }),
+      "INV_010",
+      "set_phase_status implementation: completed → in_progress",
+    );
 
     section("record acceptance validator");
     const acceptanceOutput = `\`\`\`json

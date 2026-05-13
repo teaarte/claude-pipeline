@@ -31,7 +31,18 @@ Each agent should review **code** (not plans) — pass them the "For Code" instr
 
 ### 4. Collect results
 
-Parse each agent's fenced ```json header (validates against `templates/schemas/reviewer-output.schema.json`). The `verdict` and `findings[]` are the source of truth. Append findings to `.claude/findings.jsonl`.
+For each agent's full text output, call:
+
+```
+mcp__claude-pipeline__pipeline_record_agent_run({
+  project_dir,
+  phase: "implementation",
+  agent: "<name>",
+  agent_output: "<full text incl. fenced ```json header>"
+})
+```
+
+The MCP validates the JSON header against `templates/schemas/reviewer-output.schema.json` and streams each `findings[]` entry into `.claude/findings.jsonl` (after validating against `finding.schema.json`). Never append to `findings.jsonl` directly. If `.claude/pipeline-state.json` does not exist (running `/code-review` outside a `/task` flow), parse the JSON header inline and use it for the summary below — but do not write to `findings.jsonl`.
 
 ### 5. Present summary
 

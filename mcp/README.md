@@ -35,6 +35,8 @@ Without enforcement, the orchestrator can mark a task `accepted` while never spa
 | `INV_007` | `verdict != null` → all required phases `completed` or `skipped`. |
 | `INV_008` | Every line in `findings.jsonl` validates against `finding.schema.json`. |
 | `INV_009` | `test_files_modified_by_implementer` non-empty → requires explicit human approval in `gate2_feedback`. |
+| `INV_010` | Phase status transitions follow a state machine: terminal states (`completed`, `skipped`) cannot reopen. Enforced inside `pipeline_set_phase_status`; `force=true` bypasses and records a `pipeline_violation`. |
+| `INV_011` | Phase prerequisite ordering: a phase cannot leave `pending` until its prereq is `completed` or `skipped` (`context → planning → test_first → implementation → validation`). Enforced inside `pipeline_set_phase_status`, `pipeline_record_agent_run`, and `pipeline_record_nonreview_agent`. `force=true` bypasses in `set_phase_status`; record calls have no bypass. |
 
 ## Install
 
@@ -53,14 +55,29 @@ claude mcp list
 # claude-pipeline: node .../mcp/dist/server.js - ✓ Connected
 ```
 
-## Stop hook (safety net)
+## Hooks (mechanical guardrails on top of the MCP)
 
-`~/.claude/hooks/pipeline-stop.sh` runs after every Claude Code session. It reads `.claude/pipeline-state.json` from the session cwd and prints to stderr when:
-- `verdict != null` AND `agents_count == 0` AND `complexity != simple` → real pipeline violation
-- `verdict == null` AND a state file exists → in-flight reminder
-- `pipeline_violation` field set → echo it
+### `~/.claude/hooks/pipeline-guard.sh` — PreToolUse
 
-Non-blocking; intended as a diagnostic.
+Blocks direct `Write` / `Edit` / `MultiEdit` / `NotebookEdit` and Bash mutations targeting MCP-managed files:
+- `<project>/.claude/pipeline-state.json`
+- `<project>/.claude/pipeline-state-summary.md`
+- `<project>/.claude/findings.jsonl`
+- `~/.claude/metrics/pipeline.jsonl`
+- `~/.claude/metrics/agent-feedback.jsonl`
+
+Reads (`cat`, `jq <file>`, `grep`, etc.) pass through. Write-shaped Bash (`>`, `>>`, `tee`, `sed -i`, `awk -i`, `rm`, `mv`, `cp`, `truncate`, `chmod`, `chown`) targeting any of those paths is denied with a JSON `permissionDecision: deny`. Escape hatch: set `PIPELINE_ALLOW_RAW=1` (intended for MCP-author debugging only).
+
+Registered in `~/.claude/settings.json` under `hooks.PreToolUse` with matcher `Write|Edit|MultiEdit|NotebookEdit|Bash`.
+
+### `~/.claude/hooks/pipeline-stop.sh` — Stop
+
+Runs at session-stop:
+- `verdict != null` AND `agents_count == 0` AND `complexity != simple` → prints pipeline-violation warning to stderr.
+- `verdict == null` AND a state file exists AND `stop_hook_active == false` → **blocks the stop** by emitting `{"decision": "block", "reason": "..."}` so Claude is prompted to run `/done`. On the next stop (`stop_hook_active == true`) or when `PIPELINE_ALLOW_RAW=1`, the hook falls back to stderr so the user can actually exit.
+- `pipeline_violation` field set → echoes to stderr.
+
+Together these hooks turn "never `Write` pipeline-state.json" and "always run `/done`" from soft markdown rules into mechanical enforcement.
 
 ## Testing
 

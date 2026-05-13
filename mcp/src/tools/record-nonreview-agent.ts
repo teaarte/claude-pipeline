@@ -2,6 +2,7 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
+import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 
 const NONREVIEW_AGENTS = [
   "planner",
@@ -39,6 +40,11 @@ export async function pipelineRecordNonreviewAgent(input: {
       throw new Error(`Unknown phase '${input.phase}' in pipeline-state.json`);
     }
     const phase = state.phases[input.phase];
+    // INV_011: refuse to record an agent into a phase whose prereq isn't
+    // completed/skipped. Catches out-of-order recording.
+    if (phase.status === "pending") {
+      assertPrereqSatisfied(state, input.phase as Phase, "in_progress");
+    }
     phase.agents = Array.isArray(phase.agents) ? phase.agents : [];
     phase.agents.push(input.agent);
     if (phase.status === "pending") phase.status = "in_progress";

@@ -2,9 +2,14 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-
-const VALID_PHASES = ["context", "planning", "test_first", "implementation", "validation", "final"] as const;
-const VALID_STATUS = ["pending", "in_progress", "completed", "skipped"] as const;
+import {
+  PHASES,
+  STATUSES,
+  type Phase,
+  type Status,
+  assertTransitionAllowed,
+  assertPrereqSatisfied,
+} from "../lib/phase-state-machine.js";
 
 const SKIPPED_REASON_BY_PHASE: Record<string, readonly string[]> = {
   test_first: ["regression-only", "no-test-framework-tdd-blocked", "user-override-no-tests"],
@@ -12,16 +17,16 @@ const SKIPPED_REASON_BY_PHASE: Record<string, readonly string[]> = {
 
 export const setPhaseStatusSchema = {
   project_dir: z.string(),
-  phase: z.enum(VALID_PHASES),
-  status: z.enum(VALID_STATUS),
+  phase: z.enum(PHASES),
+  status: z.enum(STATUSES),
   skipped_reason: z.string().optional(),
-  force: z.boolean().optional().describe("Bypass invariant check (allow completed with no agents). Use rarely."),
+  force: z.boolean().optional().describe("Bypass invariant check (allow completed with no agents, invalid transitions, missing prereqs). Records pipeline_violation."),
 };
 
 export async function pipelineSetPhaseStatus(input: {
   project_dir: string;
-  phase: (typeof VALID_PHASES)[number];
-  status: (typeof VALID_STATUS)[number];
+  phase: Phase;
+  status: Status;
   skipped_reason?: string;
   force?: boolean;
 }): Promise<any> {
@@ -32,6 +37,14 @@ export async function pipelineSetPhaseStatus(input: {
     if (!state) throw new Error(`pipeline-state.json not found at ${file}`);
     const phase = state.phases?.[input.phase];
     if (!phase) throw new Error(`Unknown phase '${input.phase}'`);
+
+    // INV_010: state-machine transition guard.
+    const fromStatus: Status = (phase.status as Status) ?? "pending";
+    if (!input.force) {
+      assertTransitionAllowed(input.phase, fromStatus, input.status);
+      // INV_011: phase prerequisite ordering.
+      assertPrereqSatisfied(state, input.phase, input.status);
+    }
 
     if (input.status === "completed" && !input.force) {
       const agents: string[] = phase.agents ?? [];

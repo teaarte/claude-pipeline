@@ -6,6 +6,10 @@ Run integrity checks on the pipeline configuration. No arguments needed.
 
 ## Checks
 
+### 0. MCP Server Registration
+- Run `claude mcp list` (Bash) and confirm output contains `claude-pipeline: ... ✓ Connected`. If missing or disconnected, this is a **blocking** issue — every `mcp__claude-pipeline__*` call referenced in `commands/`, `pipelines/`, and `agents/` will fail. Suggest fix: `claude mcp add --scope user claude-pipeline -- node /Users/teaarte/Programming/internal/claude-pipeline/mcp/dist/server.js`.
+- Read `mcp/README.md`. Confirm the listed MCP tool names (table under "## Tools") match what is referenced in `commands/task.md` (rules #1, #15, #22-29), `commands/done.md`, `commands/agent-feedback.md`, and the pipeline files. Any reference to a tool name not present in `mcp/README.md` is a blocking issue.
+
 ### 1. Agent Files
 For each agent in `~/.claude/agents/*.md`:
 - File exists and is non-empty
@@ -40,8 +44,12 @@ For each command in `~/.claude/commands/*.md`:
 - `task.md` Global Rules count matches actual rule numbers (no gaps)
 
 ### 7. Metrics Integrity
-- `~/.claude/metrics/pipeline.jsonl` exists and every line is a valid JSON object with `schema_version: "1.0"`.
-- `~/.claude/metrics/agent-feedback.jsonl` exists; every line validates against `templates/schemas/agent-feedback.schema.json`.
+- `~/.claude/metrics/pipeline.jsonl` exists and every line is a valid JSON object with `schema_version: "1.0"`. The MCP server enforces validity on every write via `pipeline_finish` — any malformed line predates the MCP integration or was hand-written and should be flagged.
+- `~/.claude/metrics/agent-feedback.jsonl` exists; every line validates against `templates/schemas/agent-feedback.schema.json`. Same MCP-enforced provenance via `pipeline_log_agent_feedback`.
+
+### 7a. In-Flight Pipeline State (MCP)
+- If `.claude/pipeline-state.json` exists in the current working directory, call `mcp__claude-pipeline__pipeline_validate({project_dir})` and surface any invariant violations as findings. This catches in-flight state that drifted out of MCP-managed invariants (e.g. a phase marked `completed` with no `agents[]`, a missing `skipped_reason`, etc.).
+- If validation fails, do NOT propose deleting `.claude/pipeline-state.json` — surface the violation list so the user can fix the upstream cause or `/done` with the failure recorded.
 
 ### 8. Schema Integrity
 - `templates/schemas/finding.schema.json` exists and is valid JSON Schema (draft 2020-12).
@@ -70,12 +78,14 @@ For each command in `~/.claude/commands/*.md`:
 ```
 Pipeline Validation Report
 
+MCP Server:    [Connected / DISCONNECTED] (claude-pipeline)
 Agents:        [N] found, [N] valid, [N] issues
 Pipelines:     [N] found, [N] valid, [N] issues
 Commands:      [N] found, [N] valid, [N] issues
 Templates:     [N] found, [N] valid, [N] issues
 Model Routing: [PASS/FAIL]
 Metrics:       [PASS/FAIL]
+In-Flight:     [No state / VALID / VIOLATIONS]
 
 Issues:
 - [file]: [description of issue]

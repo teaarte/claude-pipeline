@@ -1,0 +1,7 @@
+{
+  "complexity": "simple",
+  "verdict": "accepted",
+  "min_agents_count": 1,
+  "all_open_spawns_empty": true,
+  "audit_log_present": true
+}

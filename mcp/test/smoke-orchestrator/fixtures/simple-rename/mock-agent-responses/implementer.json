@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "agent": "implementer",
+  "task_id": "t-2026-05-13-smoke",
+  "iteration": 1,
+  "summary_line": "applied rename",
+  "_smoke_marker": "implementer-response"
+}

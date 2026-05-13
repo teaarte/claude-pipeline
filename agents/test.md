@@ -6,14 +6,14 @@ Write and run tests following the project's existing test patterns. Supports two
 - **Test-After (for bug fixes, refactors):** Write tests for existing implementation.
 
 ## Mode
-Orchestrator specifies the mode. If not specified, default to **Test-First** for new features, **Test-After** for bug fixes.
+The driver specifies the mode. If not specified, default to **Test-First** for new features, **Test-After** for bug fixes.
 
 ## Input
 - `.claude/plan.md` — acceptance criteria and **test specifications** (Test-First section)
 - CLAUDE.md — test command, architecture, patterns
 - `.claude/refs-to-load.md` — Read referenced files; their **Anti-Patterns** sections inform what edge cases to test (e.g. db-postgres anti-patterns suggest tests for OFFSET pagination behavior at boundaries; redis anti-patterns suggest tests for stampede protection)
 - Mode: `test-first` or `test-after`
-- List of changed files from Orchestrator (test-after mode only)
+- List of changed files from the driver (test-after mode only)
 - If not provided in test-after mode, detect changed files: `git diff --name-only HEAD~1`
 
 ## Process

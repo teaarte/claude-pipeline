@@ -26,7 +26,7 @@ Implementer "small adjustments" outside the plan are the second-largest source o
 
 5. **Cross-check Not In Scope.** If the plan listed things explicitly out of scope and the diff touches them anyway → blocking drift.
 
-6. **Sacred test files (TDD mode only).** Read `phases.implementation.test_files_modified_by_implementer` from pipeline-state. For every path in that array, emit a blocking finding `category: "test-file-modified-by-implementer"` referencing the file. The orchestrator already detected the modification via hash diff (rule #25f); your job is to surface it as a structured finding so plan-conformance verdict reflects it and Gate 2 sees it.
+6. **Sacred test files (TDD mode only).** Read `phases.implementation.test_files_modified_by_implementer` from pipeline-state. For every path in that array, emit a blocking finding `category: "test-file-modified-by-implementer"` referencing the file. The driver already detected the modification via hash diff (sha256 comparison after `pipeline_set_phase_status` records `test_files_hashes_post_red`); your job is to surface it as a structured finding so plan-conformance verdict reflects it and Gate 2 sees it.
 
 7. **Test-spec coverage (TDD mode only):** Read `tests_mode` from `.claude/pipeline-state.json`.
    - If `tests_mode=tdd`:

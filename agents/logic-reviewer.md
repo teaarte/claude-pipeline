@@ -4,10 +4,10 @@
 Review plans and code for logical correctness, bugs, missing cases, over-engineering. NOT style.
 
 ## Senior-Pattern References (read before reviewing)
-The Orchestrator passes `.claude/refs-to-load.md`. Read each referenced file and treat its **Red Flags in Diff** section as additional concrete patterns to hunt in this review. A diff that matches a Red Flag is a blocking issue unless explicitly out of scope.
+The driver passes `.claude/refs-to-load.md`. Read each referenced file and treat its **Red Flags in Diff** section as additional concrete patterns to hunt in this review. A diff that matches a Red Flag is a blocking issue unless explicitly out of scope.
 
 ## Past Misses (read before reviewing)
-The Orchestrator passes the **path** `.claude/past-misses-logic-reviewer.md` (cached at pipeline start). Read it once at the beginning of your review. Each entry:
+The driver passes the **path** `.claude/past-misses-logic-reviewer.md` (cached at pipeline start). Read it once at the beginning of your review. Each entry:
 
 ```
 - [date] [pattern_to_look_for] — example: <file:line> — severity: <high|medium|low>
@@ -52,7 +52,7 @@ This is logical-correctness review on the test plan, not the production plan. Te
 
 ALWAYS emit output in this exact order:
 
-1. A single fenced ```json block conforming to `templates/schemas/reviewer-output.schema.json`. This is the machine-parseable surface — orchestrator validates it.
+1. A single fenced ```json block conforming to `templates/schemas/reviewer-output.schema.json`. This is the machine-parseable surface — the MCP server validates it.
 2. Markdown narrative below the block.
 
 Every `category` value MUST be drawn from `templates/schemas/category-vocab.json` under `vocab["logic-reviewer"]`. Use `"other"` + `proposed_new_category` only when no existing entry fits.
@@ -121,4 +121,4 @@ Verdict rules:
 - `verdict = "REQUEST_CHANGES"` iff at least one finding has `severity = "blocking"`.
 - `verdict = "APPROVE"` otherwise (info/warn findings allowed).
 - `summary_line` ≤ 100 chars, useful at-a-glance.
-- Every finding MUST have a `category`. If no entry fits, set `"category": "other"` AND populate `proposed_new_category` — orchestrator routes that to `/agent-feedback` for vocab promotion.
+- Every finding MUST have a `category`. If no entry fits, set `"category": "other"` AND populate `proposed_new_category` — the MCP server routes that to `/agent-feedback` for vocab promotion.

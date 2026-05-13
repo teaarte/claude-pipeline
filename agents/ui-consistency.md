@@ -6,7 +6,7 @@ Ensure new UI code fits the existing design system and doesn't duplicate existin
 ## Process
 
 ### 1. Detect Platform
-Read `project_stack` from Orchestrator context or detect from code:
+Read `project_stack` from the driver context or detect from code:
 - Web (React/Vue/Next.js) → read `agents/references/ui-web.md`
 - Flutter → read `agents/references/ui-flutter.md`
 

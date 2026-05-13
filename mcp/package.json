@@ -12,8 +12,12 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "smoke": "CLAUDE_PIPELINE_METRICS_DIR=$(mktemp -d) node dist/smoke.js",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ci": "pnpm typecheck && pnpm test && pnpm build && pnpm smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
@@ -25,7 +29,10 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/proper-lockfile": "^4.1.4",
-    "typescript": "^5.7.0"
+    "@vitest/coverage-v8": "^2.1.8",
+    "fast-check": "^3.23.1",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=20"

@@ -170,12 +170,27 @@ export async function audit(call: AuditCall): Promise<void> {
   };
   if (call.error) entry.error = call.error;
 
-  await appendCapped(globalAuditFile(), redactForGlobal(entry), AUDIT_GLOBAL_CAP);
+  try {
+    await appendCapped(globalAuditFile(), redactForGlobal(entry), AUDIT_GLOBAL_CAP);
+  } catch (e) {
+    // Audit must never mask the real tool result. Surface IO errors on
+    // stderr so the gap is visible (Challenger #4); the MCP protocol
+    // owns stdout.
+    const msg = e instanceof Error ? e.message : String(e);
+    // eslint-disable-next-line no-console
+    console.error(`[audit] failed to write global stream: ${msg}`);
+  }
   if (projectDir) {
-    // Per-project audit retains the unredacted entry (it's /done-cleaned).
-    // Cap at AUDIT_PROJECT_CAP to bound growth across many tasks in one
-    // project (Performance I1).
-    await appendCapped(projectAuditFile(projectDir), entry, AUDIT_PROJECT_CAP);
+    try {
+      // Per-project audit retains the unredacted entry (it's /done-cleaned).
+      // Cap at AUDIT_PROJECT_CAP to bound growth across many tasks in one
+      // project (Performance I1).
+      await appendCapped(projectAuditFile(projectDir), entry, AUDIT_PROJECT_CAP);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.error(`[audit] failed to write project stream: ${msg}`);
+    }
   }
 }
 

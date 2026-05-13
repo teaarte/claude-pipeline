@@ -22,6 +22,13 @@ export function spawnAgent(
   };
 }
 
+/**
+ * Constructor for the parallel-spawn shuttle response. Reserved for v2.x —
+ * no built-in step emits this yet (Logic L9), but the wire protocol +
+ * continue-task `agents-results` branch are plumbed so a future step
+ * (e.g. plan-review fanning out logic + challenger in parallel) can use
+ * it without core changes. Don't strip; the cost is one constructor.
+ */
 export function spawnAgentsParallel(
   driver_state_id: string,
   spawns: { agent_run_id: string; agent: string; claude_code_task: ClaudeCodeTaskSpec }[],

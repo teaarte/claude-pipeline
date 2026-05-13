@@ -1,15 +1,13 @@
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
-
-const VALID_PHASES = ["context", "planning", "test_first", "implementation", "validation", "final"] as const;
+import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { makeAgentRunId } from "../lib/ids.js";
 
 export const beginAgentSchema = {
   project_dir: z.string(),
-  phase: z.enum(VALID_PHASES),
+  phase: z.enum(PHASES),
   agent: z.string().min(1),
   model: z.enum(["haiku", "sonnet", "opus"]).nullable().optional(),
 };
@@ -23,7 +21,7 @@ export type OpenSpawn = {
 
 export async function pipelineBeginAgent(input: {
   project_dir: string;
-  phase: (typeof VALID_PHASES)[number];
+  phase: Phase;
   agent: string;
   model?: "haiku" | "sonnet" | "opus" | null;
 }): Promise<{ agent_run_id: string; started_at: string }> {
@@ -48,7 +46,7 @@ export async function pipelineBeginAgent(input: {
       assertPrereqSatisfied(state, input.phase as Phase, "in_progress");
     }
     phase.open_spawns = Array.isArray(phase.open_spawns) ? phase.open_spawns : [];
-    const id = `ar-${randomUUID()}`;
+    const id = makeAgentRunId();
     const started_at = new Date().toISOString();
     phase.open_spawns.push({
       id,

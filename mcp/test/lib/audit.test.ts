@@ -93,7 +93,7 @@ describe("audit() — single write", () => {
     expect(last.force_used).toBe(false);
   });
 
-  it("writes to both per-project and global streams when projectDir is set", async () => {
+  it("writes to both per-project and global streams (global redacts project_dir)", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
@@ -104,13 +104,17 @@ describe("audit() — single write", () => {
         projectDir: proj.dir,
         verdict: "ok",
       });
+      // Per-project stream keeps full project_dir + task_id.
       const projRows = await readJsonl(projectAuditFile(proj.dir));
       expect(projRows).toHaveLength(1);
       expect(projRows[0].project_dir).toBe(proj.dir);
       expect(projRows[0].task_id).toBe("t-2026-05-13-test");
+      // Global stream redacts project_dir to a length-marker (Security sec007).
       const globalRows = await readJsonl(globalAuditFile());
       expect(globalRows.length).toBeGreaterThanOrEqual(1);
-      expect(globalRows[globalRows.length - 1].project_dir).toBe(proj.dir);
+      const last = globalRows[globalRows.length - 1];
+      expect(last.project_dir).toMatch(/^<project-dir \d+ chars>$/);
+      expect(last.task_id).toBe("t-2026-05-13-test"); // task_id stays
     } finally {
       await proj.cleanup();
     }
@@ -204,10 +208,14 @@ describe("audit() — global cap", () => {
   });
 
   it("FIFO-truncates global jsonl when > AUDIT_GLOBAL_CAP", async () => {
-    // Pre-seed the global file with AUDIT_GLOBAL_CAP entries.
+    // Pre-seed the global file with AUDIT_GLOBAL_CAP entries each padded out
+    // to ~300 bytes so the size-gate in appendCapped triggers the slow path
+    // (and thus the truncation branch). Real audit entries are ~300+ bytes;
+    // tiny synthetic entries would mask the rotation behavior.
     const lines: string[] = [];
+    const filler = "x".repeat(270);
     for (let i = 0; i < AUDIT_GLOBAL_CAP; i++) {
-      lines.push(JSON.stringify({ schema_version: "1.0", seq: i }));
+      lines.push(JSON.stringify({ schema_version: "1.0", seq: i, filler }));
     }
     await writeFile(globalAuditFile(), lines.join("\n") + "\n", "utf8");
     // Now write one more — total would be CAP+1; expect FIFO truncation back to CAP.

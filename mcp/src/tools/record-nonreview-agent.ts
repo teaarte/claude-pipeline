@@ -2,7 +2,8 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-import { assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
@@ -16,15 +17,13 @@ const NONREVIEW_AGENTS = [
   "migration",
 ] as const;
 
-const VALID_PHASES = ["context", "planning", "test_first", "implementation", "validation", "final"] as const;
-
 export const recordNonreviewSchema = {
   project_dir: z.string(),
-  phase: z.enum(VALID_PHASES),
+  phase: z.enum(PHASES),
   agent: z.enum(NONREVIEW_AGENTS),
   agent_run_id: z
     .string()
-    .regex(/^ar-[0-9a-f-]+$/)
+    .regex(AGENT_RUN_ID_PATTERN)
     .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   output_file: z.string().optional().describe("Relative path to the file the agent produced, e.g. '.claude/plan.md'"),
   iterations: z
@@ -35,7 +34,7 @@ export const recordNonreviewSchema = {
 
 export async function pipelineRecordNonreviewAgent(input: {
   project_dir: string;
-  phase: (typeof VALID_PHASES)[number];
+  phase: Phase;
   agent: (typeof NONREVIEW_AGENTS)[number];
   agent_run_id: string;
   output_file?: string;

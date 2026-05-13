@@ -149,17 +149,19 @@ export async function runInvariants(state: any, findingsFile: string): Promise<V
     }
   }
 
-  // INV_012: open_spawns[] must be empty in any completed phase.
+  // INV_012: open_spawns[] must be empty in any closed phase (completed
+  // OR skipped). A skipped phase with open spawns is the same leak shape
+  // (Logic L3) — historically only `completed` was checked.
   // Plus stale-spawn detection across in-progress phases.
   const staleTimeoutMs = await readStaleSpawnTimeout();
   const now = Date.now();
   for (const [name, p] of Object.entries<any>(phases)) {
     if (!p) continue;
     const open: any[] = Array.isArray(p.open_spawns) ? p.open_spawns : [];
-    if (p.status === "completed" && open.length > 0) {
+    if ((p.status === "completed" || p.status === "skipped") && open.length > 0) {
       violations.push({
         code: "INV_012",
-        message: `phase '${name}' is completed but has ${open.length} open spawn(s)`,
+        message: `phase '${name}' is ${p.status} but has ${open.length} open spawn(s)`,
         detail: open.map((s) => ({ id: s.id, agent: s.agent })),
       });
     }

@@ -2,12 +2,7 @@ import { z } from "zod";
 import { agentFeedbackJsonl } from "../lib/paths.js";
 import { appendJsonl } from "../lib/state-io.js";
 import { validate } from "../lib/schemas.js";
-import { makeFindingId } from "../lib/parse-json-header.js";
-
-function makeFeedbackId(date: Date = new Date()): string {
-  // re-use the finding id slug pattern, swap prefix
-  return makeFindingId(date).replace(/^f-/, "fb-");
-}
+import { makeFeedbackId } from "../lib/ids.js";
 
 export const logAgentFeedbackSchema = {
   agent: z.enum([

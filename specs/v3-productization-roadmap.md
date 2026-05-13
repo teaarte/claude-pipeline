@@ -47,6 +47,52 @@ These were flagged in the v2 code review and consciously deferred — fix when t
 2. **Perf I2 — `get-past-misses` reads whole `pipeline.jsonl`.** Fine at <5MB scale (~500KB per 1000 tasks). Convert to streaming tail-N when file grows. v2.5+ candidate.
 3. **Challenger #8 — audit reads pipeline-state on every call.** 5-15ms on hot cache. Threading `task_id` through 19 tool signatures was not justified at v2. Revisit when audit becomes a hot path (P3 team-scale era).
 
+### Code quality follow-ups from architecture review
+
+The v2 codebase passes all functional acceptance criteria (180 tests green, 94% line coverage, grep-gate clean) but a post-shipping architecture review surfaced refinement opportunities. None are blocking; each is a bounded improvement that raises the bar without rewriting anything. Group them as a **v2.1 code-polish round** before starting v2.5.
+
+| # | Issue | Effort | Where |
+|---|-------|--------|-------|
+| Q1 | **`: any` usage too high (33 occurrences).** Plugin registry maps, parsed JSON, and a few deserialization sites use `: any` where proper generics or `unknown` + narrowing would catch real bugs. Target: <10. | ~1 day | `grep -rn ": any\b" src` — audit each, replace with `unknown` / specific generic / proper type. |
+| Q2 | **Split monolithic `steps/index.ts` (364 lines, 23 steps).** Single file = future conflicts hotspot. Pattern is well-defined; one StepPlugin per file is the framework's own example for external plugins, so built-ins should follow it. | ~1 day | `mcp/src/driver/builtin/steps/{classify,plan,review,...}.ts` + barrel re-export from `index.ts`. |
+| Q3 | **Typed `DriverState.scratch`.** Currently `Record<string, unknown>` — convenient but loses type safety on `agent_output_<id>` / `__spawn_issued_<step>` conventions. Discriminated union for known scratch shapes catches "step assumes key X but writer used key Y" bugs at compile time. | ~1-2 days | New `DriverScratch` type in `driver/types/plugin.ts`; gradual refactor in each step. |
+| Q4 | **Lean into `satisfies` for typed const literals.** Only 1 file uses TS 4.9+ `satisfies` today. `as const satisfies StepPlugin` for built-in registrations + flow definitions would catch shape drift at compile time without runtime cost. | ~0.5 day | `mcp/src/driver/builtin/{flows,gates,decisions}/index.ts`, `loaders/builtins.ts`. |
+| Q5 | **CI threshold for test:source ratio.** Currently 76% (3535 test : 4654 source). Add a `pnpm metrics:ratio` check that fails if ratio drops below 60%. Prevents regression as the codebase grows. | ~0.5 day | `scripts/test-source-ratio.ts` + GitHub Actions step. |
+
+**Total effort: ~4-5 days. Bundle as a v2.1 code-polish PR before v2.5 kicks off.**
+
+The review also called out two architectural decisions that are documented-and-acceptable (not bugs):
+- `closePriorPhases` deliberately swallows `INV_002/010/011` errors during phase transitions, with rationale comment pointing to `pipeline_finish` as the real enforcement point. Keep as is.
+- Two state files (`pipeline-state.json` + `driver-state.json`) are necessary: canonical state (MCP-owned) vs FSM scratchpad (driver-owned). Keep as is.
+
+### Overall code quality assessment (architecture review, post-v2)
+
+| Dimension | Score | Notes |
+|-----------|-------|-------|
+| Plugin contracts | 9/10 | 7 interfaces, single-responsibility, JSDoc-rich, generic where appropriate |
+| Core FSM | 9/10 | 141 lines, transport-agnostic via `SpawnRecorder`, exhaustive switch with `satisfies never` |
+| Invariant enforcement | 9/10 | 12 INV codes with recovery paths; force=true with audit |
+| Type safety | 7/10 | 33 `any` is too many — see Q1 above |
+| Test discipline | 8/10 | 76% test:source ratio, property tests, security regressions, branch-coverage targeted |
+| Error handling | 8/10 | Structured shuttle errors; deliberate swallows documented |
+| Comments | 9/10 | "Why" comments everywhere, references to specific reviewer findings |
+| Modularity | 7/10 | Clean layering; `steps/index.ts` is the one hot file — see Q2 |
+| Security | 9/10 | Audit redaction, 20 guard-evasion fixtures, marker forgery prevention, path traversal blocked |
+| Performance | 8/10 | Stat-based fast paths, lock-safe append, FIFO truncation |
+| Extensibility | 9/10 | Plugin framework actually works; grep gate enforces; synthetic plugin smoke test proves |
+| Dependencies | 10/10 | 5 runtime deps (MCP SDK, ajv, ajv-formats, proper-lockfile, zod); all justified |
+| Coherence | 9/10 | Names + layout + semantics aligned |
+
+**Overall: 8.5 / 10.** Production-grade for an early-stage OSS framework. Above-average for OSS dev tools of this age; comparable to early Mastra / Inngest / Trigger.dev; not as polished as Vercel-era libraries (those have years of refactoring behind them).
+
+Particularly rare-for-the-stage qualities:
+- 12 explicit INV codes with documented recovery paths
+- Audit log with redaction in global stream
+- 20 guard-evasion regression fixtures
+- Property-based tests beside unit tests
+- Grep gate as an architectural invariant
+- Injectable `SpawnRecorder` for testability and future transports
+
 What's missing for **product**:
 
 - Discoverability — only known to the author

@@ -23,6 +23,7 @@ import { pipelineAbandon, abandonSchema } from "./tools/abandon.js";
 import { pipelineCancelSpawn, cancelSpawnSchema } from "./tools/cancel-spawn.js";
 import { pipelineRunTask, runTaskSchema } from "./driver/tools/run-task.js";
 import { pipelineContinueTask, continueTaskSchema } from "./driver/tools/continue-task.js";
+import { pipelineSetPatternConfidence, setPatternConfidenceSchema } from "./tools/set-pattern-confidence.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -81,6 +82,7 @@ async function main() {
   register(server, "pipeline_cancel_spawn", "Remove a stuck open_spawn from phases[phase].open_spawns[]. Use when an agent crashed mid-flight and will never call pipeline_record_agent_run. Required before pipeline_set_phase_status({status:'completed'}) if open_spawns[] is non-empty.", cancelSpawnSchema, pipelineCancelSpawn);
   register(server, "pipeline_run_task", "Driver entry point. Initialize a driver-state and run the FSM forward until the first pause. Returns one of: spawn-agent, spawn-agents-parallel, ask-user, complete, error. The shuttle (commands/task.md) routes the result back via pipeline_continue_task.", runTaskSchema, pipelineRunTask);
   register(server, "pipeline_continue_task", "Driver resume. Apply a shuttle response (agent-result, agents-results, user-answer, or recovery) to the persisted driver-state and run the FSM forward.", continueTaskSchema, pipelineContinueTask);
+  register(server, "pipeline_set_pattern_confidence", "Set manual_confidence on an agent-feedback.jsonl entry. 0.0 permanently demotes a past-miss pattern from get_past_misses ranking; 1.0 trusts fully. The only place a JSONL line is mutated.", setPatternConfidenceSchema, pipelineSetPatternConfidence);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

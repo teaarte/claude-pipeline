@@ -35,6 +35,163 @@ The roadmap below addresses these gaps in order of leverage.
 
 ---
 
+## Phase v2.5 — Daemon + Web UI + Multi-provider foundation
+
+**Prerequisite:** v2 shipped.
+**Goal:** turn the in-process MCP-tool driver into a **long-running daemon** with HTTP API + minimal Web UI for configuration. Add the first non-shuttle `SpawnProviderPlugin` (Anthropic SDK direct) so model selection becomes meaningful. Keep Claude Code as a first-class entry point.
+
+This phase is the bridge from "personal tool used in a Claude Code chat" to "self-hosted dev tool with multiple entry points and configurable LLM backends".
+
+### Target architecture after v2.5
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ENTRY POINTS (equally first-class)                          │
+│   Web UI (SvelteKit/Astro SPA, localhost:5173)              │
+│   Claude Code chat (/task via MCP, unchanged from v2)        │
+│   CLI (claude-pipeline submit/status/tail/queue)             │
+└─────────────────────────────────────────────────────────────┘
+                ↓ HTTP/SSE  ↓ MCP stdio  ↓ direct
+┌─────────────────────────────────────────────────────────────┐
+│ DAEMON (long-running Node, started via launchd/systemd/CLI)  │
+│   ├─ HTTP server (Fastify): /api/{config,tasks,agents,...}   │
+│   ├─ MCP server (stdio): unchanged from v2                   │
+│   ├─ Driver: v2 FSM + plugin framework, shared by all entry  │
+│   └─ Persistence: SQLite (config + history) + JSONL (audit) │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### v2.5.1 — Daemon lifecycle
+
+- `claude-pipeline daemon start|stop|status|restart` CLI commands.
+- PID file in `~/.claude-pipeline/daemon.pid`, log file in `~/.claude-pipeline/daemon.log`.
+- Optional: `launchd` plist for macOS / `systemd` unit for Linux to autostart.
+- Daemon process owns the singleton `PluginRegistry` + driver. All entry points connect to the same daemon.
+- Health endpoint `GET /healthz` returns daemon uptime + plugin counts.
+
+**Effort:** ~1 day.
+
+### v2.5.2 — SQLite migration for queryable state
+
+JSONL is great for audit (append-only stream) but bad for "list my last 50 tasks". Migrate:
+
+| Data | Stays as | Becomes |
+|------|----------|---------|
+| `~/.claude/metrics/pipeline.jsonl` | JSONL (append-only) | Mirrored to SQLite `tasks` table for queries |
+| `~/.claude/metrics/agent-feedback.jsonl` | JSONL | Mirrored to SQLite `past_misses` table |
+| `~/.claude/metrics/mcp-audit.jsonl` | JSONL | Stays JSONL only (high volume, append-only) |
+| Per-agent config | n/a | New: SQLite `agent_configs` table |
+| Pipeline config | n/a | New: SQLite `pipeline_config` table (single row) |
+| Plugin registry state | n/a | New: SQLite `plugins` table (enabled/disabled, version) |
+
+New `StateStorePlugin` contract (8th plugin type):
+
+```typescript
+export interface StateStorePlugin extends PluginMeta {
+  name: string;
+  loadConfig(): Promise<ClaudePipelineConfig>;
+  saveConfig(c: ClaudePipelineConfig): Promise<void>;
+  loadAgentConfig(agent: string): Promise<AgentConfig | null>;
+  saveAgentConfig(agent: string, c: AgentConfig): Promise<void>;
+  listTasks(filter): Promise<TaskSummary[]>;
+  getTask(taskId): Promise<TaskFull | null>;
+  // ...
+}
+```
+
+Built-in: `SqliteStateStorePlugin` using `better-sqlite3` or Drizzle.
+Driver consumes via `registry.state_store` — no direct DB knowledge.
+
+**Effort:** ~1-2 days.
+
+### v2.5.3 — HTTP API
+
+Fastify server inside the daemon, mounting:
+
+```
+GET    /api/config                  → current pipeline config
+PATCH  /api/config                  → update config
+GET    /api/agents                  → list all agents with their configs
+PATCH  /api/agents/:name            → update per-agent config (model, provider, model params)
+GET    /api/providers               → list registered SpawnProviders + status
+GET    /api/tasks                   → recent tasks (paginated)
+POST   /api/tasks                   → submit new task (queues it)
+GET    /api/tasks/:id               → single task with status, agents, findings
+GET    /api/tasks/:id/stream        → SSE stream of live updates
+DELETE /api/tasks/:id               → cancel a running task (via pipeline_abandon)
+GET    /api/findings                → search findings by category/agent/file
+GET    /api/audit                   → recent audit entries
+GET    /api/metrics                 → aggregate metrics for /metrics-report UI
+GET    /api/plugins                 → installed plugins + their manifests
+```
+
+OpenAPI spec auto-generated. All endpoints schema-validated via Zod (already a dependency).
+
+**Effort:** ~1-2 days.
+
+### v2.5.4 — Multi-provider SpawnProviders (first batch)
+
+Implement the second `SpawnProviderPlugin` so model selection becomes meaningful:
+
+1. **`AnthropicSdkSpawnProvider`** — uses `@anthropic-ai/sdk` directly. Requires `ANTHROPIC_API_KEY`. User specifies model per agent in config.
+2. **`ClaudeCodeSubprocessSpawnProvider`** (optional) — invokes `claude` CLI with `--output-format stream-json` per agent (ralphex pattern). For users who want autonomous-from-Claude-Code-subprocess without needing API key.
+
+Driver behavior:
+- Reads `agent_config.provider` from SQLite (e.g. `"shuttle" | "anthropic-sdk" | "claude-code-subprocess"`).
+- Looks up the matching `SpawnProviderPlugin` in registry.
+- Hands off the spawn request.
+
+**Effort:** ~2-3 days for SDK provider + ~1 day for subprocess provider.
+
+### v2.5.5 — Minimal Web UI
+
+**Stack:** SvelteKit or Astro (single-binary friendly, builds to static assets, served by daemon's HTTP). Tailwind via CDN for fast iteration.
+
+**Pages (4, plus a shell):**
+
+1. **Settings** — global pipeline config (default models per phase, complexity heuristic overrides, gate policy, notification preferences).
+2. **Agents** — list of registered agents. Per-agent: provider dropdown, model dropdown (populated from provider capabilities), token/cost limit, timeout, enabled/disabled toggle.
+3. **Tasks** — submit form + recent tasks list. Click task → detail view with timeline, agent spawns, findings, audit trail, SSE-live updates while running.
+4. **Plugins** — list installed plugins with manifest, version, capabilities. Mostly read-only initially; enable/disable in v2.5 era; plugin marketplace in P2.
+
+**Effort:** ~3-4 days.
+
+### v2.5.6 — Auto-mode gates + notifications
+
+By default after v2.5, gates auto-approve in the daemon (HTTP-submitted tasks run unattended). Interactive gates remain for Claude Code chat flow.
+
+New plugin types:
+- **`GatePolicyPlugin`** (variants: `auto-approve`, `escalate-on-blocker`, `interactive`).
+- **`NotificationPlugin`** (built-ins: `desktop-notify`, `webhook`, `email-via-smtp`, `log-only`).
+
+Per-task in submit form: choose gate policy + notification target.
+
+**Effort:** ~1-2 days.
+
+### v2.5 acceptance
+
+1. `claude-pipeline daemon start` runs the daemon; `status` shows uptime + plugin counts.
+2. `localhost:5173` (or chosen port) serves Web UI; Settings page reads and persists changes.
+3. Per-agent model override in Web UI takes effect on next task spawn (proven by audit log).
+4. Submitting a task via Web UI runs autonomously to completion; finding count + verdict appear in task detail view.
+5. Same task submitted via Claude Code `/task` still works through shuttle (one daemon, two entry points).
+6. SSE stream pushes live progress updates while a task runs.
+7. SQLite contains `tasks`, `agent_configs`, `pipeline_config`, `plugins` tables; queryable via raw SQL for debugging.
+8. At least one non-shuttle SpawnProvider works end-to-end (e.g., a task fully driven through `AnthropicSdkSpawnProvider`).
+9. Auto-approve gate plugin lets tasks run unattended; notification fires on completion.
+
+### v2.5 total effort
+
+**~7-10 focused days of agent work** (or 1.5-2 weeks in comfortable pace with reviews). Could be 2-3 Claude Code sessions due to scope.
+
+### Decision gates inside v2.5
+
+- After v2.5.1 (daemon): does the daemon model feel right? If not, can fall back to per-invocation Node process. Skip v2.5.2+ if user finds daemon too heavy.
+- After v2.5.4 (multi-provider): does provider switching actually help? If single provider (Claude Code) covers all needs, defer remaining providers indefinitely.
+- After v2.5.5 (Web UI MVP): is the UI actually used vs `/task` in chat? If chat covers 90% of use, treat Web UI as read-only history viewer and stop adding write features.
+
+---
+
 ## Phase P1 — Open source + npm distribution
 
 **Goal:** anyone with Claude Code can install in ≤5 minutes.

@@ -1,3 +1,17 @@
+---
+tags: [testing, nestjs, jest, backend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [backend, monorepo]
+summary: |
+  NestJS testing patterns — Jest defaults, controller validation, service
+  input/output mapping, auth guard behavior, error response shapes.
+when_to_load: |
+  Task writes or changes tests for a NestJS backend, OR review of test code
+  in a NestJS project. jest.config present.
+agent_hints: [test, acceptance, logic-reviewer]
+---
+
 # Testing: NestJS
 
 ## Framework Detection

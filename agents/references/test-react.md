@@ -1,3 +1,17 @@
+---
+tags: [testing, react, nextjs, vitest, jest, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  React / Next.js testing — Vitest / Jest detection, what to test
+  (components with logic, hooks, mutations), Testing Library patterns.
+when_to_load: |
+  Task writes or changes tests for a React/Next.js codebase, OR review of
+  test code in a React/Next.js project. Vitest/Jest config present.
+agent_hints: [test, acceptance, logic-reviewer]
+---
+
 # Testing: React / Next.js
 
 ## Framework Detection

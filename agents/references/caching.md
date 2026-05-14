@@ -1,3 +1,19 @@
+---
+tags: [caching, cdn, redis, http-cache, react-query, swr, invalidation, staleness]
+stack_signals: []
+summary: |
+  Caching design and invalidation discipline — every cache layer is a stale
+  copy. Patterns for HTTP cache, CDN, Redis, React Query / SWR, Next.js
+  Data/Route caches, and the invalidation contract that makes them safe.
+when_to_load: |
+  Task touches HTTP cache headers, CDN config, in-memory cache, Redis cache,
+  browser cache, query cache (React Query / SWR / RTK Query / Apollo),
+  Next.js Data/Route/Full-Route cache, server-side render cache, or
+  materialized views. Diff with cache TTLs, invalidation logic, revalidate,
+  cacheTag, cacheLife, staleTime, Cache-Control, ETag, or mutate() qualifies.
+agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+---
+
 # Caching — Senior Stance
 
 ## When this applies

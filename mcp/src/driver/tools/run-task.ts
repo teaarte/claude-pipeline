@@ -22,7 +22,7 @@ import { detectStack } from "../builtin/decisions/stack-detect.js";
 import { pipelineInit } from "../../tools/init.js";
 import { pipelineBeginAgent } from "../../tools/begin-agent.js";
 import { error as shuttleError } from "../core/shuttle.js";
-import { makeTaskId, TASK_ID_PATTERN } from "../../lib/ids.js";
+import { makeUniqueTaskId, TASK_ID_PATTERN } from "../../lib/ids.js";
 import type { DriverResponse } from "../types/shuttle.js";
 
 /**
@@ -92,7 +92,7 @@ export async function pipelineRunTask(input: {
 
     // Bootstrap pipeline-state if it doesn't exist. This makes /done's
     // pipeline_finish work after a real driver run.
-    const taskId = makeTaskId({ task: input.task, task_id: input.task_id });
+    const taskId = await makeUniqueTaskId({ task: input.task, task_id: input.task_id });
     const complexity = input.complexity_hint ?? "medium";
     const testsMode = input.tests_mode_hint ?? "regression-only";
     // Q17: detect the project's stack so reviewers, agents, and the

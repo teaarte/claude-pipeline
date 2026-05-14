@@ -1,3 +1,18 @@
+---
+tags: [testing, python, pytest, unittest, backend]
+stack_signals:
+  - language: [python]
+  - project_type: [backend, monorepo]
+summary: |
+  Python testing patterns — pytest vs unittest detection, API/service
+  testing, fixtures, mocking external calls.
+when_to_load: |
+  Task writes or changes tests for a Python codebase, OR review of test code
+  in a Python project. pytest.ini / pyproject.toml [tool.pytest] / conftest.py
+  present.
+agent_hints: [test, acceptance, logic-reviewer]
+---
+
 # Testing: Python
 
 ## Framework Detection

@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { z } from "zod";
+import { TASK_ID_PATTERN } from "../lib/ids.js";
 import { join } from "node:path";
 import { templatesDir } from "../lib/paths.js";
 import { stateFile, findingsFile, summaryFile, claudeDir } from "../lib/paths.js";
@@ -16,8 +17,8 @@ export const initSchema = {
   task: z.string().describe("One-line task description"),
   task_id: z
     .string()
-    .regex(/^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$/)
-    .describe("t-YYYY-MM-DD-slug (lowercase, 4+ char slug)"),
+    .regex(TASK_ID_PATTERN)
+    .describe("t-YYYY-MM-DD-slug (lowercase, 4+ char slug; optional -[a-f0-9]{4} collision suffix per Q42)"),
   complexity: z.enum(["simple", "medium", "complex"]),
   tests_mode: z.enum(["tdd", "regression-only"]),
   stack: z

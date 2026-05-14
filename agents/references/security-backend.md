@@ -1,3 +1,21 @@
+---
+tags: [security, auth, authentication, authorization, jwt, oauth, secrets, backend]
+stack_signals:
+  - project_type: [backend, monorepo]
+summary: |
+  Backend security stance — input is hostile until proven otherwise. Covers
+  authentication, authorization, sessions, JWTs, cookies, secrets handling,
+  input validation, file uploads, SQL/NoSQL with user input, CORS/CSRF.
+when_to_load: |
+  Task touches authentication, authorization, sessions, JWTs, cookies,
+  secrets/env vars, input validation, file uploads, SQL or NoSQL queries
+  with user input, server-side rendering of user content, CORS/CSRF
+  middleware, logging of user data, or password handling. Diff in auth/,
+  middleware/, routes/, controllers/, or new DB queries built from user input
+  also qualifies.
+agent_hints: [security-reviewer, logic-reviewer, challenger-reviewer]
+---
+
 # Backend Security — Senior Stance
 
 ## When this applies

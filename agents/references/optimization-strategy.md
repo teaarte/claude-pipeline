@@ -1,3 +1,18 @@
+---
+tags: [performance, optimization, profiling, latency, throughput, slo]
+stack_signals: []
+summary: |
+  Strategy-level performance discipline — measure before you optimize. Profile,
+  hypothesize, change one thing, measure again. Pairs with platform-specific
+  perf-*.md files.
+when_to_load: |
+  Task touches performance-sensitive code, "make it faster" is in scope, a
+  perf regression is suspected, or a feature has explicit latency/throughput
+  requirements. Preemptive load when CLAUDE.md or task mentions SLO, latency
+  budget, "scale to N users", or similar.
+agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+---
+
 # Optimization Strategy — Senior Stance
 
 ## When this applies

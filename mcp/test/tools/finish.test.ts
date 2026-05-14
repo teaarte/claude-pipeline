@@ -101,7 +101,7 @@ describe("pipeline_finish", () => {
     }
   });
 
-  it("Q22: impl_iters reads max iteration of a reviewer in implementation phase (uses Q20 phase field)", async () => {
+  it("Q43: impl_iters counts reviewer_verdicts entries in implementation phase", async () => {
     const proj = await tempProject();
     try {
       await pipelineInit(initArgs(proj.dir));
@@ -127,6 +127,80 @@ describe("pipeline_finish", () => {
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
       const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
       expect(fin.metrics_row.impl_iters).toBe(2);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q43: cross-phase same-agent — iter=1 in planning + iter=2 in implementation → impl_iters=1, plan_iters=1", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      // logic-reviewer iter=1 in planning (e.g., plan review).
+      await spawnReviewer(
+        proj.dir,
+        "planning",
+        "logic-reviewer",
+        reviewerOutput({ iteration: 1, verdict: "APPROVE", findings: [] }),
+      );
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      // Same logic-reviewer in implementation. Global iter=2 (Q20 semantics),
+      // but only 1 verdict for the implementation phase ⇒ impl_iters MUST be 1,
+      // not 2 (which the old max(iteration) derivation incorrectly produced).
+      await spawnReviewer(
+        proj.dir,
+        "implementation",
+        "logic-reviewer",
+        reviewerOutput({ iteration: 2, verdict: "APPROVE", findings: [] }),
+      );
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.impl_iters).toBe(1);
+      expect(fin.metrics_row.plan_iters).toBe(1);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q43: empty implementation phase reviews → impl_iters=0", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      // No reviewer verdicts in implementation (degenerate but possible during fixture work).
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.impl_iters).toBe(0);
     } finally {
       await proj.cleanup();
     }

@@ -1,3 +1,19 @@
+---
+tags: [ui, flutter, dart, material, cupertino, responsive, mobile]
+stack_signals:
+  - language: [dart]
+  - project_type: [mobile, frontend-app]
+summary: |
+  Flutter UI consistency — Material/Cupertino choice, Theme.of usage over
+  hardcoded values, MediaQuery / LayoutBuilder responsive layouts, SafeArea,
+  text scaling, overflow handling.
+when_to_load: |
+  Task touches Flutter UI widgets, styling, layout, or design-system
+  adherence on a mobile/Flutter stack. Diff in *.dart with widget trees,
+  theme usage, or layout containers.
+agent_hints: [ui-consistency, logic-reviewer, style-reviewer]
+---
+
 # UI Consistency: Flutter
 
 ## Material / Cupertino Consistency

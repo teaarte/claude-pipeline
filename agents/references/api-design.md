@@ -1,3 +1,20 @@
+---
+tags: [api, contract, rest, graphql, grpc, versioning, idempotency, pagination, backend]
+stack_signals:
+  - project_type: [backend, monorepo]
+summary: |
+  Public-contract design for HTTP/RPC/GraphQL endpoints — idempotency, pagination,
+  error envelopes, versioning. Treats the API signature as forever-ish and
+  prioritises contract shape over implementation detail.
+when_to_load: |
+  Task touches HTTP/RPC endpoints, GraphQL schema, gRPC proto, OpenAPI spec,
+  route handlers, or anything that's a public contract between services /
+  frontend and backend / between teams. Diff under routes/, controllers/,
+  *.proto, openapi.yaml, GraphQL *.graphql / resolvers, or new public-facing
+  functions also qualifies.
+agent_hints: [logic-reviewer, challenger-reviewer, security-reviewer, api-contract]
+---
+
 # API Design — Senior Stance
 
 ## When this applies

@@ -147,9 +147,24 @@ export interface GatePlugin extends PluginMeta {
 
 // ----- Decision -----------------------------------------------------------
 
+/**
+ * Q41: optional context threaded into DecisionPlugin.decide() so an LLM-driven
+ * decision can reach the SpawnProvider (for `query()` classification calls)
+ * and see the list of agents the current flow plans to fan out to.
+ *
+ * Existing decisions ignore `ctx` (parameter is optional) — only refs-to-load
+ * uses it today. Future decisions that want LLM judgement can opt in.
+ */
+export interface DecisionContext {
+  /** Agent plugin names the active flow plans to invoke. */
+  active_agents?: string[];
+  /** Registered spawn provider, if any — for `query()` classification. */
+  spawn_provider?: SpawnProviderPlugin | null;
+}
+
 export interface DecisionPlugin<T = unknown> extends PluginMeta {
   name: string;
-  decide(state: DriverState): T | Promise<T>;
+  decide(state: DriverState, ctx?: DecisionContext): T | Promise<T>;
 }
 
 // ----- Hook ---------------------------------------------------------------
@@ -198,9 +213,27 @@ export interface AgentSpawnRequest {
   template_path?: string;
 }
 
+/**
+ * Q41: lightweight one-shot classification request issued by DecisionPlugins
+ * (today: refs-to-load) to ask the LLM a single yes/no or short-list
+ * question without going through the full spawn shuttle. Output is the raw
+ * agent response string; the caller parses it.
+ *
+ * Optional on the SpawnProviderPlugin contract — shuttle-based providers
+ * that can't make synchronous out-of-band LLM calls leave it undefined;
+ * decisions then fall back to their regex-only behaviour.
+ */
+export interface SpawnProviderQueryRequest {
+  prompt: string;
+  model?: ModelName;
+  max_tokens?: number;
+  output_format?: "json-array" | "string";
+}
+
 export interface SpawnProviderPlugin extends PluginMeta {
   name: string;
   spawn(req: AgentSpawnRequest): Promise<StepResult>;
+  query?(req: SpawnProviderQueryRequest): Promise<string>;
 }
 
 // ----- Registry ------------------------------------------------------------

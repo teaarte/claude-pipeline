@@ -1,3 +1,18 @@
+---
+tags: [ui, design-system, accessibility, react, nextjs, vue, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  Web UI consistency — design tokens over magic numbers, shared component
+  library use, theme adherence, accessibility checks, responsive layout.
+when_to_load: |
+  Task touches user-visible UI components (React/Next/Vue), styling,
+  spacing/typography/theme, or accessibility. Reviewer fan-out includes
+  ui-consistency on a web frontend stack. Diff in *.tsx/jsx/vue/svelte/css/scss.
+agent_hints: [ui-consistency, logic-reviewer, style-reviewer]
+---
+
 # UI Consistency: Web (React / Next.js / Vue)
 
 ## Design System

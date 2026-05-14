@@ -117,6 +117,7 @@ async function spawnOne(
     driver_state_id: state.driver_state_id,
     phase,
     model,
+    template_path: agent.template_path,
     prompt: `Spawn agent: ${agentName}. Project: ${state.project_dir}. Task: ${state.task}.`,
   });
 }

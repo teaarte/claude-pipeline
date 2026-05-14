@@ -171,6 +171,14 @@ export interface AgentSpawnRequest {
    * that round-trips back into pipeline_continue_task.
    */
   driver_state_id: string;
+  /**
+   * The AgentPlugin's `template_path`. Spawn providers SHOULD read this and
+   * embed its content into whatever they pass to the underlying harness so
+   * the spawned agent sees its full role prompt. Optional because synthetic
+   * providers (smoke-orchestrator mock, future stub providers) can spawn
+   * without a template on disk.
+   */
+  template_path?: string;
 }
 
 export interface SpawnProviderPlugin extends PluginMeta {

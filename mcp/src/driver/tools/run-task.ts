@@ -18,6 +18,7 @@ import { loadBuiltinPlugins } from "../loaders/builtins.js";
 import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
 import { complexityDecision } from "../builtin/decisions/complexity.js";
 import { testsModeDecision } from "../builtin/decisions/tests-mode.js";
+import { detectStack } from "../builtin/decisions/stack-detect.js";
 import { pipelineInit } from "../../tools/init.js";
 import { pipelineBeginAgent } from "../../tools/begin-agent.js";
 import { error as shuttleError } from "../core/shuttle.js";
@@ -94,7 +95,10 @@ export async function pipelineRunTask(input: {
     const taskId = makeTaskId({ task: input.task, task_id: input.task_id });
     const complexity = input.complexity_hint ?? "medium";
     const testsMode = input.tests_mode_hint ?? "regression-only";
-    const stack = input.stack ?? { language: "unknown" };
+    // Q17: detect the project's stack so reviewers, agents, and the
+    // pipeline.jsonl metrics row all carry concrete language/commands
+    // instead of `{language: "unknown", ...nulls}`.
+    const stack = input.stack ?? (await detectStack(input.project_dir));
     try {
       await pipelineInit({
         project_dir: input.project_dir,

@@ -17,8 +17,13 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
       // spawns the planner.
       expect(res.status).toBe("spawn-agent");
       if (res.status === "spawn-agent") {
+        // The DriverResponse top-level `agent` field is the AgentPlugin name —
+        // the shuttle uses it to record which agent ran. The Task tool spec's
+        // subagent_type is independently pinned to "general-purpose" because
+        // that's the only catalog value Claude Code accepts (Q16 fix).
         expect(res.agent).toBe("planner");
-        expect(res.claude_code_task.subagent_type).toBe("planner");
+        expect(res.claude_code_task.subagent_type).toBe("general-purpose");
+        expect(res.claude_code_task.prompt).toContain("planner");
         expect(res.claude_code_task.model).toBe("opus");
       }
     } finally {

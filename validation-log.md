@@ -198,6 +198,30 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
 
+### 2026-05-14 — Bash-tool subprocess has no TTY (assumption invalidated)
+
+**Observed:** Attempted to ship `scripts/set-tab-title.sh` that emits OSC-0 escape (`\033]0;<title>\007`) to `/dev/tty`, intended to be called from `commands/task.md` / `commands/done.md` via Claude Code's Bash tool, to auto-rename the user's terminal tab to `<project> · <task_id>`. Smoke test in the planning Claude Code session itself returned:
+
+```
+scripts/set-tab-title.sh: line 44: /dev/tty: Device not configured
+```
+
+**Root cause:** Claude Code's Bash tool spawns subprocesses via `child_process.spawn()` with stdin/stdout/stderr piped to the parent process — **no pseudo-terminal allocation**. The subprocess therefore has no controlling terminal, so writes to `/dev/tty` fail. `[ -w /dev/tty ]` returns true (the device file exists with correct mode bits) but the actual `open()` fails because there's no TTY association.
+
+**Implication:** **Any script invoked via Bash tool that needs to write side-channel output to the user's terminal cannot do so.** This rules out:
+- Terminal tab title (OSC-0)
+- Terminal bell / alert (`\a`)
+- Cursor position / progress bars via ANSI
+- Any other terminal-escape-based UX
+
+Stderr and stdout reach the user only via Claude Code's chat rendering — they are captured and re-displayed, not passed through to the underlying terminal.
+
+**Filed as Q38** (🟢 LOW, deferred to v2.3 Web UI). Underlying user need (*"what's running where, on which task"*) better served by browser-tab + Web UI navigation rather than terminal-escape tricks. Workaround for current users: shell function in `.zshrc` that reads `.claude/pipeline-state.json` and emits OSC-0 from a real shell context (not via skill / not via Bash tool).
+
+**Pattern lesson:** Before designing a feature that depends on a side-channel from inside a Claude Code subprocess context (Bash tool, hook, MCP server), **smoke-test the channel availability first.** Don't infer from `[ -w /dev/path ]` style permission checks — those don't catch "device exists but no TTY association" errors. Run an actual write + check exit status.
+
+---
+
 ### 2026-05-14 — v2.2-clear-bundle resolution (10 of the 13 remaining v2.1 Q-items closed)
 
 Shipped as a single-session bundled fix on branch `v2.2-clear-bundle`. One commit per Q-item, all four gates (typecheck / test / smoke / smoke:orchestrator) green per commit.

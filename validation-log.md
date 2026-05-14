@@ -252,6 +252,19 @@ find ~ -name "category-vocab.json"
 ## t-2026-05-14-workingdirectoryuser — apps/curator → apps/core rename refactor (Phase 0.5 Steps 1-2)
 
 > **✓ Closed 2026-05-14.** `/done` ran successfully. Metrics row written to `~/.claude/metrics/pipeline.jsonl` (`verdict: accepted`, 8 agents, 5 reviewer_verdicts preserved). State files cleaned. Q12 + Q13 fixes verified holding. **New issues observed post-`/done`:** Q22 (metrics row has null `tests_mode` / `impl_iters=0` despite 1 revision) and Q23 (architectural — Plan B `pipeline_done_cleanup` MCP tool was deferred; Q14 audit regen recurred as expected). Q14 also recurred (267-byte `mcp-audit.jsonl` stub remains).
+>
+> **✓ RESOLVED 2026-05-14 by v2.1-polish-bundle (branch `v2.1-polish-bundle`, 9 commits):**
+> - Q19 fixed in commit `c114f21` (`fix(driver): Q19 — thread resolved model through SpawnRecorder to open_spawns`).
+> - Q20 fixed in commit `e7741d0` (`feat(state): Q20 — add phase field to reviewer_verdicts entries`).
+> - Q8 fixed in commit `359f566` (`fix(driver): Q8 — mirror gate decisions from scratch to pipeline-state.gates`).
+> - Q11 fixed in commit `c290fb8` (`feat(audit): Q11 — add error_class field for verdict=error categorization`).
+> - Q22 fixed in commit `a038293` (`fix(finish): Q22 — extract tests_mode + impl_iters + acceptance_first_pass correctly`).
+> - Q23 fixed in commit `dda67cd` (`feat(tools): Q23 — pipeline_done_cleanup MCP tool (closes Q14, supersedes Q12 Plan A)`). Q14 subsumed by Q23 (no more audit-regen stub); Q12 Plan A retired.
+> - Q17 fixed in commit `9b35bd3` (`feat(driver): Q17 — auto-detect project stack and persist to pipeline-state`).
+> - Q18 fixed in commit `226f994` (`feat(driver): Q18 — embed category vocab inline in agent spawn prompts`). No more file-system `find` hunting.
+> - Q21 fixed in commit `eb445e0` (`fix(agents): Q21 — output examples respect header schema constraints`).
+> - Bug-list 1-9 from this entry: Q8 ✓, Q9 deferred (needs auth/perf task profile), Q11 ✓, Q17 ✓, Q18 ✓, Q20 ✓, Q21 ✓, Q22 ✓, Q23 ✓.
+> - Tests: 209 → 265 (+56). Tool count: 20 → 21. `mcp-audit.jsonl` stub will not recur after Q23 lands.
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

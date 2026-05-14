@@ -198,6 +198,7 @@ Per-task entries live in `validation/closed-tasks/`. Each file is a self-contain
 
 | Date | task_id | Project / scope | Verdict | File |
 |---|---|---|---|---|
+| 2026-05-14 | `t-2026-05-14-31fb` | **wandr-be** — tech-debt cleanup sweep (first non-frontend, first non-English, first full-fan-out) | accepted | [closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md](validation/closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md) |
 | 2026-05-14 | `t-2026-05-14-addauthtokendecodert` | s3-panel — auth-token decoder in core bootstrap | accepted | [closed-tasks/2026-05-14-addauthtokendecodert.md](validation/closed-tasks/2026-05-14-addauthtokendecodert.md) |
 | 2026-05-14 | `t-2026-05-14-contextreadfirstinth` | s3-panel — Phase 0.5 Step 4 `_demo-contract` | accepted | [closed-tasks/2026-05-14-contextreadfirstinth-step4.md](validation/closed-tasks/2026-05-14-contextreadfirstinth-step4.md) |
 | 2026-05-14 | `t-2026-05-14-workingdirectoryuser` | s3-panel — Phase 0.5 Steps 1-2 rename `apps/curator` → `apps/core` | accepted | [closed-tasks/2026-05-14-workingdirectoryuser.md](validation/closed-tasks/2026-05-14-workingdirectoryuser.md) |

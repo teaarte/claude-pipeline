@@ -81,6 +81,7 @@ Grouped by role:
 | `INV_009` | `test_files_modified_by_implementer` non-empty → requires explicit human approval in `gate2_feedback`. |
 | `INV_010` | Phase status transitions follow a state machine: terminal states (`completed`, `skipped`) cannot reopen. Enforced inside `pipeline_set_phase_status`; `force=true` bypasses and records a `pipeline_violation`. |
 | `INV_011` | Phase prerequisite ordering: a phase cannot leave `pending` until its prereq is `completed` or `skipped` (`context → planning → test_first → implementation → validation`). Enforced inside `pipeline_set_phase_status`, `pipeline_record_agent_run`, and `pipeline_record_nonreview_agent`. `force=true` bypasses in `set_phase_status`; record calls have no bypass. |
+| `INV_012` | Phase cannot move to `completed` OR `skipped` while `open_spawns[]` is non-empty. Every `pipeline_begin_agent` must be paired with a `pipeline_record_*` (closes the spawn) or `pipeline_cancel_spawn` (removes the spawn). Stale spawns (> 30 min by default) are also flagged by `pipeline_validate` and refused by `pipeline_finish`. `force=true` bypasses in `set_phase_status` (records `pipeline_violation`). |
 
 ## Install
 

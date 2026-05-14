@@ -198,6 +198,34 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
 
+### 2026-05-14 — v2.2-clear-bundle resolution (10 of the 13 remaining v2.1 Q-items closed)
+
+Shipped as a single-session bundled fix on branch `v2.2-clear-bundle`. One commit per Q-item, all four gates (typecheck / test / smoke / smoke:orchestrator) green per commit.
+
+**Schema deprecations** (legacy v1 fields the v2 driver never maintained — `reviewer_verdicts[]` / `gates` / `driver-state.json` are the actual sources of truth):
+- **Q10** `pipeline-state.current_step` removed; Stop hook now reads `flow_name + step_index` from `driver-state.json` and emits `flow=… step=…` (or `unknown`) instead of the always-stale `"STEP 1"`.
+- **Q31** `phases.{planning,implementation}.iterations` removed; `record-nonreview-agent` no longer writes the field; `finish.ts` `impl_iters/plan_iters` derive purely from `reviewer_verdicts[].iteration`.
+- **Q32** `phases.validation.acceptance_first_pass` removed; `finish.ts` no longer falls back to it.
+- **Q34** `phases.planning.grounding_check` removed; summary template swapped to `grounding_mismatches` (still populated).
+
+**Population fixes** (filling in fields the schema documented but v2 never wrote):
+- **Q33** `state.files.{created,modified}` populated from `git diff --name-status HEAD` at implementation-close. New `mcp/src/lib/git-diff.ts` helper; degrades to empty + `error_class: "git-unavailable"` audit entry on non-repo dirs.
+- **Q37** `pipeline.jsonl` metrics row now carries `state.stack` (was always `null`).
+
+**Detector polish**:
+- **Q26** `stack-detect` parses CLAUDE.md `Validation Commands` first (priority over `package.json scripts`) with a broader regex covering bullet/bold/colon-inside-bold variants. `pnpm-workspace.yaml` / `lerna.json` / `nx.json` / `turbo.json` markers classify the root as `monorepo` (new 4th `project_type` enum value, propagated to 4 consumers); positive frontend/backend signal still wins over monorepo.
+
+**Prompt + vocab + docs**:
+- **Q28** all 13 reviewer/validator templates carry a 4th "Output constraints" bullet naming `findings[].schema_version` as required.
+- **Q29** `logic-reviewer` vocab adds `spec-deviation`, `scope-creep`, `coverage-gap`; new `category-vocab.json.md` change-notes companion; validation-log Step 5 grew a *Vocab evolution* sub-bullet.
+- **Q25** docs-only — `mcp/README.md` gains a *First-time project setup* section recommending `Write(.claude/**)` pre-approval in `settings.local.json`; `commands/task.md` points readers to it.
+
+**Test surface**: 274 → 295 (+21 net). New files: `test/lib/category-vocab.test.ts`, `test/lib/git-diff.test.ts`. Schema/deprecation regression assertions in `finish.test.ts`, `init.test.ts`, `record-nonreview-agent.test.ts`, `record-agent-run.test.ts`, `pipeline-stop.test.ts`.
+
+**Still open from the v2.1 backlog**: Q9 (review under-spawning), Q27 (pre-review infra), Q30 (refs-to-load) — deferred to v2.2a *review-completeness* bundle (needs a fresh auth/perf real-task run to confirm fan-out fires end-to-end). Q1-Q6 code-quality items remain in v2.2-code-polish.
+
+---
+
 ### 2026-05-14 — `task_id` slug derived from task-text preamble, not task essence
 
 **Observed:** Real-task run on s3-panel produced `task_id = "t-2026-05-14-workingdirectoryuser"`. The actual task was a rename refactor (`apps/curator` → `apps/core`), but the slug came from the boilerplate preamble that prefixes every `/task` invocation: *"Working directory: /Users/teaarte/Work/AI-FACTORY/s3-panel ## Context (read first, in this order) ..."*.

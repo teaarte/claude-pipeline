@@ -346,7 +346,24 @@ Audit error rate: **1/15 = 7%** (was 48% on first run → 27% → 7%). Strong im
 
 - This run is the **first end-to-end execution of v2.1-polish-bundle** code in production. 7/10 bundle fixes verified working: Q7, Q8, Q11, Q17 (partial — see Q26), Q20, Q22, Q24. The remaining 3 (Q18, Q19, Q23, Q21) work but weren't directly testable from this state.
 - The trend on audit-error rate (48% → 27% → 7%) is real signal — Q11 categorization + better prompt examples + cleaner state shape compound.
-- Two structural gaps remain (Q9 + Q27) that limit how much we can claim about "review quality". Until both close, the value-prop "multi-perspective adversarial review" is aspirational.
+- Two structural gaps remain (Q9 + Q27 + Q30) that limit how much we can claim about "review quality". Until all three close, the value-prop "multi-perspective adversarial review" is aspirational.
+
+### Additional findings from full state-file read (Q30-Q34)
+
+After the jq-driven query pass, a line-by-line read of `pipeline-state.json` surfaced **5 more issues** that aggregate-shape queries miss — a category of "v1-era legacy fields the v2 driver doesn't maintain":
+
+- **Q30** 🟡 MEDIUM — `state.refs_loaded: []` and `state.refs_dropped_due_to_cap: []`. `DecisionPlugin` `refs-to-load` (Global Rule #13) should inject reference files into agent prompts; never fires. Frontend TS project should at minimum get `perf-react.md` + `security-frontend.md`. Confirmed across both real-task runs on s3-panel — never any refs loaded. **Bundles with Q9 + Q27 into v2.2-review-completeness.**
+- **Q31** 🟡 MEDIUM — `phases.planning.iterations: 0` and `phases.implementation.iterations: 0` despite `reviewer_verdicts[].iteration: 1` for both phases. Field defined in schema, never written by v2 driver.
+- **Q32** 🟢 LOW — `phases.validation.acceptance_first_pass: false` despite acceptance iter1 PASS verdict. Q22 fix correctly derives `acceptance_first_pass: true` for metrics row by bypassing this stale source field. Cleanup: deprecate field OR populate it.
+- **Q33** 🟡 MEDIUM — `state.files.created: []`, `state.files.modified: []` despite git diff showing 2 modified files. v2 driver doesn't write these. `/learn` loses file-level signal; v2.7 cost-aware routing data starved.
+- **Q34** 🟢 LOW — `phases.planning.grounding_check: null` despite plan-grounding-check verdict = GROUNDED. Same shape as Q31/Q32.
+
+**Architectural pattern across Q31/Q32/Q34:** v1 markdown-orchestrator wrote rich per-phase summary fields; v2 TypeScript driver writes the underlying `reviewer_verdicts[]` array (correct) but skips the per-phase legacy summary fields. **Q35 umbrella ticket**: schema-hygiene audit — decide per field whether to deprecate (remove + bump major schema_version) or sync (write at verdict-record time). Q33 is similar but the field is high-value, so populate. Q31/Q32/Q34 are cosmetic — deprecate.
+
+**Sibling observations (not filed as Q-items):**
+- `logic_vs_challenger_disagreement: false` is vacuously-false because challenger never spawns (Q9). Could be `null` / `"n/a"` until challenger fires. Tied to Q9 — defer.
+- `state.task` stores 2600+ chars of raw input including `## Context (read first, in this order)` preamble + leading whitespace + `\n` escapes. Source of slug semantics issue (cross-cutting observation already filed). Not a bug per se but explains why slug = "contextreadfirstinth".
+- `checkpoint_results: []` — TDD-only field, correct empty in `regression-only` mode. Not a bug.
 
 ---
 

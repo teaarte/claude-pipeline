@@ -62,6 +62,30 @@ The v2 codebase passes all functional acceptance criteria (180 tests green, 94% 
 
 **Total effort: ~5-6 days. Bundle as a v2.1 code-polish PR before v2.5 kicks off.**
 
+### Validation-driven v2.1 backlog (real-task findings)
+
+These are bugs surfaced by **actual** real-project use of v2, not by code review or smoke tests. Source-of-truth: `validation-log.md` at repo root. Each Q-item below references the validation-log entry it came from.
+
+| # | Severity | Issue | Effort | Where | First seen |
+|---|----------|-------|--------|-------|------------|
+| Q7 | 🔴 HIGH | **`pipeline_init` slug sanitizer broken.** Generated `task_id` like `t-2026-05-13-gateway-ui-gateway-orval-tanstaack-query` — hyphens in slug violate `^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$` schema pattern. Also preserves typos from user input. Blocks `pipeline_finish` (INV_SCHEMA_STATE). Fix: slugifier must lowercase + strip all non-alphanumeric + truncate to reasonable length. | ~30min | `mcp/src/tools/init.ts` — slug generation. Add unit test for malformed task descriptions (hyphens, typos, unicode, long strings, empty). | t-2026-05-13-gateway... |
+| Q8 | 🟡 MEDIUM | **Gate decisions stored in driver scratch but not mirrored to `pipeline_set_gate`.** `driver-state.scratch` has `gate-0_decision` and `gate-1_decision` after user answers, but `pipeline-state.gates` stays `"pending"`. Metrics row computed by `pipeline_finish` loses `gate1_revisions` count; INV_005/INV_006 can't fire. Fix: gate steps in `builtin/steps/index.ts` must call `pipelineSetGate({gate, decision, feedback})` immediately after capturing user-answer. | ~1h | `mcp/src/driver/builtin/steps/index.ts` — gate step impl + add audit-log entries proving the mirror happens. | t-2026-05-13-gateway... |
+| Q9 | 🟡 MEDIUM | **Code review under-spawned.** MEDIUM flow per spec spawns 5 parallel reviewers (logic + challenger + style + security + performance) at `review` step. Real run produced only logic-reviewer in implementation phase (1/5). Root cause unclear — three hypotheses: (a) `applies_to` predicates too aggressive (`security_needed` returned false for non-auth diff — plausible), (b) review step calls `spawnOne` instead of `spawnAgentsParallel`, (c) Gate 1 plan revision reset `decisions` causing `applies_to` re-evaluation on stale state. Audit: inspect `review` step + dump `applies_to` decisions to audit log so it's visible. | ~2-3h | `mcp/src/driver/builtin/steps/index.ts` `review` step + add per-spawn rationale log line `{agent, applies_to_result, reason}`. | t-2026-05-13-gateway... |
+| Q10 | 🟢 LOW | **`pipeline-state.current_step` stays stale.** Shows `"STEP 1"` while phases progress to `completed`/`in_progress`. v1 field that v2 driver doesn't update. Either: (a) v2 driver mirrors `driver-state.step_index` + flow_name into a derived `current_step` string, or (b) remove field from `pipeline-state.schema.json` as obsolete. Recommend (b) for clean break — `driver-state.json` is the live source of truth. | ~30min | `templates/schemas/pipeline-state.schema.json` + `templates/pipeline-state.json` + any tool that reads `current_step`. | t-2026-05-13-gateway... |
+| Q11 | 🟢 LOW | **High `pipeline_continue_task` error rate (10/21 = 48% in first run).** Mix of expected swallowed retries (`closePriorPhases` swallowing INV_002/010/011, JSON parser repairs) and possibly real signal. Need categorization: each `verdict: "error"` audit entry should carry an `error_class` field (e.g., `"swallowed-inv"`, `"retry-recovered"`, `"genuine-failure"`) so post-hoc analysis can distinguish noise from problems. Currently every error looks the same in audit. | ~1h | `mcp/src/lib/audit.ts` add `error_class` field + emit from call sites; classify the ~5 known patterns. | t-2026-05-13-gateway... |
+
+**Validation-driven total effort: ~6-8h. Bundle with Q1-Q6 polish round → revised total v2.1 estimate: ~6-7 days.**
+
+### How to add new validation-driven Q-items
+
+When real-task validation surfaces a new bug class:
+
+1. Add entry to `validation-log.md` describing the bug with task_id reference + objective signals from logs.
+2. Add a new Q-row to the table above with severity, effort estimate, file location, and link to the validation-log entry that surfaced it.
+3. Don't fix immediately. Wait for the v2.1 bundled PR — fixing as you go fragments the polish round into N small commits and you lose the opportunity to spot patterns across bugs.
+
+**Exception:** if a bug **blocks further validation** (e.g., `/done` can't run, `/task` won't start), fix it as v2.1 hotfix on its own and continue.
+
 The review also called out two architectural decisions that are documented-and-acceptable (not bugs):
 - `closePriorPhases` deliberately swallows `INV_002/010/011` errors during phase transitions, with rationale comment pointing to `pipeline_finish` as the real enforcement point. Keep as is.
 - Two state files (`pipeline-state.json` + `driver-state.json`) are necessary: canonical state (MCP-owned) vs FSM scratchpad (driver-owned). Keep as is.

@@ -13,16 +13,13 @@
     "project_type": null
   },
   "started_at": "<ISO 8601>",
-  "current_step": "STEP 1",
   "refs_loaded": [],
   "refs_dropped_due_to_cap": [],
   "phases": {
     "context": { "status": "pending", "agents": [], "open_spawns": [] },
     "planning": {
       "status": "pending",
-      "iterations": 0,
       "gate1_revisions": 0,
-      "grounding_check": null,
       "grounding_mismatches": 0,
       "agents": [],
       "open_spawns": []
@@ -39,7 +36,6 @@
     },
     "implementation": {
       "status": "pending",
-      "iterations": 0,
       "antipattern_candidates_count": 0,
       "caller_context_sites_count": 0,
       "logic_vs_challenger_disagreement": false,
@@ -50,7 +46,7 @@
       "agents": [],
       "open_spawns": []
     },
-    "validation": { "status": "pending", "acceptance_first_pass": false, "agents": [], "open_spawns": [] },
+    "validation": { "status": "pending", "agents": [], "open_spawns": [] },
     "final": { "status": "pending", "agents": [], "open_spawns": [] }
   },
   "reviewer_verdicts": [],

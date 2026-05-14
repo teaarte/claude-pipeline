@@ -27,7 +27,7 @@ export const initSchema = {
       test_command: z.string().nullable().optional(),
       lint_command: z.string().nullable().optional(),
       build_command: z.string().nullable().optional(),
-      project_type: z.enum(["frontend-app", "backend", "library"]).nullable().optional(),
+      project_type: z.enum(["frontend-app", "backend", "library", "monorepo"]).nullable().optional(),
     })
     .describe("Stack info — passes verbatim into pipeline-state.json"),
 };
@@ -63,7 +63,6 @@ export async function pipelineInit(input: {
       tests_mode: input.tests_mode,
       stack: { ...tpl.stack, ...input.stack },
       started_at: now,
-      current_step: "STEP 1",
     };
     await ensureEmptyJsonl(fjsonl);
     await writeText(summary, await buildSummary(state));

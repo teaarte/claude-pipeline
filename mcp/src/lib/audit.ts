@@ -20,6 +20,7 @@ export type ErrorClass =
   | "retry-recovered"      // JSON-header lenient parse repaired the payload
   | "schema-validation"    // reviewer-output / validator-output / finding schema fail
   | "vocab-rejected"       // category not in vocab for agent
+  | "git-unavailable"      // Q33: git CLI absent or project_dir isn't a repo
   | "genuine-failure";     // anything we don't recognise — investigate
 
 export type AuditEntry = {

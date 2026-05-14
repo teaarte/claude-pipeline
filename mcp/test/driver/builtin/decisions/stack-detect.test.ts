@@ -132,6 +132,101 @@ describe("Q17 — detectStack", () => {
     }
   });
 
+  it("Q26: CLAUDE.md accepts simpler patterns (no backticks, optional bullet)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "jest", build: "webpack" } }),
+        "utf8",
+      );
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "## Validation Commands",
+          "",
+          "Lint: pnpm -r lint",
+          "**Test**: pnpm -r test",
+          "- Build: pnpm -r build",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.lint_command).toBe("pnpm -r lint");
+      expect(stack.test_command).toBe("pnpm -r test");
+      expect(stack.build_command).toBe("pnpm -r build");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q26: pnpm-workspace.yaml at the root classifies as monorepo (no next/nest signal)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "root", devDependencies: { typescript: "^5" } }),
+        "utf8",
+      );
+      await writeFile(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n", "utf8");
+      await writeFile(join(dir, "tsconfig.json"), "{}", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.project_type).toBe("monorepo");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q26: turbo.json without frontend/backend deps → monorepo", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "root" }), "utf8");
+      await writeFile(join(dir, "turbo.json"), JSON.stringify({ pipeline: {} }), "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.project_type).toBe("monorepo");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q26: next.js inside a monorepo root still wins as frontend-app (positive type beats monorepo)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "root",
+          devDependencies: { typescript: "^5", next: "^14" },
+        }),
+        "utf8",
+      );
+      await writeFile(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n", "utf8");
+      await writeFile(join(dir, "tsconfig.json"), "{}", "utf8");
+      await writeFile(join(dir, "next.config.js"), "module.exports = {};", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.project_type).toBe("frontend-app");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q26: empty CLAUDE.md doesn't crash; falls through to package.json", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "vitest" } }),
+        "utf8",
+      );
+      await writeFile(join(dir, "CLAUDE.md"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("npm run test");
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("synthesised s3-panel-like frontend fixture: pnpm + TS + next → expected stack shape", async () => {
     const { dir, cleanup } = await tempDir();
     try {

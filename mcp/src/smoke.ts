@@ -36,7 +36,7 @@ async function expectThrow(fn: () => Promise<any>, contains: string, label: stri
   }
 }
 
-async function spawnNonreview(project: string, phase: any, agent: any, extras: { output_file?: string; iterations?: number } = {}) {
+async function spawnNonreview(project: string, phase: any, agent: any, extras: { output_file?: string } = {}) {
   const { agent_run_id } = await pipelineBeginAgent({ project_dir: project, phase, agent });
   return pipelineRecordNonreviewAgent({ project_dir: project, phase, agent, agent_run_id, ...extras });
 }
@@ -98,7 +98,7 @@ async function main() {
     );
 
     section("begin + record planner");
-    await spawnNonreview(project, "planning", "planner", { output_file: ".claude/plan.md", iterations: 1 });
+    await spawnNonreview(project, "planning", "planner", { output_file: ".claude/plan.md" });
     ok("recorded planner");
 
     section("INV_012: cannot complete planning with an open spawn");

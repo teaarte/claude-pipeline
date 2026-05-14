@@ -101,6 +101,36 @@ claude mcp list
 # claude-pipeline: node .../mcp/dist/server.js - ✓ Connected
 ```
 
+## First-time project setup
+
+The pipeline writes ~10 working artifacts into `<project>/.claude/` per
+`/task` run — context-doc, plan, analyzer-claims, refs-to-load, past-misses
+files, etc. By design, these are *not* in the guard hook's protected
+basename list (`pipeline-state.json`, `findings.jsonl`, `mcp-audit.jsonl`,
+…). They're working files the orchestrator can rewrite freely.
+
+Claude Code's per-session permission system still asks you to confirm each
+unprotected Write the first time it sees it, so a fresh `/task` produces
+~10 permission prompts in the first few minutes. To skip them, pre-approve
+the `Write(.claude/**)` glob in `<project>/.claude/settings.local.json`:
+
+```json
+{
+  "permissions": {
+    "allow": ["Write(.claude/**)"]
+  }
+}
+```
+
+This pre-approves Writes only **under** `.claude/`. The guard hook still
+blocks direct writes to the state-critical files inside that directory
+(see *Hooks* below) — the pre-approval only suppresses the per-Write
+permission prompt, it doesn't relax the protection invariants.
+
+> **Not automated yet (Q25):** the pipeline could merge this rule into
+> `settings.local.json` from `pipeline_init`, but that interacts with
+> larger onboarding work scheduled for v2.5. For now it's a one-line edit.
+
 ## Hooks (mechanical guardrails on top of the MCP)
 
 ### `~/.claude/hooks/pipeline-guard.sh` — PreToolUse

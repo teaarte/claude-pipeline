@@ -200,6 +200,33 @@ describe("pipeline_record_agent_run", () => {
     }
   });
 
+  it("Q34: plan-grounding-check verdict still flows into reviewer_verdicts[]; deprecated planning.grounding_check is gone", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      // plan-grounding-check runs against the plan inside the planning phase.
+      await spawnReviewer(
+        proj.dir,
+        "planning",
+        "plan-grounding-check",
+        validatorOutput({ agent: "plan-grounding-check", verdict: "GROUNDED" }),
+      );
+      const { pipelineStateGet } = await import("../../src/tools/state-get.js");
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      const verdict = (state.reviewer_verdicts as Array<{ agent: string; verdict: string; phase: string }>)
+        .find((v) => v.agent === "plan-grounding-check");
+      expect(verdict).toBeDefined();
+      expect(verdict!.verdict).toBe("GROUNDED");
+      expect(verdict!.phase).toBe("planning");
+      // Deprecated field must not have been resurrected anywhere on planning.
+      expect(state.phases.planning).not.toHaveProperty("grounding_check");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("rejects when agent_run_id does not match the output's agent (INV_012)", async () => {
     const proj = await tempProject();
     try {

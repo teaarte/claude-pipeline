@@ -29,7 +29,6 @@ verdict=$(jq -r '.verdict // empty' "$state" 2>/dev/null)
 agents=$(jq -r '.agents_count // 0' "$state" 2>/dev/null)
 complexity=$(jq -r '.complexity // empty' "$state" 2>/dev/null)
 violation=$(jq -r '.pipeline_violation // empty' "$state" 2>/dev/null)
-current_step=$(jq -r '.current_step // empty' "$state" 2>/dev/null)
 
 # Q36: Gate 2 decision tri-state. After user accepts at Gate 2,
 # pipeline_continue_task mirrors gates.gate2="approved" but verdict
@@ -45,8 +44,23 @@ gate2_status=$(jq -r '.gates.gate2 // empty' "$state" 2>/dev/null)
 # every time the pipeline asks a gate question.
 driver_state="$cwd/.claude/driver-state.json"
 pending_user_answer=""
+flow_name=""
+step_index=""
 if [ -f "$driver_state" ]; then
   pending_user_answer=$(jq -r '.pending_user_answer // empty' "$driver_state" 2>/dev/null)
+  # Q10: pipeline-state.current_step was a v1 leftover that v2 never
+  # maintained (always stayed at "STEP 1"). driver-state.{flow_name,
+  # step_index} is the source of truth for FSM progress.
+  flow_name=$(jq -r '.flow_name // empty' "$driver_state" 2>/dev/null)
+  step_index=$(jq -r '.step_index // empty' "$driver_state" 2>/dev/null)
+fi
+
+# Diagnostic step label for messages. Falls back to "unknown" when
+# driver-state is absent or fields missing.
+if [ -n "$flow_name" ] && [ -n "$step_index" ]; then
+  step_label="flow=${flow_name} step=${step_index}"
+else
+  step_label="unknown"
 fi
 
 # Case 1: task closed with zero agents on a non-trivial complexity → real violation.
@@ -62,7 +76,7 @@ fi
 # legitimately paused at a gate, not stuck. Stop hook stays silent.
 if [ -z "$verdict" ] && [ -z "$pending_user_answer" ]; then
   if [ "$stop_hook_active" = "true" ] || [ "${PIPELINE_ALLOW_RAW:-0}" = "1" ]; then
-    echo "[claude-pipeline] pipeline still in flight at step: $current_step — exit anyway (stop_hook_active or PIPELINE_ALLOW_RAW=1)." >&2
+    echo "[claude-pipeline] pipeline still in flight at step: $step_label — exit anyway (stop_hook_active or PIPELINE_ALLOW_RAW=1)." >&2
   elif [ "$gate2_status" = "approved" ] || [ "$gate2_status" = "accepted" ]; then
     # Q36: tri-state #3 — Gate 2 accepted, only awaiting /done finalization.
     # Block (to prevent data loss) but with positive framing: the task
@@ -73,9 +87,9 @@ if [ -z "$verdict" ] && [ -z "$pending_user_answer" ]; then
     }'
     exit 0
   else
-    jq -n --arg step "$current_step" '{
+    jq -n --arg step "$step_label" '{
       "decision": "block",
-      "reason": ("Pipeline is in flight at step \"" + $step + "\" with verdict=null. Run /done to finalize the task — this calls mcp__claude-pipeline__pipeline_finish, appends metrics, and cleans .claude/ working files. If you genuinely want to abandon the task, call mcp__claude-pipeline__pipeline_finish with verdict=\"rejected\" and then re-stop.")
+      "reason": ("Pipeline is in flight (" + $step + ") with verdict=null. Run /done to finalize the task — this calls mcp__claude-pipeline__pipeline_finish, appends metrics, and cleans .claude/ working files. If you genuinely want to abandon the task, call mcp__claude-pipeline__pipeline_finish with verdict=\"rejected\" and then re-stop.")
     }'
     exit 0
   fi

@@ -64,10 +64,10 @@ export async function pipelineFinish(input: {
     );
     const phases = state.phases ?? {};
 
-    // Q22: compute iter counts from reviewer_verdicts when phase is known
-    // (Q20 enables this — pre-Q20 verdicts without `phase` fall back to the
-    // older phases.<x>.iterations counter). impl_iters = max iteration of a
-    // reviewer in implementation; plan_iters = same for planning.
+    // Q22/Q31: impl_iters / plan_iters come from reviewer_verdicts[].iteration
+    // filtered by Q20 `phase`. The legacy phases.<x>.iterations counter was
+    // deprecated in v2.2-clear-bundle (Q31). Pre-Q20 state without `phase`
+    // ⇒ 0 (those rows predate the metric entirely).
     const maxIterInPhase = (phase: string): number => {
       let max = 0;
       for (const v of verdicts) {
@@ -77,16 +77,17 @@ export async function pipelineFinish(input: {
       }
       return max;
     };
-    const implIters = maxIterInPhase("implementation") || phases.implementation?.iterations || 0;
-    const planIters = maxIterInPhase("planning") || phases.planning?.iterations || 0;
+    const implIters = maxIterInPhase("implementation");
+    const planIters = maxIterInPhase("planning");
     // acceptance_first_pass = iteration-1 acceptance verdict has verdict=PASS.
-    // Fall back to phases.validation.acceptance_first_pass for legacy state.
+    // Q32: the legacy phases.validation.acceptance_first_pass field was
+    // deprecated in v2.2-clear-bundle; reviewer_verdicts[] is the only source
+    // of truth. Absent iter-1 acceptance verdict ⇒ false (the task never
+    // passed acceptance on the first try).
     const acceptanceFirst = verdicts.find(
       (v) => v.agent === "acceptance" && (v.phase === undefined || v.phase === "validation") && v.iteration === 1,
     );
-    const acceptanceFirstPass = acceptanceFirst
-      ? acceptanceFirst.verdict === "PASS"
-      : (phases.validation?.acceptance_first_pass ?? false);
+    const acceptanceFirstPass = acceptanceFirst ? acceptanceFirst.verdict === "PASS" : false;
 
     const row = {
       schema_version: "1.0",
@@ -96,6 +97,7 @@ export async function pipelineFinish(input: {
       task_short: input.task_short ?? short,
       complexity: state.complexity,
       tests_mode: state.tests_mode ?? null,
+      stack: state.stack ?? null,
       plan_iters: planIters,
       gate1_revisions: phases.planning?.gate1_revisions ?? 0,
       impl_iters: implIters,

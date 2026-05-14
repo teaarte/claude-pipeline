@@ -58,7 +58,7 @@ export const runTaskSchema = {
       test_command: z.string().nullable().optional(),
       lint_command: z.string().nullable().optional(),
       build_command: z.string().nullable().optional(),
-      project_type: z.enum(["frontend-app", "backend", "library"]).nullable().optional(),
+      project_type: z.enum(["frontend-app", "backend", "library", "monorepo"]).nullable().optional(),
     })
     .optional()
     .describe("Optional stack info. If omitted, a minimal placeholder is used."),

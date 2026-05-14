@@ -69,7 +69,7 @@ export async function spawnNonreview(
   projectDir: string,
   phase: "context" | "planning" | "test_first" | "implementation" | "validation" | "final",
   agent: "planner" | "implementer" | "architect" | "code-analyzer" | "dependency-auditor" | "research" | "migration",
-  extras: { output_file?: string; iterations?: number } = {},
+  extras: { output_file?: string } = {},
 ): Promise<any> {
   const { pipelineBeginAgent } = await import("../../src/tools/begin-agent.js");
   const { pipelineRecordNonreviewAgent } = await import("../../src/tools/record-nonreview-agent.js");

@@ -21,7 +21,7 @@ export type DetectedStack = {
   test_command: string | null;
   lint_command: string | null;
   build_command: string | null;
-  project_type: "frontend-app" | "backend" | "library" | null;
+  project_type: "frontend-app" | "backend" | "library" | "monorepo" | null;
 };
 
 const EMPTY: DetectedStack = {
@@ -46,28 +46,59 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
- * Parse the "## Validation Commands" (or similar) section in CLAUDE.md.
- * Looks for `**Lint:** \`cmd\``, `**Test:** \`cmd\``, `**Build:** \`cmd\``
- * patterns. Case-insensitive. Returns null when CLAUDE.md is absent or has
- * no recognised commands.
+ * Q26: parse "Validation Commands" labels from CLAUDE.md. Accepts every
+ * combination of bullet / bold / backticks / quote-wrap we've seen in real
+ * project docs:
+ *
+ *   - **Lint:** `pnpm lint`
+ *   - **Lint**: pnpm lint
+ *   Lint: pnpm -r test
+ *   * Test: "pnpm vitest"
+ *
+ * Case-insensitive. Returns null when no label matched (caller falls
+ * through to package.json / language defaults).
  */
 function parseClaudeMd(content: string): Partial<DetectedStack> | null {
-  // Look anywhere in the doc — the section heading is conventional but not
-  // mandatory. We look for the three lines we care about.
-  const grab = (label: string): string | null => {
-    const re = new RegExp(`\\*\\*${label}\\s*:?\\*\\*\\s*[\`\"]([^\`\"]+)[\`\"]`, "i");
-    const m = content.match(re);
-    return m ? m[1].trim() : null;
-  };
-  const lint = grab("Lint");
-  const test = grab("Test");
-  const build = grab("Build");
-  if (!lint && !test && !build) return null;
-  return {
-    lint_command: lint,
-    test_command: test,
-    build_command: build,
-  };
+  const out: Partial<DetectedStack> = {};
+  const labels: Array<[string, "test_command" | "lint_command" | "build_command"]> = [
+    ["Test", "test_command"],
+    ["Lint", "lint_command"],
+    ["Build", "build_command"],
+  ];
+  for (const raw of content.split("\n")) {
+    let line = raw.trim();
+    if (!line) continue;
+    // Normalise the line so every accepted form collapses to `Label: value`:
+    //   strip leading list marker
+    //   strip bold markers (so colon position inside vs outside ** doesn't matter)
+    line = line.replace(/^[-*]\s+/, "").replace(/\*\*/g, "").trim();
+    for (const [label, key] of labels) {
+      if (out[key]) continue;
+      const m = line.match(new RegExp(`^${label}\\s*:\\s*(.+?)\\s*$`, "i"));
+      if (m && m[1]) {
+        // Strip one surrounding pair of backticks or quotes if present.
+        const value = m[1].trim().replace(/^[`"'](.*)[`"']$/, "$1").trim();
+        if (value) out[key] = value;
+        break;
+      }
+    }
+  }
+  if (!out.test_command && !out.lint_command && !out.build_command) return null;
+  return out;
+}
+
+/**
+ * Q26: pnpm-workspace.yaml / lerna.json / nx.json / turbo.json at the root
+ * mark this as a monorepo. Lifts the classification out of the
+ * "library" default that the v2.1 Q17 detector emitted for every pnpm /
+ * turbo root.
+ */
+async function isMonorepoRoot(projectDir: string): Promise<boolean> {
+  const markers = ["pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json"];
+  for (const m of markers) {
+    if (await fileExists(join(projectDir, m))) return true;
+  }
+  return false;
 }
 
 function parsePackageJson(content: string): Partial<DetectedStack> {
@@ -136,13 +167,25 @@ export async function detectStack(projectDir: string): Promise<DetectedStack> {
     const tsConfigPresent = await fileExists(join(projectDir, "tsconfig.json"));
     const language = tsConfigPresent || pkg?.devDependencies?.typescript ? "typescript" : "javascript";
     const fromPkg = parsePackageJson(pkgJsonRaw);
+    // Q26: monorepo signal wins over the legacy "library" default but
+    // not over a positive frontend/backend classification (a Next.js
+    // app inside a Turborepo root is still a frontend-app).
+    const frontendOrBackend = await detectFrontendVsBackend(projectDir, pkg);
+    let project_type: DetectedStack["project_type"];
+    if (frontendOrBackend === "frontend-app" || frontendOrBackend === "backend") {
+      project_type = frontendOrBackend;
+    } else if (await isMonorepoRoot(projectDir)) {
+      project_type = "monorepo";
+    } else {
+      project_type = frontendOrBackend;
+    }
     return {
       language,
       package_manager: await detectNodePackageManager(projectDir),
       test_command: claudeOverrides.test_command ?? fromPkg.test_command ?? null,
       lint_command: claudeOverrides.lint_command ?? fromPkg.lint_command ?? null,
       build_command: claudeOverrides.build_command ?? fromPkg.build_command ?? null,
-      project_type: await detectFrontendVsBackend(projectDir, pkg),
+      project_type,
     };
   }
 

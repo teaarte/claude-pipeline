@@ -12,7 +12,6 @@
     "tests_mode",
     "stack",
     "started_at",
-    "current_step",
     "phases",
     "gates",
     "agents_count"
@@ -37,12 +36,11 @@
         "test_command": { "type": ["string", "null"] },
         "lint_command": { "type": ["string", "null"] },
         "build_command": { "type": ["string", "null"] },
-        "project_type": { "type": ["string", "null"], "enum": [null, "frontend-app", "backend", "library"] }
+        "project_type": { "type": ["string", "null"], "enum": [null, "frontend-app", "backend", "library", "monorepo"] }
       },
       "additionalProperties": true
     },
     "started_at": { "type": "string", "format": "date-time" },
-    "current_step": { "type": "string" },
     "refs_loaded": {
       "type": "array",
       "items": { "type": "string" },
@@ -63,12 +61,7 @@
             {
               "type": "object",
               "properties": {
-                "iterations": { "type": "integer", "minimum": 0 },
                 "gate1_revisions": { "type": "integer", "minimum": 0 },
-                "grounding_check": {
-                  "type": ["string", "null"],
-                  "enum": [null, "GROUNDED", "NEEDS_REVISION", "NO_CITATIONS"]
-                },
                 "grounding_mismatches": { "type": "integer", "minimum": 0 }
               }
             }
@@ -102,7 +95,6 @@
             {
               "type": "object",
               "properties": {
-                "iterations": { "type": "integer", "minimum": 0 },
                 "antipattern_candidates_count": { "type": "integer", "minimum": 0 },
                 "caller_context_sites_count": { "type": "integer", "minimum": 0 },
                 "logic_vs_challenger_disagreement": { "type": "boolean", "default": false },
@@ -133,17 +125,7 @@
             }
           ]
         },
-        "validation": {
-          "allOf": [
-            { "$ref": "#/$defs/phase_status" },
-            {
-              "type": "object",
-              "properties": {
-                "acceptance_first_pass": { "type": "boolean" }
-              }
-            }
-          ]
-        },
+        "validation": { "$ref": "#/$defs/phase_status" },
         "final": { "$ref": "#/$defs/phase_status" }
       }
     },

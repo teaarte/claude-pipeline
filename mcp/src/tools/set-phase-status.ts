@@ -10,6 +10,8 @@ import {
   assertTransitionAllowed,
   assertPrereqSatisfied,
 } from "../lib/phase-state-machine.js";
+import { captureGitDiff } from "../lib/git-diff.js";
+import { audit } from "../lib/audit.js";
 
 const SKIPPED_REASON_BY_PHASE: Record<string, readonly string[]> = {
   test_first: ["regression-only", "no-test-framework-tdd-blocked", "user-override-no-tests"],
@@ -101,6 +103,34 @@ export async function pipelineSetPhaseStatus(input: {
       state.pipeline_violation = state.pipeline_violation
         ? `${state.pipeline_violation}; phase-force-${input.phase}`
         : `phase-force-${input.phase}`;
+    }
+
+    // Q33: at implementation close, snapshot the working-tree diff so
+    // state.files.{created,modified} reflects what changed instead of the
+    // empty arrays the v2 driver never wrote. Best-effort: git absence /
+    // non-repo / exec errors degrade to empty arrays + an audit note.
+    if (input.phase === "implementation" && input.status === "completed") {
+      const diff = await captureGitDiff(input.project_dir);
+      state.files = state.files ?? { created: [], modified: [] };
+      state.files.created = Array.isArray(state.files.created) ? state.files.created : [];
+      state.files.modified = Array.isArray(state.files.modified) ? state.files.modified : [];
+      if (diff) {
+        for (const p of diff.created) {
+          if (!state.files.created.includes(p)) state.files.created.push(p);
+        }
+        for (const p of diff.modified) {
+          if (!state.files.modified.includes(p)) state.files.modified.push(p);
+        }
+      } else {
+        // Surface the gap; analyser can grep for git-unavailable in audit.
+        await audit({
+          tool: "pipeline_set_phase_status",
+          args: { phase: input.phase, status: input.status },
+          projectDir: input.project_dir,
+          verdict: "ok",
+          error_class: "git-unavailable",
+        }).catch(() => undefined);
+      }
     }
 
     await writeText(summary, await buildSummary(state));

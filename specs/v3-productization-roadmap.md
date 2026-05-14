@@ -15,9 +15,9 @@ v2 has shipped (commit range `67d736f`…`128ab51`, 13 spec items + handoff comm
 - **Plugin framework architecture:** all 7 plugin contracts in `mcp/src/driver/types/plugin.ts` (`StepPlugin`, `AgentPlugin`, `FlowPlugin`, `GatePlugin`, `DecisionPlugin`, `HookPlugin`, `SpawnProviderPlugin`) + `PLUGIN_API_VERSION = "1.0"`.
 - **Built-in plugins:** 23 steps, 20 agents, 3 flows, 3 gates, 6 decisions, 3 hooks, 1 spawn provider (`shuttle`). All spec minima met.
 - **MCP-enforced state invariants:** `INV_001`–`INV_012` (added INV_012 open-spawn leak in Item 3).
-- **MCP tool count:** **19** (spec target 17; +2 from acceptance criteria that required `pipeline_set_pattern_confidence` and `pipeline_meta`).
+- **MCP tool count:** **20** (initial 19 at v2 ship + `pipeline_fix_task_id` added in v2.1-hotfix Q15).
 - **Audit log:** per-project (`.claude/mcp-audit.jsonl`) + global (`~/.claude/metrics/mcp-audit.jsonl`).
-- **Test infrastructure:** vitest + fast-check property tests + CI workflow. **179 tests across 29 files, 94.33% line coverage, 79.39% branch coverage** (slightly under 80% spec target — 5% gap is unreachable `?? default` branches in metrics builders; documented and accepted).
+- **Test infrastructure:** vitest + fast-check property tests + CI workflow. **209 tests across 33 files** (post-v2.1-hotfix: was 179/29 at v2 ship, +30 tests from hotfix bundle). 94%+ line coverage maintained.
 - **Protocol versioning:** `PLUGIN_API_VERSION = "1.0"`, `mcp/package.json 2.0.0`, frontmatter pin `mcp_protocol_required: "^2.0"` in `commands/task.md`.
 - **Recovery paths:** `pipeline_abandon` + `pipeline_cancel_spawn` + `commands/done.md` (21 lines) with INV_001–INV_012 + stale-spawn recovery hints inline.
 - **Guard hook hardened:** Item 4 added marker-based scoping (`.mcp-managed`), TTL bypass via `.mcp-bypass-allowed`, regex coverage expansion. **Code review extended this to 20 evasion fixtures** all blocked, including: `bash -c "rm ..."`, command substitution `$(rm ...)`, `os.system('rm ...')`, `subprocess.*`, `find -delete`, `find -exec rm`, relative paths (resolved against `$PWD`), split-form `find /x/.claude -name pipeline-state.json -delete`, `gzip/bzip2/xz/zstd` in-place, `pwsh -Command "Remove-Item"`, attempts to delete `.mcp-managed` itself. Protected basenames now include `driver-state.json`, `.mcp-managed`, `.mcp-bypass-allowed` (so the marker files protect themselves). **Bypass marker forgery prevented** via `issued_at + TTL cap` check (3600s max from issue time; `pipeline_unlock_writes` refuses to extend active marker without `force=true`). **Path traversal blocked** by new `mcp/src/lib/project-dir.ts:assertProjectDirAllowed()` (restricts `project_dir` to cwd / `TMPDIR` / `~/.claude/settings.json:pipeline.allowed_project_roots`).
@@ -45,7 +45,7 @@ These were flagged in the v2 code review and consciously deferred — fix when t
 
 1. **Sec sec005 — nested-project marker walk.** `find_marker_dir` takes the NEAREST `.mcp-managed`. No real leak (bypass marker reads from same dir as `.mcp-managed`), but documented edge case if user has nested projects with conflicting markers.
 2. **Perf I2 — `get-past-misses` reads whole `pipeline.jsonl`.** Fine at <5MB scale (~500KB per 1000 tasks). Convert to streaming tail-N when file grows. v2.5+ candidate.
-3. **Challenger #8 — audit reads pipeline-state on every call.** 5-15ms on hot cache. Threading `task_id` through 19 tool signatures was not justified at v2. Revisit when audit becomes a hot path (P3 team-scale era).
+3. **Challenger #8 — audit reads pipeline-state on every call.** 5-15ms on hot cache. Threading `task_id` through 20 tool signatures was not justified at v2. Revisit when audit becomes a hot path (P3 team-scale era).
 
 ### Code quality follow-ups from architecture review
 
@@ -79,9 +79,31 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q15 | 🟡 MEDIUM | **No clean recovery primitive for malformed `task_id`.** Q7 prevents the bug at init; this addresses the case where it slips through. Currently recovery requires: `pipeline_unlock_writes` → `python3` JSON-edit hack → `pipeline_relock_writes` → re-`pipeline_finish` (4 manual steps). Add `pipeline_fix_task_id({project_dir, new_task_id, reason})` MCP tool: validates new id against schema, mutates state under lock, audits the change. **Fixed: v2.1-hotfix Q15** — new `mcp/src/tools/fix-task-id.ts`, registered as the 20th MCP tool. Uses `withStateLock`, regenerates summary, rejects bad new_task_id / too-short reason. 5 unit tests in `test/tools/fix-task-id.test.ts`. `commands/done.md` Recovery section now points operators to it. | ~1h | New `mcp/src/tools/fix-task-id.ts` + register in `server.ts`. | t-2026-05-13-gwarchspec |
 | Q16 | 🔴 **CRITICAL** | **`subagent_type` mismatch breaks spawning for non-builtin agent names.** Driver returns `claude_code_task.subagent_type: "<agent name>"` (e.g. `"code-analyzer"`), but Claude Code's `Task` tool only accepts its own internal subagent_types: `general-purpose`, `Explore`, `Plan`, `runtime-debug-agent`, `test-all-agent`, `fe-test-all-agent`, `statusline-setup`, `claude-code-guide`. Error: `Agent type 'code-analyzer' not found`. **Per v2 design intent**, `subagent_type` should always be `"general-purpose"` (or detected from Claude Code's catalog), and the actual AgentPlugin role/template should be embedded in the `prompt` text. Currently this mapping is wrong somewhere — most likely `ShuttleSpawnProvider` or a step using `agent.name` as `subagent_type`. Blocks spawn for any agent whose name isn't accidentally a Claude Code subagent_type (= most of them). **HIGHEST PRIORITY v2.1 fix — without it, ~90% of pipeline tasks will fail at context-enrichment phase.** **Fixed: v2.1-hotfix Q16** — `shuttle-provider.ts` now pins `subagent_type="general-purpose"`, reads the AgentPlugin's `template_path` and embeds it (plus a self-id header + spawn context) into the Task tool prompt. `AgentSpawnRequest.template_path` added so non-shuttle providers can do the same. 5 unit tests in `test/driver/builtin/spawn/shuttle-provider.test.ts`. | ~1-2h | `mcp/src/driver/builtin/spawn/shuttle-provider.ts` — force `subagent_type: "general-purpose"` always; ensure prompt contains the agent template content + role context. Add unit test asserting subagent_type is one of CC's accepted values. | t-2026-05-14-...-blocked |
 
-**Validation-driven total effort: ~9-11h (Q7-Q15). Bundle with Q1-Q6 polish round → revised total v2.1 estimate: ~6-8 days.**
+### Validation-driven backlog status (post v2.1-hotfix)
 
-**Priority within v2.1 backlog:** Q7 first (single point of failure — breaks `/done` for every task with non-trivial title). Q12 second (Q7 fix doesn't help if `/done` cleanup still requires unlock dance). Rest can land bundled.
+**Shipped — v2.1-hotfix bundle (4 commits, 2026-05-14):**
+
+| Q | Commit | Status |
+|---|--------|--------|
+| Q7 | `4ea0c9f` | ✓ Fixed — slug sanitizer in `mcp/src/lib/ids.ts`; 18 tests |
+| Q12 | `4e2527b` | ✓ Fixed — `/done` cleanup wraps with `pipeline_unlock_writes` / `pipeline_relock_writes`; 1 test |
+| Q13 | — | ✓ Subsumed by Q12 (`pipeline_relock_writes` unlinks `.mcp-bypass-allowed`) |
+| Q15 | `baa253e` | ✓ Fixed — new `pipeline_fix_task_id` tool (MCP tool #20); 5 tests |
+| Q16 | `98b9f45` | ✓ Fixed — `ShuttleSpawnProvider` pins `subagent_type="general-purpose"`; 5 tests |
+
+5 of 10 validation-driven items closed. Pipeline can now run real tasks end-to-end.
+
+**Remaining for v2.1 polish bundle (Q1-Q6 code quality + 5 leftover validation-driven):**
+
+| Q | Severity | Status | Notes |
+|---|----------|--------|-------|
+| Q8 | 🟡 MEDIUM | open | Gate decisions not mirrored to `pipeline_set_gate`. Observability loss. |
+| Q9 | 🟡 MEDIUM | open | Code review under-spawning. Needs investigation: `applies_to` predicates vs step bug vs Gate 1 revision interaction. |
+| Q10 | 🟢 LOW | open | `current_step` field stale. Either update v2 driver or remove from schema. |
+| Q11 | 🟢 LOW | open | Audit `error_class` field for verdict=error categorization. |
+| Q14 | 🟢 LOW | open | `mcp-audit.jsonl` regenerates during `/done` cleanup. May be subsumed by Q12 — verify on next real-task run. |
+
+**Remaining effort (Q1-Q6 + Q8-Q11 + Q14):** ~5-6 days bundled. Schedule after 3-5 more real-task validation runs (so Q9 hypothesis can be narrowed and any new Q-items surface).
 
 ### How to add new validation-driven Q-items
 

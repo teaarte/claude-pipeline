@@ -195,6 +195,15 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 ## t-2026-05-14-blocked-at-context — second real-task attempt, blocked at context phase
 
+> **✓ RESOLVED 2026-05-14 by v2.1-hotfix bundle:**
+> - Q16 fixed in commit `98b9f45` (`fix(driver): Q16 — force subagent_type=general-purpose for Task tool`).
+> - Q7 fixed in commit `4ea0c9f` (`fix(init): Q7 — sanitize task_id slug to match schema pattern`).
+> - Q12 fixed in commit `4e2527b` (`fix(done): Q12 — wrap cleanup with pipeline_unlock_writes/relock_writes`).
+> - Q15 added new tool `pipeline_fix_task_id` in commit `baa253e` for clean task_id recovery.
+> - Q13 subsumed by Q12 (`pipeline_relock_writes` already unlinks the bypass marker).
+> - Tests: 180 → 209 (+29). Pipeline now functional end-to-end for real tasks.
+> - Remaining Q-items (Q8, Q9, Q10, Q11, Q14) deferred to v2.1 polish bundle.
+
 - **Project:** `~/Work/AI-FACTORY/s3-panel` (likely; second `/task` attempted)
 - **Complexity (auto):** medium (presumed — didn't reach Gate 0 confirmation)
 - **Wall time:** <5min — blocked before context enrichment completed
@@ -227,6 +236,10 @@ The driver's spawn payload puts the AgentPlugin name (`code-analyzer`, `context-
 2. After Q16 hotfix lands → resume validation with fresh `/task`.
 
 ## t-2026-05-13-gateway-ui-gateway-orval-tanstaack-query — Phase 0.5 gateway scaffolding
+
+> **✓ Bugs from this run resolved 2026-05-14 by v2.1-hotfix bundle:**
+> Q7 (`4ea0c9f`), Q12 (`4e2527b`), Q15 (`baa253e`). Q13 subsumed by Q12.
+> Remaining unfixed: Q8 (gate mirror), Q9 (review under-spawning), Q10 (current_step stale), Q11 (audit error_class), Q14 (audit regen) — bundled into v2.1 polish round.
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

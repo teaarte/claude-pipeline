@@ -265,6 +265,12 @@ find ~ -name "category-vocab.json"
 > - Q21 fixed in commit `eb445e0` (`fix(agents): Q21 — output examples respect header schema constraints`).
 > - Bug-list 1-9 from this entry: Q8 ✓, Q9 deferred (needs auth/perf task profile), Q11 ✓, Q17 ✓, Q18 ✓, Q20 ✓, Q21 ✓, Q22 ✓, Q23 ✓.
 > - Tests: 209 → 265 (+56). Tool count: 20 → 21. `mcp-audit.jsonl` stub will not recur after Q23 lands.
+>
+> **+ Q24 hot-fix during polish-bundle real-run validation (2026-05-15):** during the s3-panel run that exercised Q8/Q11/Q17/Q22 fixes in production, Stop hook surfaced a confusing `decision: "block"` message at Gate 0 ("Pipeline is in flight at step STEP 1 with verdict=null. Run /done..."). Pipeline was correctly paused awaiting user input — but the hook didn't check `driver-state.pending_user_answer`. Filed + fixed on the same branch:
+> - Q24 fixed in commit (TBD `git log` after this entry) — `hooks/pipeline-stop.sh` reads `driver-state.json:pending_user_answer`; Case 2 block guard requires both `verdict` empty AND no pending answer. 6 vitest tests in `mcp/test/hooks/pipeline-stop.test.ts`.
+> - Tests: 265 → 271 (+6). Test files: 38 → 39.
+> - Made Q10 (`current_step` stale → message read "STEP 1" while step_index=3) more visible. Q10 stays open as cosmetic.
+> - Bonus signal from this run: **Q8 confirmed working in production** — `pipeline-state.gates.gate0 = "approved"` (was always `pending` before).
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

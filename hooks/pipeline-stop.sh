@@ -31,6 +31,16 @@ complexity=$(jq -r '.complexity // empty' "$state" 2>/dev/null)
 violation=$(jq -r '.pipeline_violation // empty' "$state" 2>/dev/null)
 current_step=$(jq -r '.current_step // empty' "$state" 2>/dev/null)
 
+# Q24: driver-state.pending_user_answer marks a legitimate pause (gate
+# awaiting user input). Treat it as "not in flight" so the Stop hook
+# stays silent — otherwise the user gets a scary "run /done" message
+# every time the pipeline asks a gate question.
+driver_state="$cwd/.claude/driver-state.json"
+pending_user_answer=""
+if [ -f "$driver_state" ]; then
+  pending_user_answer=$(jq -r '.pending_user_answer // empty' "$driver_state" 2>/dev/null)
+fi
+
 # Case 1: task closed with zero agents on a non-trivial complexity → real violation.
 if [ -n "$verdict" ] && [ "$agents" = "0" ] && [ "$complexity" != "simple" ]; then
   echo "[claude-pipeline] PIPELINE VIOLATION: task '$verdict' with agents_count=0 (complexity=$complexity). No subagents were spawned. Run pipeline_validate via MCP." >&2
@@ -39,7 +49,10 @@ fi
 # Case 2: in-flight task (no verdict yet) → block the stop ONCE and ask Claude
 # to run /done. If stop_hook_active is already true (i.e. we've blocked before
 # this run), fall back to diagnostic stderr so the user can actually exit.
-if [ -z "$verdict" ]; then
+#
+# Q24: skip entirely when pending_user_answer is set — the pipeline is
+# legitimately paused at a gate, not stuck. Stop hook stays silent.
+if [ -z "$verdict" ] && [ -z "$pending_user_answer" ]; then
   if [ "$stop_hook_active" = "true" ] || [ "${PIPELINE_ALLOW_RAW:-0}" = "1" ]; then
     echo "[claude-pipeline] pipeline still in flight at step: $current_step — exit anyway (stop_hook_active or PIPELINE_ALLOW_RAW=1)." >&2
   else

@@ -193,6 +193,27 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 ## Entries (newest first)
 
+## Cross-cutting observations (not tied to a single task)
+
+Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
+
+### 2026-05-14 — Agents `find`-hunting for `templates/schemas/category-vocab.json`
+
+**Observed:** Logic-reviewer (and likely other reviewer/validator agents) running multiple `find` commands in real-task runs trying to locate the vocab file:
+
+```
+cat ~/.claude/plugins/cache/*/templates/schemas/category-vocab.json
+find ~/.claude -name "category-vocab.json"
+find / -path "*/templates/schemas/category-vocab.json"   ← whole filesystem
+find ~ -name "category-vocab.json"
+```
+
+**Root cause:** agent prompts reference `templates/schemas/category-vocab.json` by **relative path**, which only resolves from the claude-pipeline repo root. Agent is spawned inside the user's project (e.g. `s3-panel/`) → path doesn't resolve → `find` fallback wastes tokens + slow filesystem walks.
+
+**Filed as Q18** (🟡 MEDIUM, ~1-2h fix). Architectural answer: driver embeds vocab inline in prompt at spawn build time. Connects to Q6 (similar SoT principle for output examples).
+
+---
+
 ## t-2026-05-14-blocked-at-context — second real-task attempt, blocked at context phase
 
 > **✓ RESOLVED 2026-05-14 by v2.1-hotfix bundle:**

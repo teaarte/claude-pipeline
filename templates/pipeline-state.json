@@ -13,7 +13,6 @@
     "project_type": null
   },
   "started_at": "<ISO 8601>",
-  "current_step": "STEP 1",
   "refs_loaded": [],
   "refs_dropped_due_to_cap": [],
   "phases": {

@@ -63,7 +63,6 @@ export async function pipelineInit(input: {
       tests_mode: input.tests_mode,
       stack: { ...tpl.stack, ...input.stack },
       started_at: now,
-      current_step: "STEP 1",
     };
     await ensureEmptyJsonl(fjsonl);
     await writeText(summary, await buildSummary(state));

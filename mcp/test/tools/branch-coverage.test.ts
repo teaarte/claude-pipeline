@@ -300,7 +300,6 @@ describe("branch-coverage extras", () => {
       tests_mode: "tdd",
       stack: { language: "TypeScript" },
       started_at: "2026-05-13T00:00:00.000Z",
-      current_step: "STEP 1",
       phases: {
         context: { status: "pending", agents: [] },
         planning: { status: "pending", agents: [] },

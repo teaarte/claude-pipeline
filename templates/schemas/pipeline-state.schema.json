@@ -12,7 +12,6 @@
     "tests_mode",
     "stack",
     "started_at",
-    "current_step",
     "phases",
     "gates",
     "agents_count"
@@ -42,7 +41,6 @@
       "additionalProperties": true
     },
     "started_at": { "type": "string", "format": "date-time" },
-    "current_step": { "type": "string" },
     "refs_loaded": {
       "type": "array",
       "items": { "type": "string" },

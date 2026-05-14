@@ -20,7 +20,6 @@ function baseState(): any {
     tests_mode: "regression-only",
     stack: { language: "TypeScript" },
     started_at: "2026-05-13T00:00:00.000Z",
-    current_step: "STEP 1",
     refs_loaded: [],
     refs_dropped_due_to_cap: [],
     phases: {

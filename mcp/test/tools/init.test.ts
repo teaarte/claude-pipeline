@@ -34,6 +34,29 @@ describe("pipeline_init", () => {
     }
   });
 
+  it("Q10: initialized state does not carry deprecated current_step field", async () => {
+    const proj = await tempProject();
+    try {
+      const result = await pipelineInit(initArgs(proj.dir));
+      const state = JSON.parse(await readFile(result.state_file, "utf8"));
+      expect(state).not.toHaveProperty("current_step");
+      // Validate the template and schema also dropped the field.
+      const { join } = await import("node:path");
+      const { pipelineRoot } = await import("../../src/lib/paths.js");
+      const tpl = JSON.parse(
+        await readFile(join(pipelineRoot, "templates", "pipeline-state.json"), "utf8"),
+      );
+      expect(tpl).not.toHaveProperty("current_step");
+      const schemaRaw = await readFile(
+        join(pipelineRoot, "templates", "schemas", "pipeline-state.schema.json"),
+        "utf8",
+      );
+      expect(schemaRaw).not.toContain("current_step");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("refuses to overwrite a finished state", async () => {
     const proj = await tempProject();
     try {

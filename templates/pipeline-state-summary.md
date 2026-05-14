@@ -5,7 +5,6 @@
 - **Task:** {{task}}
 - **Task ID:** {{task_id}}
 - **Complexity:** {{complexity}} | **Tests mode:** {{tests_mode}}
-- **Current step:** {{current_step}}
 - **Phases:** context={{phases.context.status}} · planning={{phases.planning.status}}(grounding_mismatches={{phases.planning.grounding_mismatches}}) · test_first={{phases.test_first.status}} · impl={{phases.implementation.status}}(drift={{phases.implementation.plan_conformance}}) · validation={{phases.validation.status}} · final={{phases.final.status}}
 - **Gates:** g0={{gates.gate0}} · g1={{gates.gate1}} · g2={{gates.gate2}}
 - **Reviewer verdicts:** see `.claude/pipeline-state.json` `reviewer_verdicts[]`

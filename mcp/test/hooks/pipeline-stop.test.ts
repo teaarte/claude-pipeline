@@ -29,7 +29,6 @@ function writePipelineState(root: string, partial: Record<string, unknown>) {
       verdict: null,
       agents_count: 0,
       complexity: "medium",
-      current_step: "STEP 1",
       ...partial,
     }),
   );
@@ -72,6 +71,11 @@ describe("pipeline-stop hook — Q24", () => {
     expect(res.status).toBe(0);
     expect(res.stdout).toContain('"decision": "block"');
     expect(res.stdout).toContain("Pipeline is in flight");
+    // Q10: in-flight diagnostic now reads flow_name + step_index from
+    // driver-state.json. The fixture sets flow="medium" step=3.
+    expect(res.stdout).toContain("flow=medium step=3");
+    // Q10: hard guarantee the deprecated literal never reappears.
+    expect(res.stdout).not.toContain("STEP 1");
   });
 
   it("stays SILENT when pipeline paused at gate with pending_user_answer set (Q24)", () => {
@@ -93,6 +97,10 @@ describe("pipeline-stop hook — Q24", () => {
     const res = runHook(root);
     expect(res.status).toBe(0);
     expect(res.stdout).toContain('"decision": "block"');
+    // Q10: with driver-state absent, the step label falls back to "unknown"
+    // instead of leaking the deprecated current_step="STEP 1".
+    expect(res.stdout).toContain("unknown");
+    expect(res.stdout).not.toContain("STEP 1");
   });
 
   it("stays silent on completed task (verdict set)", () => {

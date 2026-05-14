@@ -133,17 +133,7 @@
             }
           ]
         },
-        "validation": {
-          "allOf": [
-            { "$ref": "#/$defs/phase_status" },
-            {
-              "type": "object",
-              "properties": {
-                "acceptance_first_pass": { "type": "boolean" }
-              }
-            }
-          ]
-        },
+        "validation": { "$ref": "#/$defs/phase_status" },
         "final": { "$ref": "#/$defs/phase_status" }
       }
     },

@@ -28,7 +28,7 @@ function baseState(): any {
       planning: { status: "pending", iterations: 0, gate1_revisions: 0, grounding_check: null, grounding_mismatches: 0, agents: [], open_spawns: [] },
       test_first: { status: "pending", skipped_reason: null, test_spec_count_in_plan: null, tests_written_count: null, test_files_written: [], test_files_hashes_post_red: {}, agents: [], open_spawns: [] },
       implementation: { status: "pending", iterations: 0, antipattern_candidates_count: 0, caller_context_sites_count: 0, logic_vs_challenger_disagreement: false, plan_conformance: null, drift_files_count: 0, test_files_modified_by_implementer: [], checkpoint_results: [], agents: [], open_spawns: [] },
-      validation: { status: "pending", acceptance_first_pass: false, agents: [], open_spawns: [] },
+      validation: { status: "pending", agents: [], open_spawns: [] },
       final: { status: "pending", agents: [], open_spawns: [] },
     },
     reviewer_verdicts: [],

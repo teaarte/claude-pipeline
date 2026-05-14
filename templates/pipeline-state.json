@@ -50,7 +50,7 @@
       "agents": [],
       "open_spawns": []
     },
-    "validation": { "status": "pending", "acceptance_first_pass": false, "agents": [], "open_spawns": [] },
+    "validation": { "status": "pending", "agents": [], "open_spawns": [] },
     "final": { "status": "pending", "agents": [], "open_spawns": [] }
   },
   "reviewer_verdicts": [],

@@ -80,13 +80,14 @@ export async function pipelineFinish(input: {
     const implIters = maxIterInPhase("implementation") || phases.implementation?.iterations || 0;
     const planIters = maxIterInPhase("planning") || phases.planning?.iterations || 0;
     // acceptance_first_pass = iteration-1 acceptance verdict has verdict=PASS.
-    // Fall back to phases.validation.acceptance_first_pass for legacy state.
+    // Q32: the legacy phases.validation.acceptance_first_pass field was
+    // deprecated in v2.2-clear-bundle; reviewer_verdicts[] is the only source
+    // of truth. Absent iter-1 acceptance verdict ⇒ false (the task never
+    // passed acceptance on the first try).
     const acceptanceFirst = verdicts.find(
       (v) => v.agent === "acceptance" && (v.phase === undefined || v.phase === "validation") && v.iteration === 1,
     );
-    const acceptanceFirstPass = acceptanceFirst
-      ? acceptanceFirst.verdict === "PASS"
-      : (phases.validation?.acceptance_first_pass ?? false);
+    const acceptanceFirstPass = acceptanceFirst ? acceptanceFirst.verdict === "PASS" : false;
 
     const row = {
       schema_version: "1.0",

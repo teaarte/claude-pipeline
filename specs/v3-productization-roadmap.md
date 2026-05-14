@@ -93,7 +93,7 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 
 5 of 10 validation-driven items closed. Pipeline can now run real tasks end-to-end.
 
-**Remaining for v2.1 polish bundle (Q1-Q6 code quality + 5 leftover validation-driven):**
+**Remaining for v2.1 polish bundle (Q1-Q6 code quality + 6 leftover validation-driven):**
 
 | Q | Severity | Status | Notes |
 |---|----------|--------|-------|
@@ -102,8 +102,9 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q10 | 🟢 LOW | open | `current_step` field stale. Either update v2 driver or remove from schema. |
 | Q11 | 🟢 LOW | open | Audit `error_class` field for verdict=error categorization. |
 | Q14 | 🟢 LOW | open | `mcp-audit.jsonl` regenerates during `/done` cleanup. May be subsumed by Q12 — verify on next real-task run. |
+| Q17 | 🟡 MEDIUM | open | **`pipeline-state.json:stack` never populated.** After every `/task` run, `state.stack` shows all `null`/`"unknown"` for `language`/`package_manager`/`test_command`/`lint_command`/`build_command`/`project_type`. `pipeline_init` accepts a `stack` param (verified in `smoke.ts` fixture) but the driver entry (`mcp/src/driver/tools/run-task.ts`) doesn't run stack-detection pre-flight and calls `pipeline_init` without it. The `classify` step / `decisions/tests-mode.ts` do partial detection (frontend vs backend) but don't write back to `state.stack`. **Effect:** agents receive `project_stack` as all-null context → reference files like `perf-react.md` rely on indirect indicators; `pipeline.jsonl` metrics row carries useless stack data for cross-stack `/learn` drift analysis. **Fix scope ~2-4h:** add stack-detection helper (`mcp/src/driver/builtin/decisions/stack-detect.ts` reading CLAUDE.md "Validation Commands" + `package.json`/`pyproject.toml`/`pubspec.yaml`/etc.); call it in driver run-task before `pipeline_init`; OR add `pipeline_set_stack` MCP tool + classify step. |
 
-**Remaining effort (Q1-Q6 + Q8-Q11 + Q14):** ~5-6 days bundled. Schedule after 3-5 more real-task validation runs (so Q9 hypothesis can be narrowed and any new Q-items surface).
+**Remaining effort (Q1-Q6 + Q8-Q11 + Q14 + Q17):** ~6-7 days bundled. Schedule after 3-5 more real-task validation runs (so Q9 hypothesis can be narrowed and any new Q-items surface).
 
 ### How to add new validation-driven Q-items
 

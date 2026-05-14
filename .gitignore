@@ -1,1 +1,12 @@
 .DS_Store
+
+# Per-project pipeline working state — managed by MCP server, never committed.
+# Includes: pipeline-state.json, driver-state.json, findings.jsonl,
+# mcp-audit.jsonl, .mcp-managed, .mcp-bypass-allowed, settings.local.json,
+# plan.md / diff.txt / context-doc.md / etc. orchestrator scratch.
+.claude/
+
+# Node / TypeScript build artifacts
+node_modules/
+dist/
+*.tsbuildinfo

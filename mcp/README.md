@@ -129,7 +129,7 @@ permission prompt, it doesn't relax the protection invariants.
 
 > **Not automated yet (Q25):** the pipeline could merge this rule into
 > `settings.local.json` from `pipeline_init`, but that interacts with
-> larger onboarding work scheduled for v2.5. For now it's a one-line edit.
+> larger onboarding work scheduled for v2.3. For now it's a one-line edit.
 
 ## Hooks (mechanical guardrails on top of the MCP)
 

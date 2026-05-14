@@ -6,6 +6,15 @@
 
 This document is **strategic, not tactical**. Each phase here gets its own detailed spec when it's time to execute. Phases are sized in days/weeks of focused work, not specific commits.
 
+> **Version-numbering note (2026-05-14):** phase numbers compacted from gappy `v2.5/v2.6/v2.7/v2.8` to consecutive `v2.3/v2.4/v2.5/v2.6`. **Mapping:**
+> - old `v2.5` (daemon + Web UI) → **`v2.3`**
+> - old `v2.6` (Docker isolation) → **`v2.4`**
+> - old `v2.7` (cost-aware multi-provider routing) → **`v2.5`**
+> - old `v2.8` (plugin marketplace + curator) → **`v2.6`**
+> - **`v3.0`** reserved for fleet + multi-tenancy + commercial launch
+>
+> Old gaps were sigil-y signaling without semantic meaning. Compact numbering is cleaner for a single-author project pre-external-users. Strict semver (breaking changes = major bump) will be adopted once external alpha users + version pinning become real concerns — likely at v2.3 daemon launch. See `specs/product-vision.md` for the full product trajectory and commercial phasing.
+
 ---
 
 ## Where v2 leaves us
@@ -21,35 +30,35 @@ v2 has shipped (commit range `67d736f`…`128ab51`, 13 spec items + handoff comm
 - **Protocol versioning:** `PLUGIN_API_VERSION = "1.0"`, `mcp/package.json 2.0.0`, frontmatter pin `mcp_protocol_required: "^2.0"` in `commands/task.md`.
 - **Recovery paths:** `pipeline_abandon` + `pipeline_cancel_spawn` + `commands/done.md` (21 lines) with INV_001–INV_012 + stale-spawn recovery hints inline.
 - **Guard hook hardened:** Item 4 added marker-based scoping (`.mcp-managed`), TTL bypass via `.mcp-bypass-allowed`, regex coverage expansion. **Code review extended this to 20 evasion fixtures** all blocked, including: `bash -c "rm ..."`, command substitution `$(rm ...)`, `os.system('rm ...')`, `subprocess.*`, `find -delete`, `find -exec rm`, relative paths (resolved against `$PWD`), split-form `find /x/.claude -name pipeline-state.json -delete`, `gzip/bzip2/xz/zstd` in-place, `pwsh -Command "Remove-Item"`, attempts to delete `.mcp-managed` itself. Protected basenames now include `driver-state.json`, `.mcp-managed`, `.mcp-bypass-allowed` (so the marker files protect themselves). **Bypass marker forgery prevented** via `issued_at + TTL cap` check (3600s max from issue time; `pipeline_unlock_writes` refuses to extend active marker without `force=true`). **Path traversal blocked** by new `mcp/src/lib/project-dir.ts:assertProjectDirAllowed()` (restricts `project_dir` to cwd / `TMPDIR` / `~/.claude/settings.json:pipeline.allowed_project_roots`).
-- **Foundation for later phases** already in place (no need to redo in v2.5+):
+- **Foundation for later phases** already in place (no need to redo in v2.3+):
   - `mcp/src/driver/types/config.ts` exports `ClaudePipelineConfig` with `default_models_by_phase`, `agent_overrides`, `gate_policy`, `notification_targets`, `plugin_enabled`.
   - `mcp/src/driver/builtin/agents/resolve-model.ts` implements the `agent_overrides[name].model ?? default_models_by_phase[phase] ?? plugin.default_model` cascade. **Phase is passed explicitly from caller** (review fix L2 — no more string-matching `template_path` heuristic).
   - State IO encapsulated: `pipeline-state.json`, `findings.jsonl`, `mcp-audit.jsonl`, `driver-state.json` written ONLY inside `mcp/src/tools/*` and `mcp/src/driver/core/state.ts`.
   - Driver transport-agnostic: `runFSM(state, registry)` in `driver/core/fsm.ts` does not depend on MCP; `pipeline_run_task` and `pipeline_continue_task` are thin wrappers.
   - **Driver↔pipeline-state wiring closed (review fix arch01/02):** `pipelineRunTask` calls `pipelineInit`; `runFSM` accepts an injected `SpawnRecorder`; `mcpSpawnRecorder` routes every `beginSpawn` through `pipelineBeginAgent`; `pipelineContinueTask` calls `pipelineRecordAgentRun`/`pipelineRecordNonreviewAgent` for `agent-result` / `agents-results` — `open_spawns[]` close correctly.
   - **Concurrency-safe (review fix conc01):** both `pipelineRunTask` and `pipelineContinueTask` wrapped in `withDriverStateLock`; concurrent invocations cannot clobber driver state. `pipelineRunTask` refuses to overwrite in-flight state (returns `IN_FLIGHT_TASK` shuttle response with recovery options).
-  - **`lib/ids.ts` consolidates** `makeFindingId`, `makeFeedbackId`, `makeAgentRunId`, `AGENT_RUN_ID_PATTERN`. v2.5+ should import from here, not reinvent.
+  - **`lib/ids.ts` consolidates** `makeFindingId`, `makeFeedbackId`, `makeAgentRunId`, `AGENT_RUN_ID_PATTERN`. v2.3+ should import from here, not reinvent.
   - **`lib/audit.ts` is concurrency-safe and bounded:** `proper-lockfile.lock` around read-trim-rename; stat-based fast path skips read when file fits in 3MB; global stream redacts `project_dir`/`task`/`task_short`/`reason` to length markers (`redactForGlobal`); per-project stream capped at 50k entries; IO errors go to stderr (not silent).
   - **`lib/parse-json-header.ts` bounded:** `LENIENT_OBJECT_CEILING=128KB`, `LENIENT_RETRY_CAP=5` — patological inputs no longer cause O(n²).
 
-### Known follow-ups from v2 execution (defer to v2.5 or v2.1 hot-fix)
+### Known follow-ups from v2 execution (defer to v2.3 or v2.1 hot-fix)
 
-1. **`agents/*.md` cleanup** — 4 files still mention "orchestrator" (Item 10 was light-touch). Template loading verified working; cosmetic cleanup deferred. Fold into v2.5 (when agents/*.md gets new model-resolution metadata anyway).
+1. **`agents/*.md` cleanup** — 4 files still mention "orchestrator" (Item 10 was light-touch). Template loading verified working; cosmetic cleanup deferred. Fold into v2.3 (when agents/*.md gets new model-resolution metadata anyway).
 2. **`pipelines/` symlink in `~/.claude/`** — pointed at deleted `repo/pipelines/`. Removed during v2 post-flight. New installs won't have this issue.
-3. **`pipeline-guard.sh` is a copy in `~/.claude/hooks/`** (not a symlink to repo). Means hook updates require manual sync. Consider symlinking in v2.5 (or document `ln -sf` in install script).
+3. **`pipeline-guard.sh` is a copy in `~/.claude/hooks/`** (not a symlink to repo). Means hook updates require manual sync. Consider symlinking in v2.3 (or document `ln -sf` in install script).
 4. **`set-phase-status.ts` coercion** — Item 7 spec named this file as a coercion site, but it has no integer args today. Left untouched.
 
-### Deliberately deferred from code review (track for v2.5+)
+### Deliberately deferred from code review (track for v2.3+)
 
 These were flagged in the v2 code review and consciously deferred — fix when their cost/benefit improves:
 
 1. **Sec sec005 — nested-project marker walk.** `find_marker_dir` takes the NEAREST `.mcp-managed`. No real leak (bypass marker reads from same dir as `.mcp-managed`), but documented edge case if user has nested projects with conflicting markers.
-2. **Perf I2 — `get-past-misses` reads whole `pipeline.jsonl`.** Fine at <5MB scale (~500KB per 1000 tasks). Convert to streaming tail-N when file grows. v2.5+ candidate.
+2. **Perf I2 — `get-past-misses` reads whole `pipeline.jsonl`.** Fine at <5MB scale (~500KB per 1000 tasks). Convert to streaming tail-N when file grows. v2.3+ candidate.
 3. **Challenger #8 — audit reads pipeline-state on every call.** 5-15ms on hot cache. Threading `task_id` through 20 tool signatures was not justified at v2. Revisit when audit becomes a hot path (P3 team-scale era).
 
 ### Code quality follow-ups from architecture review
 
-The v2 codebase passes all functional acceptance criteria (180 tests green, 94% line coverage, grep-gate clean) but a post-shipping architecture review surfaced refinement opportunities. None are blocking; each is a bounded improvement that raises the bar without rewriting anything. Group them as a **v2.1 code-polish round** before starting v2.5.
+The v2 codebase passes all functional acceptance criteria (180 tests green, 94% line coverage, grep-gate clean) but a post-shipping architecture review surfaced refinement opportunities. None are blocking; each is a bounded improvement that raises the bar without rewriting anything. Group them as a **v2.1 code-polish round** before starting v2.3.
 
 | # | Issue | Effort | Where |
 |---|-------|--------|-------|
@@ -60,7 +69,7 @@ The v2 codebase passes all functional acceptance criteria (180 tests green, 94% 
 | Q5 | **CI threshold for test:source ratio.** Currently 76% (3535 test : 4654 source). Add a `pnpm metrics:ratio` check that fails if ratio drops below 60%. Prevents regression as the codebase grows. | ~0.5 day | `scripts/test-source-ratio.ts` + GitHub Actions step. |
 | Q6 | **Single source of truth for agent output examples.** Each `agents/*.md` currently inlines a 30-50-line JSON example template; structurally identical across 14 reviewer/validator agents. Schema-validation already enforces correctness — the duplication is cosmetic but high-maintenance (schema change → 14 file edits). Consolidate: each agent's "Output" section becomes a 5-line reference to `templates/agent-output-formats.md` (canonical structure) + the agent-specific category list (kept inline — LLM-friendly). Saves ~500 lines total; eliminates drift risk on field ordering / placeholder strings. **Defer triggers:** before adding any new reviewer/validator agent, OR if real-use validation surfaces multiple `schema validation failed` MCP errors from agent output (indicates drift hurting production). | ~1-2h | All 14 reviewer/validator `agents/*.md` files; verify `templates/agent-output-formats.md` is the canonical reference. |
 
-**Total effort: ~5-6 days. Bundle as a v2.1 code-polish PR before v2.5 kicks off.**
+**Total effort: ~5-6 days. Bundle as a v2.1 code-polish PR before v2.3 kicks off.**
 
 ### Validation-driven v2.1 backlog (real-task findings)
 
@@ -77,10 +86,10 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q13 | 🟢 LOW | **`.mcp-bypass-allowed` orphan after `/done`.** Cleanup list in `commands/done.md` doesn't include this filename. Required separate `rm`. Fix: add to cleanup list OR ensure `pipeline_relock_writes` auto-deletes the marker. Likely subsumed by Q12 implementation. **Subsumed by Q12** — `pipeline_relock_writes` already `unlink`s the marker (verified in `mcp/src/tools/unlock-writes.ts:pipelineRelockWrites`); the Q12 fix wires `/done` step 5 to call it on the way out, so the orphan can't happen anymore. The cleanup file list still names `.mcp-bypass-allowed` defensively in case relock is ever skipped. | ~10min | `commands/done.md` cleanup file list. | t-2026-05-13-gwarchspec |
 | Q14 | 🟢 LOW | **`mcp-audit.jsonl` regenerates during `/done` cleanup (267-byte stub orphan).** Every MCP call during cleanup itself (unlock/relock/finish) re-appends to the project-local audit jsonl. Deleting it early in cleanup → subsequent MCP calls re-create the file. Fix: delete `mcp-audit.jsonl` LAST after all MCP calls done, OR have a `pipeline_done_cleanup` MCP tool (Q12) do file deletion atomically without re-emitting audit until after. | ~30min | Same as Q12 — bundled fix. | t-2026-05-13-gwarchspec |
 | Q15 | 🟡 MEDIUM | **No clean recovery primitive for malformed `task_id`.** Q7 prevents the bug at init; this addresses the case where it slips through. Currently recovery requires: `pipeline_unlock_writes` → `python3` JSON-edit hack → `pipeline_relock_writes` → re-`pipeline_finish` (4 manual steps). Add `pipeline_fix_task_id({project_dir, new_task_id, reason})` MCP tool: validates new id against schema, mutates state under lock, audits the change. **Fixed: v2.1-hotfix Q15** — new `mcp/src/tools/fix-task-id.ts`, registered as the 20th MCP tool. Uses `withStateLock`, regenerates summary, rejects bad new_task_id / too-short reason. 5 unit tests in `test/tools/fix-task-id.test.ts`. `commands/done.md` Recovery section now points operators to it. | ~1h | New `mcp/src/tools/fix-task-id.ts` + register in `server.ts`. | t-2026-05-13-gwarchspec |
-| Q37 | 🟡 MEDIUM | **`pipeline.jsonl` metrics row carries `stack: null` despite `pipeline-state.stack` being populated.** Real-task `t-2026-05-14-contextreadfirstinth` post-`/done` row: `stack: null` even though `pipeline-state.stack` had `{language:"typescript", package_manager:"pnpm", ...}` populated by Q17 fix. `pipeline_finish` extraction in `mcp/src/tools/finish.ts` doesn't copy `state.stack` to the metrics row. **Effect:** `/learn` cross-stack aggregation impossible — cannot answer *"reviewer-X miss-rate broken down by language"* or *"frontend tasks vs backend tasks: complexity distribution"*. v2.7 cost-aware routing needs historical stack data to learn routing decisions per language. Same shape as the Q22 family — Q22 fix the in-state→in-row threading for `tests_mode` / `impl_iters` / `acceptance_first_pass`, but missed `stack`. **Fix:** in `extractMetricsRow` (or equivalent), copy `state.stack` directly into the row's `stack` field. ~5 LOC + 1 unit test. | ~30min | `mcp/src/tools/finish.ts` + `mcp/test/tools/finish.test.ts`. | t-2026-05-14-contextreadfirstinth post-/done |
+| Q37 | 🟡 MEDIUM | **`pipeline.jsonl` metrics row carries `stack: null` despite `pipeline-state.stack` being populated.** Real-task `t-2026-05-14-contextreadfirstinth` post-`/done` row: `stack: null` even though `pipeline-state.stack` had `{language:"typescript", package_manager:"pnpm", ...}` populated by Q17 fix. `pipeline_finish` extraction in `mcp/src/tools/finish.ts` doesn't copy `state.stack` to the metrics row. **Effect:** `/learn` cross-stack aggregation impossible — cannot answer *"reviewer-X miss-rate broken down by language"* or *"frontend tasks vs backend tasks: complexity distribution"*. v2.5 cost-aware routing needs historical stack data to learn routing decisions per language. Same shape as the Q22 family — Q22 fix the in-state→in-row threading for `tests_mode` / `impl_iters` / `acceptance_first_pass`, but missed `stack`. **Fix:** in `extractMetricsRow` (or equivalent), copy `state.stack` directly into the row's `stack` field. ~5 LOC + 1 unit test. | ~30min | `mcp/src/tools/finish.ts` + `mcp/test/tools/finish.test.ts`. | t-2026-05-14-contextreadfirstinth post-/done |
 | Q36 | 🟢 LOW | **Stop hook scary message after Gate 2 acceptance** (now fixed in v2.1-polish-bundle). After user accepted Gate 2 but before `/done` ran, the Stop hook treated this state identically to "in flight no progress" and emitted *"Pipeline is in flight at step STEP 1 with verdict=null. Run /done..."* — alarming wording that suggested the user broke something. Reality: task is approved, only `/done` finalization pending. Q24 covered the silent-at-gate case; Q36 covers the positive-message-after-accept case. **Fixed: v2.1-polish-bundle Q36** — `hooks/pipeline-stop.sh` parses `gates.gate2`; when `verdict=null` + no `pending_user_answer` + `gate2 ∈ {"approved","accepted"}`, blocks with positive framing *"Task accepted at Gate 2 — one step left to finalize. Run /done..."* Data-loss prevention preserved; "you broke it" tone removed. 3 new vitest tests. | ~30min | `hooks/pipeline-stop.sh` + extend `mcp/test/hooks/pipeline-stop.test.ts`. | t-2026-05-14-contextreadfirstinth |
 | Q34 | 🟢 LOW | **`phases.planning.grounding_check` field always `null` despite plan-grounding-check having run.** Real-task `t-2026-05-14-contextreadfirstinth` shows `phases.planning.grounding_check: null, grounding_mismatches: 0`, yet `reviewer_verdicts[]` contains plan-grounding-check with `verdict: "GROUNDED", phase: "planning"`. The verdict was correctly recorded in the verdicts array, but the legacy per-phase summary field wasn't synced. Same class as Q31/Q32 — v1-era state fields not maintained by v2 driver. **Fix:** either populate `phases.planning.grounding_check` from the most-recent grounding-check verdict (1-line in `pipeline_record_agent_run`), or deprecate from schema (cleaner — `reviewer_verdicts[]` is the source of truth). Recommend deprecation as part of Q35 schema hygiene. | ~15min | `templates/schemas/pipeline-state.schema.json` — remove field OR `mcp/src/tools/record-agent-run.ts` — populate. | t-2026-05-14-contextreadfirstinth |
-| Q33 | 🟡 MEDIUM | **`state.files.created` and `state.files.modified` arrays always empty.** Real-task run had real git diff (2 files modified: `docs/ROADMAP.md` + `packages/module-contract/src/index.ts`), but `state.files = {created: [], modified: []}` post-implementation. Fields defined in schema, populated by v1 markdown-orchestrator, **never written by v2 driver**. **Effect:** `/learn` cross-task aggregation loses file-level signal — cannot answer *"which modules are touched most often?"*, *"which files have highest blocker rate?"*, *"what's the correlation between files and category-of-issues?"*. Directly affects v2.7 cost-aware routing — without file-level history, can't make data-driven decisions about which files need which reviewer fan-out. **Fix:** in the implementation phase (or in `pipeline_set_phase_status` when closing implementation), parse `git diff --name-status` (which the orchestrator already runs for `.claude/diff.txt` per Global Rule #10 — Q27) and persist into `state.files.created` (A status) / `state.files.modified` (M status). Add unit test asserting `state.files.modified` is non-empty after a synthetic implementation step that produced a diff. | ~1h | `mcp/src/driver/builtin/steps/` (implementation step or close-phase hook) + `mcp/src/tools/set-phase-status.ts` (optional) + test. | t-2026-05-14-contextreadfirstinth |
+| Q33 | 🟡 MEDIUM | **`state.files.created` and `state.files.modified` arrays always empty.** Real-task run had real git diff (2 files modified: `docs/ROADMAP.md` + `packages/module-contract/src/index.ts`), but `state.files = {created: [], modified: []}` post-implementation. Fields defined in schema, populated by v1 markdown-orchestrator, **never written by v2 driver**. **Effect:** `/learn` cross-task aggregation loses file-level signal — cannot answer *"which modules are touched most often?"*, *"which files have highest blocker rate?"*, *"what's the correlation between files and category-of-issues?"*. Directly affects v2.5 cost-aware routing — without file-level history, can't make data-driven decisions about which files need which reviewer fan-out. **Fix:** in the implementation phase (or in `pipeline_set_phase_status` when closing implementation), parse `git diff --name-status` (which the orchestrator already runs for `.claude/diff.txt` per Global Rule #10 — Q27) and persist into `state.files.created` (A status) / `state.files.modified` (M status). Add unit test asserting `state.files.modified` is non-empty after a synthetic implementation step that produced a diff. | ~1h | `mcp/src/driver/builtin/steps/` (implementation step or close-phase hook) + `mcp/src/tools/set-phase-status.ts` (optional) + test. | t-2026-05-14-contextreadfirstinth |
 | Q32 | 🟢 LOW | **`phases.validation.acceptance_first_pass: false` is a stale legacy field that Q22 bypassed.** Real-task run had acceptance iter1 with verdict PASS — derived `acceptance_first_pass` for metrics row correctly = `true` (Q22 fix), but the source field `phases.validation.acceptance_first_pass` remained `false` (initial template default). Q22 fix derives the value at extract time from `reviewer_verdicts[]` filter, bypassing the source field entirely. **Effect:** misleading when reading state directly (e.g. validate-pipeline skill, post-mortem inspection). **Fix:** either (a) keep field but populate it correctly when acceptance verdict lands (1-line addition in `pipeline_record_agent_run`); or (b) **preferred** — deprecate field, remove from schema, since Q22 derive-from-verdicts is the canonical path. Recommend (b) as part of Q35 schema hygiene. | ~15min | `templates/schemas/pipeline-state.schema.json` (remove field) OR `mcp/src/tools/record-agent-run.ts` (populate). | t-2026-05-14-contextreadfirstinth |
 | Q31 | 🟡 MEDIUM | **`phases.X.iterations` never increments — always 0 despite reviewer iterations happening.** Real-task run: `phases.planning.iterations = 0` and `phases.implementation.iterations = 0`, yet `reviewer_verdicts[]` clearly shows `logic-reviewer iteration: 1` in both phases. Same v1-legacy field that Q22 (metrics row `impl_iters`) sidestepped by deriving from `reviewer_verdicts[]` directly. **Effect:** post-mortem state inspection misleading (validate-pipeline, debugging); any external consumer reading the legacy field gets `0` instead of real iteration count. **Fix:** sync `phases.X.iterations` with `max(reviewer_verdicts[].iteration)` filtered by phase whenever `pipeline_record_agent_run` writes a verdict. Alternative: deprecate the field (same as Q32/Q34). Recommend population for now (cheap, observable) + deprecate as part of Q35 schema hygiene later. | ~30min | `mcp/src/tools/record-agent-run.ts` — recompute and write `phases.<phase>.iterations` on each verdict. | t-2026-05-14-contextreadfirstinth |
 | Q30 | 🟡 MEDIUM | **`refs_loaded` and `refs_dropped_due_to_cap` always empty across runs.** Real-task `t-2026-05-14-contextreadfirstinth` (TypeScript frontend project — s3-panel) produced `state.refs_loaded: []` and `state.refs_dropped_due_to_cap: []`. Per Global Rule #13 + `DecisionPlugin` `refs-to-load`, the driver is supposed to inject relevant reference files (`agents/references/*.md` — `perf-react.md`, `security-frontend.md`, etc.) into agent prompts based on detected stack + diff. **None did.** A frontend TS project should have at minimum injected `perf-react.md` + `security-frontend.md`. **Effect:** agents lack domain-specific knowledge baseline — reviewers don't know React-perf patterns, frontend-security gotchas, accessibility checklists. Same architectural class as Q27 (pre-review infrastructure missing). Likely root cause: `DecisionPlugin` `refs-to-load` exists in `mcp/src/driver/builtin/decisions/` but: (a) not registered in `loaders/builtins.ts`, OR (b) not invoked by any step in `builtin/flows/medium.ts`, OR (c) registered but its output isn't persisted to `state.refs_loaded`. **Bundles naturally with Q9 + Q27 into "v2.2-review-completeness"** — review surface needs fan-out (Q9) + supporting input files (Q27) + injected domain knowledge (Q30). | ~2-3h | `mcp/src/driver/builtin/decisions/refs-to-load.ts` + `loaders/builtins.ts` + `builtin/flows/{medium,complex}.ts` step wiring + persistence into `state.refs_loaded`. | t-2026-05-14-contextreadfirstinth |
@@ -88,13 +97,13 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q28 | 🟢 LOW | **`schema_version` missing in per-finding entries (Q21 extension).** Real-task run produced one `verdict:error` audit entry: `Agent header failed reviewer-output.schema.json validation: /findings/0: must have required property 'schema_version'`. Q21 added a "## Output constraints (hard validation)" bullet list to all reviewer/validator templates covering `summary_line` ≤100, `findings[].id` regex, `summary` ≤200 — but did not enforce the per-finding `schema_version` requirement. Agent forgot to set it, retry-recovered. **Fix:** extend the Q21 bullet list in all 13 reviewer/validator `agents/*.md` templates with a fourth rule: *"`findings[].schema_version`: required, value `'1.0'`"*. Also extend the inline JSON example to show `"schema_version": "1.0"` on a finding. Connects to Q21 (same prompt-engineering channel) and Q11 (this was the one `schema-validation` error_class entry in the run). | ~30min | All 13 `agents/*.md` reviewer/validator templates. | t-2026-05-14-contextreadfirstinth |
 | Q27 | 🟡 MEDIUM | **Pre-review infrastructure files missing — `diff.txt` / `caller-context.md` / `antipattern-candidates.md` / `past-misses-*.md` not generated.** Real-task `t-2026-05-14-contextreadfirstinth` (MEDIUM) had `.claude/` with NONE of the four documented pre-review artifacts present: (a) `.claude/diff.txt` per Global Rule #10 (file-pointer mode for diff-scoped review), (b) `.claude/caller-context.md` per Global Rule #19 (MEDIUM/COMPLEX caller-context expansion), (c) `.claude/antipattern-candidates.md` per Global Rule #16 (all complexities, grep CLAUDE.md "What NOT to Do" against diff), (d) `.claude/past-misses-*.md` per Global Rule #15 (cached at pipeline start, per reviewer agent). Confirmed via state: **`past_misses_applied: 0` for ALL 5 reviewer_verdicts** — past-misses injection isn't running at all. **Combined with Q9 (under-spawning):** the 1/5 reviewer that actually fires reviews **blind to 4 expected input files** — no diff scoping, no caller usage context, no anti-pattern signals, no historical-miss data. Reviewer is essentially context-free. **Real value of current review is well below the already-low Q9 baseline.** Probable root cause: HookPlugins for these artifacts not registered in `loaders/builtins.ts`, OR steps in `builtin/flows/medium.ts` don't include their emission, OR `applies_to` predicates skip them. Same class of bug as Q9 — review surface infrastructure not wired. **Top priority for v2.2 polish bundle alongside Q9** — fixing review-surface without fixing inputs is incomplete. | ~3-4h | `mcp/src/driver/builtin/hooks/` (verify load-past-misses, anti-pattern-grep, caller-context-expand exist + registered) + `mcp/src/driver/builtin/flows/medium.ts` (verify hook events are wired) + integration test that asserts the 4 files exist after implementation phase. | t-2026-05-14-contextreadfirstinth |
 | Q26 | 🟡 MEDIUM | **Q17 stack-detector ignores CLAUDE.md "Validation Commands" priority — returns wrong commands and wrong project_type.** Real-task run on s3-panel (which has explicit `Lint: pnpm -r lint`, `Test: pnpm -r test`, `Build: pnpm -r build` in CLAUDE.md) produced `state.stack = { language:"typescript", package_manager:"pnpm", test_command:"npm run test", lint_command:"npm run lint", build_command:"npm run build", project_type:"library" }`. Two distinct problems: **(a) priority chain violated** — Q17 spec said *"CLAUDE.md 'Validation Commands' wins over package.json scripts"*, but the detector skipped CLAUDE.md parsing and fell straight to package.json scripts (where it derived `npm run X` defaults instead of the actual `pnpm -r X` commands documented in CLAUDE.md). **(b) Monorepo classification wrong** — s3-panel root is a `pnpm-workspace.yaml` monorepo with `apps/`, `gateways/`, `modules/`, `packages/`. The detector at root saw no `next.config.*` / `vite.config.*` / `rsbuild.config.*` (those live in `apps/core/`) → fell back to `project_type:"library"`. Real classification: workspace root is **neither** `frontend-app` nor `library` — it's a monorepo with frontend-app inside. **Fix:** (a) restore CLAUDE.md parsing in `stack-detect.ts` — read `## Validation Commands` block, extract Lint/Test/Build lines, override package.json scripts; (b) for monorepo detection (presence of `pnpm-workspace.yaml` / `lerna.json` / `nx.json` / `turbo.json`), add a 4th `project_type` value (`"monorepo"`) OR walk one level deeper into `apps/*` and aggregate. Recommend (a) immediate; (b) defer until monorepo gains a real consumer signal. | ~1-2h | `mcp/src/driver/builtin/decisions/stack-detect.ts` — add CLAUDE.md parsing branch with priority over package.json; add unit test fixture mimicking s3-panel layout. | t-2026-05-14-contextreadfirstinth |
-| Q25 | 🟢 LOW | **Onboarding friction: Claude Code asks user to approve every Write to `<project>/.claude/*`.** Each `/task` run spawns agents that write 8-12 working artifacts under `<project>/.claude/` (`context-doc.md`, `plan.md`, `analyzer-claims.json`, `diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`, `reviews/<agent>-<iter>.md`, etc.). These are NOT in the guard hook's protected basename list (`hooks/pipeline-guard.sh:33`) — by design they are working artifacts, not state. **But** Claude Code's per-session permission system still asks the user to confirm each Write that hasn't been pre-approved in `<project>/.claude/settings.local.json`. Result: first-time pipeline users on a new project click "Yes" ~10 times per `/task`. **Fix options** (pick one or stack): (a) docs-only — add a section to `README.md` and `commands/task.md` recommending users add `{"permissions": {"allow": ["Write(.claude/**)"]}}` to `settings.local.json` before first run; (b) automation — `pipeline_init` MCP tool merges the rule into `settings.local.json` (carefully — don't clobber existing user rules); (c) bootstrap — `pipeline_install` setup-time tool (if such a thing lands in v2.5 daemon). **Recommendation:** ship (a) immediately (~30min), defer (b)/(c) until v2.5 when there's a coherent onboarding story. Connects to Q23 (server-side cleanup already side-steps this problem for `/done` — but spawn-phase Writes still hit it). Connects to Q24 (similar class: friction from CC ↔ pipeline integration that isn't a bug per se). **Defer for now** — file only, don't fix in v2.1-polish-bundle. | ~30min (option a) / ~2h (option b) | `README.md` + `commands/task.md` + optionally `mcp/src/tools/init.ts`. | v2.1-polish-bundle real-run (s3-panel, 2026-05-15) |
+| Q25 | 🟢 LOW | **Onboarding friction: Claude Code asks user to approve every Write to `<project>/.claude/*`.** Each `/task` run spawns agents that write 8-12 working artifacts under `<project>/.claude/` (`context-doc.md`, `plan.md`, `analyzer-claims.json`, `diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`, `reviews/<agent>-<iter>.md`, etc.). These are NOT in the guard hook's protected basename list (`hooks/pipeline-guard.sh:33`) — by design they are working artifacts, not state. **But** Claude Code's per-session permission system still asks the user to confirm each Write that hasn't been pre-approved in `<project>/.claude/settings.local.json`. Result: first-time pipeline users on a new project click "Yes" ~10 times per `/task`. **Fix options** (pick one or stack): (a) docs-only — add a section to `README.md` and `commands/task.md` recommending users add `{"permissions": {"allow": ["Write(.claude/**)"]}}` to `settings.local.json` before first run; (b) automation — `pipeline_init` MCP tool merges the rule into `settings.local.json` (carefully — don't clobber existing user rules); (c) bootstrap — `pipeline_install` setup-time tool (if such a thing lands in v2.3 daemon). **Recommendation:** ship (a) immediately (~30min), defer (b)/(c) until v2.3 when there's a coherent onboarding story. Connects to Q23 (server-side cleanup already side-steps this problem for `/done` — but spawn-phase Writes still hit it). Connects to Q24 (similar class: friction from CC ↔ pipeline integration that isn't a bug per se). **Defer for now** — file only, don't fix in v2.1-polish-bundle. | ~30min (option a) / ~2h (option b) | `README.md` + `commands/task.md` + optionally `mcp/src/tools/init.ts`. | v2.1-polish-bundle real-run (s3-panel, 2026-05-15) |
 | Q24 | 🟡 MEDIUM | **Stop hook falsely warns "Pipeline is in flight" at every gate pause.** `hooks/pipeline-stop.sh:42-52` blocks Stop whenever `pipeline-state.verdict=null`, without checking `driver-state.pending_user_answer` — which marks legitimate gate-pauses awaiting user input (Gate 0/1/2). User sees scary `decision: "block"` payload text *"Pipeline is in flight at step \"STEP 1\" with verdict=null. Run /done to finalize..."* on every gate question. Made worse by **Q10 recurrence** (`current_step` stale → message reads "STEP 1" even when `step_index=3`). Surfaced during `v2.1-polish-bundle` real-run validation on s3-panel. **Fixed: v2.1-polish-bundle Q24** — `hooks/pipeline-stop.sh` reads `driver-state.json:pending_user_answer`; Case 2 block guard becomes `if [ -z "$verdict" ] && [ -z "$pending_user_answer" ]`. 6 vitest tests in `mcp/test/hooks/pipeline-stop.test.ts` cover: in-flight no-pause → blocks, paused-at-gate → silent (Q24 happy path), missing driver-state → blocks (degraded-safe), completed task → silent, stop_hook_active → stderr fallback, agents_count=0 violation → stderr. | ~30min | `hooks/pipeline-stop.sh` — add driver-state.pending_user_answer check before the block decision. | v2.1-polish-bundle real-run |
 | Q23 | 🟡 MEDIUM | **`/done` cleanup should go through a dedicated MCP tool, not Bash `rm` via guard-unlock window (supersedes Q12 Plan A; closes Q14).** Current Q12 fix kept cleanup in `commands/done.md` markdown: `pipeline_unlock_writes` (300s bypass window) → `Bash rm -f .claude/...` → `pipeline_relock_writes`. Real `/done` run on `t-2026-05-14-workingdirectoryuser` confirmed three correlated issues: (a) user-visible `Bash(rm -f ...)` invocation contradicts guard-hook design (we exist to *prevent* raw writes, then open a window to do raw writes anyway); (b) **Q14 recurrence verified** — 267-byte `mcp-audit.jsonl` stub left after cleanup because `pipeline_relock_writes` audits itself AFTER `rm` deleted the file; (c) cleanup file-list lives in markdown and will drift from server-side reality as new state files are added. **Original Q12 spec acknowledged Plan B (`pipeline_done_cleanup({project_dir})`) as "preferred" but deferred for ship velocity.** Plan B implementation: server-side atomic delete of all known state files; `mcp-audit.jsonl` deleted LAST after all internal logging; no guard bypass needed (MCP-internal op). Shrinks `commands/done.md` cleanup block to ~5 lines (single MCP call). Closes Q14 automatically. | ~2-3h | New `mcp/src/tools/done-cleanup.ts` + register in `server.ts` + revise `commands/done.md` to call it + remove the unlock/relock dance from cleanup step. Update `mcp/README.md` tool count (21st tool). | t-2026-05-14-workingdirectoryuser |
 | Q22 | 🟡 MEDIUM | **`pipeline.jsonl` metrics row has null/wrong fields after `pipeline_finish`.** Post-`/done` inspection of the row written for `t-2026-05-14-workingdirectoryuser`: `tests_mode: null` (should be `"regression-only"` — auto-detected at `/task` time), `impl_iters: 0` (should be `≥1` — logic-reviewer ran iter1 REQUEST_CHANGES → iter2 APPROVE = 1 revision happened), `acceptance_first_pass: false` (semantically confusing — acceptance ran ONCE with PASS verdict; the `false` likely encodes "code review needed iteration" but the field name implies acceptance itself failed). `gate1_revisions: 0` is a known Q8 recurrence (gate state never mirrored). **Effect:** any cross-run aggregation by `tests_mode` distribution, average `impl_iters` per complexity, or `acceptance_first_pass` rate produces wrong numbers. Likely root cause: `pipeline_finish` mechanical extraction in `mcp/src/tools/finish.ts` either reads from un-maintained pipeline-state fields, OR the extraction logic is bugged (e.g., `impl_iters` derivation doesn't count `reviewer_verdicts` iterations correctly). Need audit of `extractMetricsRow` (or equivalent) against the schema definitions in `templates/schemas/`. Possibly rename/clarify `acceptance_first_pass` semantics in the schema. | ~1-2h | `mcp/src/tools/finish.ts` extraction logic + `templates/schemas/pipeline.jsonl-row.schema.json` (if exists, else the inline schema in finish.ts) + unit test asserting row matches real run state. | t-2026-05-14-workingdirectoryuser |
 | Q21 | 🟡 MEDIUM | **Agents systematically violate output-header schema.** Real-task runs show recurring `Agent header failed validator/reviewer-output.schema.json validation` errors in `mcp-audit.jsonl`. Two concrete patterns seen across runs: (a) `summary_line` exceeds 100 char limit; (b) `findings[].id` does not match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$`; (c) `findings[].summary` exceeds 200 chars. Pipeline retry-recovers, but each retry wastes a Task-tool invocation and pollutes audit. Root cause: canonical output examples in `agents/*.md` either omit explicit constraint text, or the examples themselves don't visibly violate the constraint, so the LLM has no signal that 100 chars is a hard limit. **Two-prong fix:** (a) revise agent prompt templates so the inline example shows a deliberately-truncated `summary_line` and a regex-valid `findings.id`; (b) consider relaxing the schema if 100 chars proves too tight in practice (the constraint was set without empirical data). Connects to **Q6** (consolidate output examples to a single reference file) and **Q11** (error_class would mark these as `"agent-retry-recovered"` distinct from genuine failures). | ~1-2h | `agents/*.md` (14 reviewer/validator templates) + optionally `templates/schemas/{reviewer,validator}-output.schema.json`. | t-2026-05-14-workingdirectoryuser |
 | Q20 | 🟢 LOW | **`reviewer_verdicts[].phase` field missing from pipeline-state.** Real-task `pipeline-state.json.reviewer_verdicts[]` entries carry `{agent, iteration, verdict, blocking_issues, non_blocking, past_misses_applied, past_miss_matches, categories_seen}` — **no `phase` field**. Same agent can run in multiple phases (e.g. logic-reviewer runs in `planning` for plan review and again in `implementation` for code review); the two verdicts become indistinguishable without external timestamp correlation. Affects observability and post-hoc analysis (e.g. "which phase caused the longest review loop?"). **Fix:** add `phase: Phase` to `templates/schemas/pipeline-state.schema.json` `reviewer_verdicts` item shape; populate from `pipeline_record_agent_run` (the call site already knows the phase). 1-line schema change + 1-line tool change + regression test. | ~30min | `templates/schemas/pipeline-state.schema.json` + `mcp/src/tools/record-agent-run.ts` + test. | t-2026-05-14-workingdirectoryuser |
-| Q19 | 🟡 MEDIUM | **`open_spawns[].model` always `null`.** Real-task `pipeline-state.json` shows every entry in `phases.<phase>.open_spawns[]` with `"model": null` (e.g. `{id: "ar-...", agent: "implementer", model: null, started_at: "..."}`). Root cause traced: `SpawnRecorder` type signature in `mcp/src/driver/core/fsm.ts:28-32` only accepts `{project_dir, phase, agent}` — no `model` field. `mcpSpawnRecorder` in `mcp/src/driver/tools/run-task.ts:33-40` calls `pipelineBeginAgent` without a `model` argument, and `pipelineBeginAgent` (`mcp/src/tools/begin-agent.ts:54`) defaults `model: input.model ?? null`. The model resolved by `resolveAgentModel(plugin, phase, config)` somewhere upstream is dropped on the floor before reaching the open_spawn record. **Effect:** post-hoc cost analysis impossible (which model ran which spawn); audit trail loses model info; v2.7 cost-aware routing has no historical data to learn from; `pipeline.jsonl` metrics row carries useless per-spawn model data. **Fix scope ~1h:** (a) extend `SpawnRecorder` signature with `model?: "haiku" \| "sonnet" \| "opus" \| null`; (b) thread `resolveAgentModel(...)` result through the spawn step call site (likely `mcp/src/driver/builtin/steps/index.ts` `spawn`/`review` steps); (c) `mcpSpawnRecorder` forwards model to `pipelineBeginAgent`. Add unit test asserting `open_spawn.model` equals resolved value (not null) for each complexity level. | ~1h | `mcp/src/driver/core/fsm.ts` + `mcp/src/driver/tools/run-task.ts` + `mcp/src/driver/builtin/steps/index.ts` + test. | t-2026-05-14 real-task run |
+| Q19 | 🟡 MEDIUM | **`open_spawns[].model` always `null`.** Real-task `pipeline-state.json` shows every entry in `phases.<phase>.open_spawns[]` with `"model": null` (e.g. `{id: "ar-...", agent: "implementer", model: null, started_at: "..."}`). Root cause traced: `SpawnRecorder` type signature in `mcp/src/driver/core/fsm.ts:28-32` only accepts `{project_dir, phase, agent}` — no `model` field. `mcpSpawnRecorder` in `mcp/src/driver/tools/run-task.ts:33-40` calls `pipelineBeginAgent` without a `model` argument, and `pipelineBeginAgent` (`mcp/src/tools/begin-agent.ts:54`) defaults `model: input.model ?? null`. The model resolved by `resolveAgentModel(plugin, phase, config)` somewhere upstream is dropped on the floor before reaching the open_spawn record. **Effect:** post-hoc cost analysis impossible (which model ran which spawn); audit trail loses model info; v2.5 cost-aware routing has no historical data to learn from; `pipeline.jsonl` metrics row carries useless per-spawn model data. **Fix scope ~1h:** (a) extend `SpawnRecorder` signature with `model?: "haiku" \| "sonnet" \| "opus" \| null`; (b) thread `resolveAgentModel(...)` result through the spawn step call site (likely `mcp/src/driver/builtin/steps/index.ts` `spawn`/`review` steps); (c) `mcpSpawnRecorder` forwards model to `pipelineBeginAgent`. Add unit test asserting `open_spawn.model` equals resolved value (not null) for each complexity level. | ~1h | `mcp/src/driver/core/fsm.ts` + `mcp/src/driver/tools/run-task.ts` + `mcp/src/driver/builtin/steps/index.ts` + test. | t-2026-05-14 real-task run |
 | Q16 | 🔴 **CRITICAL** | **`subagent_type` mismatch breaks spawning for non-builtin agent names.** Driver returns `claude_code_task.subagent_type: "<agent name>"` (e.g. `"code-analyzer"`), but Claude Code's `Task` tool only accepts its own internal subagent_types: `general-purpose`, `Explore`, `Plan`, `runtime-debug-agent`, `test-all-agent`, `fe-test-all-agent`, `statusline-setup`, `claude-code-guide`. Error: `Agent type 'code-analyzer' not found`. **Per v2 design intent**, `subagent_type` should always be `"general-purpose"` (or detected from Claude Code's catalog), and the actual AgentPlugin role/template should be embedded in the `prompt` text. Currently this mapping is wrong somewhere — most likely `ShuttleSpawnProvider` or a step using `agent.name` as `subagent_type`. Blocks spawn for any agent whose name isn't accidentally a Claude Code subagent_type (= most of them). **HIGHEST PRIORITY v2.1 fix — without it, ~90% of pipeline tasks will fail at context-enrichment phase.** **Fixed: v2.1-hotfix Q16** — `shuttle-provider.ts` now pins `subagent_type="general-purpose"`, reads the AgentPlugin's `template_path` and embeds it (plus a self-id header + spawn context) into the Task tool prompt. `AgentSpawnRequest.template_path` added so non-shuttle providers can do the same. 5 unit tests in `test/driver/builtin/spawn/shuttle-provider.test.ts`. | ~1-2h | `mcp/src/driver/builtin/spawn/shuttle-provider.ts` — force `subagent_type: "general-purpose"` always; ensure prompt contains the agent template content + role context. Add unit test asserting subagent_type is one of CC's accepted values. | t-2026-05-14-...-blocked |
 
 ### Validation-driven backlog status (post v2.1-hotfix)
@@ -121,7 +130,7 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q11 | 🟢 LOW | ✓ fixed (v2.1-polish-bundle) | Audit `error_class` field for verdict=error categorization. Done in v2.1-polish-bundle: `AuditEntry` carries optional `error_class: "swallowed-inv" \| "retry-recovered" \| "schema-validation" \| "vocab-rejected" \| "genuine-failure"`. `withAudit` auto-classifies thrown errors by message regex; `record-agent-run` explicitly emits `retry-recovered` when the lenient JSON parser repairs the header. 7 new tests covering the classifier + round-trip + auto-classification. |
 | Q14 | 🟢 LOW | ✓ subsumed by Q23 (v2.1-polish-bundle) | `mcp-audit.jsonl` regenerates during `/done` cleanup. May be subsumed by Q12 — verify on next real-task run. **Closed by Q23 in v2.1-polish-bundle:** `pipeline_done_cleanup` deletes `mcp-audit.jsonl` LAST, and is registered without `withAudit` so no post-impl audit entry can re-create the file. |
 | Q17 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | **`pipeline-state.json:stack` never populated.** After every `/task` run, `state.stack` shows all `null`/`"unknown"` for `language`/`package_manager`/`test_command`/`lint_command`/`build_command`/`project_type`. `pipeline_init` accepts a `stack` param (verified in `smoke.ts` fixture) but the driver entry (`mcp/src/driver/tools/run-task.ts`) doesn't run stack-detection pre-flight and calls `pipeline_init` without it. The `classify` step / `decisions/tests-mode.ts` do partial detection (frontend vs backend) but don't write back to `state.stack`. **Effect:** agents receive `project_stack` as all-null context → reference files like `perf-react.md` rely on indirect indicators; `pipeline.jsonl` metrics row carries useless stack data for cross-stack `/learn` drift analysis. **Fix scope ~2-4h:** add stack-detection helper (`mcp/src/driver/builtin/decisions/stack-detect.ts` reading CLAUDE.md "Validation Commands" + `package.json`/`pyproject.toml`/`pubspec.yaml`/etc.); call it in driver run-task before `pipeline_init`; OR add `pipeline_set_stack` MCP tool + classify step. Done in v2.1-polish-bundle: `mcp/src/driver/builtin/decisions/stack-detect.ts` inspects CLAUDE.md "Validation Commands", `package.json` (Node/JS/TS), `pyproject.toml` (Python), `pubspec.yaml`, `Cargo.toml`, `go.mod`. Project type detected via `next.config.*`/`vite.config.*`/`angular.json` or `dependencies` (next/react-dom → frontend-app, @nestjs/core/fastify/express → backend). `pipelineRunTask` calls it before `pipeline_init` when no explicit `stack` was passed. `pipeline_set_stack` was intentionally skipped to keep Q23's 21-tool milestone clean — manual override stays through `pipeline_unlock_writes` + JSON edit. 8 unit tests covering Node, Python, Rust, Go, CLAUDE.md override, empty dir, nest backend, monorepo fixture. |
-| Q19 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | **`open_spawns[].model` always `null`.** `SpawnRecorder` signature drops the resolved model before it reaches `pipeline_begin_agent`. Blocks cost analysis + v2.7 historical training data. Fix: extend `SpawnRecorder` type with `model?` field; thread `resolveAgentModel` result through. Done in v2.1-polish-bundle: `SpawnRecorder` + `StepContext.beginSpawn` + `state.pending_spawns` carry `model`; `mcpSpawnRecorder` forwards it to `pipeline_begin_agent`. 5 new tests in `begin-agent.test.ts` and `driver/core/spawn-recorder-model.test.ts`. |
+| Q19 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | **`open_spawns[].model` always `null`.** `SpawnRecorder` signature drops the resolved model before it reaches `pipeline_begin_agent`. Blocks cost analysis + v2.5 historical training data. Fix: extend `SpawnRecorder` type with `model?` field; thread `resolveAgentModel` result through. Done in v2.1-polish-bundle: `SpawnRecorder` + `StepContext.beginSpawn` + `state.pending_spawns` carry `model`; `mcpSpawnRecorder` forwards it to `pipeline_begin_agent`. 5 new tests in `begin-agent.test.ts` and `driver/core/spawn-recorder-model.test.ts`. |
 | Q20 | 🟢 LOW | ✓ fixed (v2.1-polish-bundle) | **`reviewer_verdicts[].phase` field missing.** Same agent can run in multiple phases; verdicts indistinguishable without external timestamp correlation. Add `phase` field to schema + record-agent-run tool. Done in v2.1-polish-bundle: optional `phase` (enum of Phase) added to `templates/schemas/pipeline-state.schema.json:reviewer_verdicts.items.properties`; `pipelineRecordAgentRun` writes `input.phase` onto every appended verdict. Backward-compatible (legacy entries without `phase` still validate). |
 | Q21 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | **Agents systematically violate output-header schema** (`summary_line` >100 chars, `findings.id` wrong pattern). Retry-recovered but wastes calls + pollutes audit. Fix: revise agent prompt examples to show constraint-respecting templates; optionally relax schema if 100 chars too tight. Done in v2.1-polish-bundle: all 13 reviewer/validator templates now end with a "## Output constraints (hard validation)" bullet list naming the three rules (`summary_line` ≤100, `findings[].id` regex with example, `summary` ≤200). 18 schema-validation tests in `mcp/test/agents/output-constraints.test.ts` cover boundary cases (100/101 chars) and bad id shape. **Prong B not exercised** — schemas left at 100/200 limits per risk register; only re-evaluate if next validation run still shows retries on natural prose. |
 | Q22 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | **Metrics row in `pipeline.jsonl` has null/wrong fields** after `pipeline_finish`. `tests_mode=null`, `impl_iters=0` despite 1 revision happened, `acceptance_first_pass` semantics confusing. Cross-run aggregation broken. Fix: audit `extractMetricsRow` in `mcp/src/tools/finish.ts`. Done in v2.1-polish-bundle: row now carries `tests_mode` from `state.tests_mode`; `impl_iters` and `plan_iters` come from `max(iteration)` over `reviewer_verdicts` filtered by Q20 `phase` field (with `phases.<x>.iterations` as legacy fallback); `acceptance_first_pass` derives from iter-1 acceptance verdict (PASS/FAIL) instead of an unmaintained `phases.validation.acceptance_first_pass` flag. Reviewer-verdicts in the row also include `phase`. 4 new tests in `finish.test.ts`. |
@@ -134,7 +143,7 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 | Q30 | 🟡 MEDIUM | open | **`refs_loaded` always empty.** `DecisionPlugin` refs-to-load not wired/persisting — agents missing domain-specific knowledge (perf-react.md, security-frontend.md). Bundle with Q9 + Q27 into "v2.2-review-completeness". |
 | Q31 | 🟡 MEDIUM | ✓ fixed (v2.2-clear-bundle) | **`phases.X.iterations` never increments.** Legacy field unmaintained; reviewer_verdicts[].iteration is correct but phase-level summary stays at 0. Fix by sync OR deprecate (Q35). |
 | Q32 | 🟢 LOW | ✓ fixed (v2.2-clear-bundle) | **`phases.validation.acceptance_first_pass` stale.** Q22 bypassed this field by deriving from reviewer_verdicts. Source field still `false` despite acceptance PASS. Either populate or deprecate (Q35). |
-| Q33 | 🟡 MEDIUM | ✓ fixed (v2.2-clear-bundle) | **`state.files.created/modified` never populated.** Schema has fields, v1 wrote them, v2 driver doesn't. /learn loses file-level signal. Affects v2.7 cost-aware routing data. |
+| Q33 | 🟡 MEDIUM | ✓ fixed (v2.2-clear-bundle) | **`state.files.created/modified` never populated.** Schema has fields, v1 wrote them, v2 driver doesn't. /learn loses file-level signal. Affects v2.5 cost-aware routing data. |
 | Q34 | 🟢 LOW | ✓ fixed (v2.2-clear-bundle) | **`phases.planning.grounding_check: null`** despite plan-grounding-check having run with verdict GROUNDED. Legacy field not synced. Deprecate (Q35). |
 | Q36 | 🟢 LOW | ✓ fixed (v2.1-polish-bundle) | **Stop hook scary message after Gate 2 accept** — treated post-accept state as "in flight". Now: positive framing *"Task accepted at Gate 2 — one step left to finalize"*. Data-loss prevention preserved. |
 | Q37 | 🟡 MEDIUM | ✓ fixed (v2.2-clear-bundle) | **`pipeline.jsonl` metrics row has `stack: null`** despite Q17 populating `pipeline-state.stack`. `pipeline_finish` extraction doesn't copy state.stack into row. Same shape as Q22 family — Q22 fix missed this field. ~30min fix in `tools/finish.ts`. |
@@ -226,7 +235,7 @@ The roadmap below addresses these gaps in order of leverage.
 
 ---
 
-## Phase v2.5 — Daemon + Web UI + Multi-provider foundation
+## Phase v2.3 — Daemon + Web UI + Multi-provider foundation
 
 **Prerequisite:** v2 shipped (confirmed at commit `95f3f90`).
 **Goal:** turn the in-process MCP-tool driver into a **long-running daemon** with HTTP API + minimal Web UI for configuration. Add the first non-shuttle `SpawnProviderPlugin` (Anthropic SDK direct) so model selection becomes meaningful. Keep Claude Code as a first-class entry point.
@@ -235,7 +244,7 @@ This phase is the bridge from "personal tool used in a Claude Code chat" to "sel
 
 ### What's already in place from v2 (don't redo)
 
-These pieces were nudged into v2 ahead of time so v2.5 doesn't need rework:
+These pieces were nudged into v2 ahead of time so v2.3 doesn't need rework:
 
 - ✓ `ClaudePipelineConfig` type in `mcp/src/driver/types/config.ts` — the schema Web UI will edit.
 - ✓ `resolveAgentModel(plugin, phase, config)` cascade — phase passed explicitly (no template_path heuristic).
@@ -247,19 +256,19 @@ These pieces were nudged into v2 ahead of time so v2.5 doesn't need rework:
 - ✓ `pipeline_meta` MCP tool (Item 12) — Web UI can call this to discover protocol version + tool list.
 - ✓ `lib/ids.ts` consolidates id generators (don't write new ones; import).
 - ✓ `lib/audit.ts` is lock-safe + bounded + redacted in global stream.
-- ✓ `lib/project-dir.ts:assertProjectDirAllowed()` — **MUST be used by HTTP API in v2.5.3 for every incoming `project_dir`** (Web UI is a path-traversal vector otherwise).
+- ✓ `lib/project-dir.ts:assertProjectDirAllowed()` — **MUST be used by HTTP API in v2.3.3 for every incoming `project_dir`** (Web UI is a path-traversal vector otherwise).
 - ✓ Bypass marker is forgery-resistant (`issued_at + TTL cap` ≤ 3600s) — Web UI "Unlock writes" button calls existing `pipeline_unlock_writes`; do not reinvent the marker format.
 
-v2.5 builds **on top of** these; reuse them, don't reinvent.
+v2.3 builds **on top of** these; reuse them, don't reinvent.
 
 ### Security must-haves carried over from v2
 
 1. **HTTP API endpoints accepting `project_dir`** (POST /api/tasks, GET /api/tasks/:id, etc.): wrap every `project_dir` extraction through `assertProjectDirAllowed()` before passing to MCP tools. Without this, a malicious request can target paths outside the user's projects (e.g. `~/.ssh/`).
 2. **Web UI "Unlock writes" button**: bound TTL to the same 3600s max enforced by `pipeline_unlock_writes`. Don't bypass.
 3. **HTTP API task submission must use the SAME `mcpSpawnRecorder`** as MCP entry points — guarantees pipeline-state stays consistent regardless of which client submitted.
-4. **`INV_012` fires on both `completed` AND `skipped`** (review fix L3). If v2.5 adds gate-policy plugins that auto-skip phases, they MUST cancel open spawns first or hit this invariant.
+4. **`INV_012` fires on both `completed` AND `skipped`** (review fix L3). If v2.3 adds gate-policy plugins that auto-skip phases, they MUST cancel open spawns first or hit this invariant.
 
-### Target architecture after v2.5
+### Target architecture after v2.3
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -278,7 +287,7 @@ v2.5 builds **on top of** these; reuse them, don't reinvent.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### v2.5.1 — Daemon lifecycle
+### v2.3.1 — Daemon lifecycle
 
 - `claude-pipeline daemon start|stop|status|restart` CLI commands.
 - PID file in `~/.claude-pipeline/daemon.pid`, log file in `~/.claude-pipeline/daemon.log`.
@@ -288,7 +297,7 @@ v2.5 builds **on top of** these; reuse them, don't reinvent.
 
 **Effort:** ~1 day.
 
-### v2.5.2 — SQLite migration for queryable state
+### v2.3.2 — SQLite migration for queryable state
 
 JSONL is great for audit (append-only stream) but bad for "list my last 50 tasks". Migrate:
 
@@ -323,7 +332,7 @@ Driver consumes via `registry.state_store` — no direct DB knowledge.
 
 **Effort:** ~1-2 days.
 
-### v2.5.3 — HTTP API
+### v2.3.3 — HTTP API
 
 Fastify server inside the daemon, mounting:
 
@@ -348,7 +357,7 @@ OpenAPI spec auto-generated. All endpoints schema-validated via Zod (already a d
 
 **Effort:** ~1-2 days.
 
-### v2.5.4 — Multi-provider SpawnProviders (first batch)
+### v2.3.4 — Multi-provider SpawnProviders (first batch)
 
 Implement the second `SpawnProviderPlugin` so model selection becomes meaningful:
 
@@ -362,7 +371,7 @@ Driver behavior:
 
 **Effort:** ~2-3 days for SDK provider + ~1 day for subprocess provider.
 
-### v2.5.5 — Minimal Web UI
+### v2.3.5 — Minimal Web UI
 
 **Stack:** SvelteKit or Astro (single-binary friendly, builds to static assets, served by daemon's HTTP). Tailwind via CDN for fast iteration.
 
@@ -371,13 +380,13 @@ Driver behavior:
 1. **Settings** — global pipeline config (default models per phase, complexity heuristic overrides, gate policy, notification preferences).
 2. **Agents** — list of registered agents. Per-agent: provider dropdown, model dropdown (populated from provider capabilities), token/cost limit, timeout, enabled/disabled toggle.
 3. **Tasks** — submit form + recent tasks list. Click task → detail view with timeline, agent spawns, findings, audit trail, SSE-live updates while running.
-4. **Plugins** — list installed plugins with manifest, version, capabilities. Mostly read-only initially; enable/disable in v2.5 era; plugin marketplace in P2.
+4. **Plugins** — list installed plugins with manifest, version, capabilities. Mostly read-only initially; enable/disable in v2.3 era; plugin marketplace in P2.
 
 **Effort:** ~3-4 days.
 
-### v2.5.6 — Auto-mode gates + notifications
+### v2.3.6 — Auto-mode gates + notifications
 
-By default after v2.5, gates auto-approve in the daemon (HTTP-submitted tasks run unattended). Interactive gates remain for Claude Code chat flow.
+By default after v2.3, gates auto-approve in the daemon (HTTP-submitted tasks run unattended). Interactive gates remain for Claude Code chat flow.
 
 New plugin types:
 - **`GatePolicyPlugin`** (variants: `auto-approve`, `escalate-on-blocker`, `interactive`).
@@ -387,9 +396,9 @@ Per-task in submit form: choose gate policy + notification target.
 
 **Effort:** ~1-2 days.
 
-### v2.5.7 — Permission strategy for autonomous mode
+### v2.3.7 — Permission strategy for autonomous mode
 
-Claude Code asks the user for permission before running Bash commands, editing files, calling MCP tools, etc. In interactive `/task` flow this is fine — user clicks through. In autonomous (daemon-submitted) tasks there's nobody to click. v2.5 must offer mechanisms that don't block on permission prompts.
+Claude Code asks the user for permission before running Bash commands, editing files, calling MCP tools, etc. In interactive `/task` flow this is fine — user clicks through. In autonomous (daemon-submitted) tasks there's nobody to click. v2.3 must offer mechanisms that don't block on permission prompts.
 
 **Background.** Claude Code permission system:
 - `permissions.allow[]` in `~/.claude/settings.json` whitelists tools/commands.
@@ -403,7 +412,7 @@ Claude Code asks the user for permission before running Bash commands, editing f
 
 `ClaudeCodeSubprocessSpawnProvider` invokes `claude --dangerously-skip-permissions --output-format stream-json --verbose` per agent (ralphex pattern). Bypasses all permission prompts.
 
-**Why this is the default:** v2.6 makes Docker isolation the default execution environment for autonomous tasks. With the container as the blast-radius boundary, `--dangerously-skip-permissions` is safe — the agent can do whatever, but it can only do it inside the throwaway container. This combination = ralphex-grade autonomy + better isolation than ralphex (per-task containers vs ralphex's optional Docker wrapper).
+**Why this is the default:** v2.4 makes Docker isolation the default execution environment for autonomous tasks. With the container as the blast-radius boundary, `--dangerously-skip-permissions` is safe — the agent can do whatever, but it can only do it inside the throwaway container. This combination = ralphex-grade autonomy + better isolation than ralphex (per-task containers vs ralphex's optional Docker wrapper).
 
 **Pros:**
 - Uses existing Claude Code subscription (no separate API key).
@@ -415,7 +424,7 @@ Claude Code asks the user for permission before running Bash commands, editing f
 - Requires `claude` CLI installed in the daemon's environment / Docker image (already true for our daemon container).
 - "dangerously" is in the flag name — pair with Docker isolation always.
 
-**Effort:** ~1 day, slots into v2.5.4 work.
+**Effort:** ~1 day, slots into v2.3.4 work.
 
 #### Strategy A — Anthropic SDK direct (alternative for headless or API-first setups)
 
@@ -435,7 +444,7 @@ const response = await anthropic.messages.create({
 
 **Pros:** explicit tool surface, no Claude Code CLI dependency, separate Anthropic billing visibility, foundation for multi-model providers in P5.
 **Cons:** requires `ANTHROPIC_API_KEY`; separate billing from Claude Code subscription; agent tools must be defined explicitly (more work than just inheriting Claude Code's defaults).
-**Effort:** already counted in v2.5.4.
+**Effort:** already counted in v2.3.4.
 
 #### Strategy C — Pre-warmed allowlist + shuttle (alternative for paranoid users)
 
@@ -469,7 +478,7 @@ permission_strategy: {
 
 Web UI Settings page surfaces this as a radio choice per mode (autonomous/interactive) + per-agent override grid. The default values above are pre-selected; user can change but the safe defaults assume Docker isolation is on.
 
-### v2.5.8 — Branch isolation + merge strategy (worktree + auto-merge)
+### v2.3.8 — Branch isolation + merge strategy (worktree + auto-merge)
 
 Each autonomous task runs in a `git worktree` isolated from the main working tree:
 
@@ -614,7 +623,7 @@ This gives `/learn` data about which merge strategies users prefer + how often a
 **Cons:** worktree management adds complexity; merge conflicts on completion need handling (mitigated by dry-run + abort).
 **Effort:** ~3-4 days (worktree management ~1d, branch strategies ~1d, merge strategies + safety ~1-2d, UI controls ~0.5d).
 
-### v2.5 acceptance
+### v2.3 acceptance
 
 1. `claude-pipeline daemon start` runs the daemon; `status` shows uptime + plugin counts.
 2. `localhost:5173` (or chosen port) serves Web UI; Settings page reads and persists changes.
@@ -629,22 +638,22 @@ This gives `/learn` data about which merge strategies users prefer + how often a
 11. Same task submitted with `merge: no-merge`: completes successfully → task branch preserved, notification shows "Merge ready: `claude-pipeline/<task_id>`" with a CTA. No write to base branch.
 12. Auto-merge precondition guard works: deliberately break a test in a task with `auto-merge` selected → daemon detects failure, falls back to `no-merge`, notification explains "auto-merge blocked: tests not green".
 
-### v2.5 total effort
+### v2.3 total effort
 
-**~12-15 focused days of agent work** (or 2.5-3 weeks in comfortable pace with reviews). Could be 3-4 Claude Code sessions due to scope. Grew from earlier ~10-13 estimate after expanding v2.5.8 to cover full branch + merge strategy with auto-merge safety preconditions, audit logging, and UI controls.
+**~12-15 focused days of agent work** (or 2.5-3 weeks in comfortable pace with reviews). Could be 3-4 Claude Code sessions due to scope. Grew from earlier ~10-13 estimate after expanding v2.3.8 to cover full branch + merge strategy with auto-merge safety preconditions, audit logging, and UI controls.
 
-### Decision gates inside v2.5
+### Decision gates inside v2.3
 
-- After v2.5.1 (daemon): does the daemon model feel right? If not, can fall back to per-invocation Node process. Skip v2.5.2+ if user finds daemon too heavy.
-- After v2.5.4 (multi-provider): does provider switching actually help? If single provider (Claude Code) covers all needs, defer remaining providers indefinitely.
-- After v2.5.5 (Web UI MVP): is the UI actually used vs `/task` in chat? If chat covers 90% of use, treat Web UI as read-only history viewer and stop adding write features.
-- After v2.5.7 (permission strategy): which strategy gets the most use? If Strategy A dominates, can drop work on Strategy C.
+- After v2.3.1 (daemon): does the daemon model feel right? If not, can fall back to per-invocation Node process. Skip v2.3.2+ if user finds daemon too heavy.
+- After v2.3.4 (multi-provider): does provider switching actually help? If single provider (Claude Code) covers all needs, defer remaining providers indefinitely.
+- After v2.3.5 (Web UI MVP): is the UI actually used vs `/task` in chat? If chat covers 90% of use, treat Web UI as read-only history viewer and stop adding write features.
+- After v2.3.7 (permission strategy): which strategy gets the most use? If Strategy A dominates, can drop work on Strategy C.
 
 ---
 
-## Phase v2.6 — Container isolation + Docker distribution
+## Phase v2.4 — Container isolation + Docker distribution
 
-**Prerequisite:** v2.5 shipped (daemon + autonomous mode exist).
+**Prerequisite:** v2.3 shipped (daemon + autonomous mode exist).
 **Goal:** Docker isolation **is the default execution environment for autonomous tasks**, not opt-in. Ship daemon as Docker images. Per-task containers are spawned automatically. Combined with Strategy B (`--dangerously-skip-permissions` Claude Code subprocess), this gives ralphex-grade autonomy with stronger isolation than ralphex.
 
 **Design philosophy:** `--dangerously-skip-permissions` is safe ONLY because Docker is the cage. The two defaults reinforce each other:
@@ -655,7 +664,7 @@ Removing either one breaks the safety argument. Both must ship together as defau
 
 Interactive mode (Claude Code chat `/task`) does NOT change — user is in the loop, no isolation needed by default, shuttle provider with normal permissions still works.
 
-### v2.6.1 — Daemon-as-Docker-image
+### v2.4.1 — Daemon-as-Docker-image
 
 Build and publish Docker images:
 
@@ -684,7 +693,7 @@ Docker Compose template included in `examples/` for common setups (with traefik 
 
 **Effort:** ~2 days. Dockerfile + GitHub Actions workflow for builds on tag.
 
-### v2.6.2 — Per-task container isolation
+### v2.4.2 — Per-task container isolation
 
 Even when daemon runs on host, individual autonomous tasks can spawn in their own throwaway containers. New `ExecutionEnvironmentPlugin` (9th plugin type):
 
@@ -699,8 +708,8 @@ export interface ExecutionEnvironmentPlugin extends PluginMeta {
 Built-in implementations:
 
 - **`DockerContainerEnvironment`** (DEFAULT for autonomous tasks): spins up a fresh container per task. Volume-mounts a worktree as `/workspace`. Resource limits (CPU, memory) configurable. Network policy: default-deny outbound except `api.anthropic.com` + per-language package registries + git remotes. Container torn down after task finalizes (kept 60 min for inspection if task failed, configurable).
-- **`InPlaceEnvironment`** (DEFAULT for interactive Claude Code chat tasks): uses `<project>/.claude-pipeline/worktrees/<task_id>/` from v2.5.8. No container — just git worktree on the host. Fast, no filesystem isolation. Safe because user is in the loop.
-- **`FirecrackerEnvironment`** (P2 era — too heavy for v2.6): VM-level isolation. Skip for now.
+- **`InPlaceEnvironment`** (DEFAULT for interactive Claude Code chat tasks): uses `<project>/.claude-pipeline/worktrees/<task_id>/` from v2.3.8. No container — just git worktree on the host. Fast, no filesystem isolation. Safe because user is in the loop.
+- **`FirecrackerEnvironment`** (P2 era — too heavy for v2.4): VM-level isolation. Skip for now.
 
 Configuration with sane defaults:
 
@@ -735,7 +744,7 @@ Web UI Settings page exposes this but the defaults above are pre-selected. Chang
 
 **Effort:** ~3-4 days. Container lifecycle + network policy enforcement + volume mounts + cleanup.
 
-### v2.6.3 — Network policy
+### v2.4.3 — Network policy
 
 Tasks executing in `DockerContainerEnvironment` get a default-deny network policy with a small allowlist:
 
@@ -749,7 +758,7 @@ Implementation: Docker network in `bridge` mode + iptables rules inside containe
 
 **Effort:** ~2 days. Includes audit-log entries for each blocked egress attempt.
 
-### v2.6.4 — Volume-mount strategy
+### v2.4.4 — Volume-mount strategy
 
 Three tiers of access:
 
@@ -764,9 +773,9 @@ Tasks NEVER see arbitrary host filesystem. `~/.ssh` etc. invisible unless user e
 
 If a task needs files outside the worktree (e.g., shared design system in a sibling dir), user must mount it explicitly.
 
-**Effort:** ~1 day. Already mostly determined by the run script in v2.6.1; finalized here.
+**Effort:** ~1 day. Already mostly determined by the run script in v2.4.1; finalized here.
 
-### v2.6.5 — Resource limits + escape valves
+### v2.4.5 — Resource limits + escape valves
 
 Per-task limits, enforced at container level:
 
@@ -780,11 +789,11 @@ If a task hits any limit, daemon surfaces it via SSE + audit log + notification.
 
 **Effort:** ~1 day. Most of this is `docker run --cpus 1.0 --memory 2g` flags; some daemon-side enforcement for wall time.
 
-### v2.6 total effort
+### v2.4 total effort
 
 **~9-11 focused days.** Could be 2 Claude Code sessions.
 
-### v2.6 acceptance
+### v2.4 acceptance
 
 1. `docker run ghcr.io/<org>/claude-pipeline-ts` starts a working daemon; Web UI accessible on mapped port.
 2. **Autonomous tasks default to Docker container execution + Strategy B (subprocess-skip-permissions).** Verified: submit a task via HTTP without specifying environment → daemon spawns container + claude subprocess with skip-permissions → task completes → container torn down.
@@ -795,18 +804,18 @@ If a task hits any limit, daemon surfaces it via SSE + audit log + notification.
 7. `--keep-container` flag preserves container for inspection after failure.
 8. `ExecutionEnvironmentPlugin` is registered like other plugins; users can add custom environments without core changes.
 9. Docker Compose template in `examples/` works end-to-end (daemon + persistent SQLite + multi-project mount).
-10. Inside a v2.6 container, an agent doing `rm -rf /tmp/foo` only affects the container's `/tmp`, not the host (proves the isolation).
+10. Inside a v2.4 container, an agent doing `rm -rf /tmp/foo` only affects the container's `/tmp`, not the host (proves the isolation).
 
-### v2.6 decision gates
+### v2.4 decision gates
 
-- After v2.6.1 (daemon image): is anyone running the daemon-in-Docker? If only the author, the image is a distribution detail; per-task isolation (v2.6.2) is the main value.
-- After v2.6.2 (per-task isolation): does container startup add significant latency? If >30s per task, consider container reuse (pool of warm containers) — separate optimization.
+- After v2.4.1 (daemon image): is anyone running the daemon-in-Docker? If only the author, the image is a distribution detail; per-task isolation (v2.4.2) is the main value.
+- After v2.4.2 (per-task isolation): does container startup add significant latency? If >30s per task, consider container reuse (pool of warm containers) — separate optimization.
 
 ---
 
-## Phase v2.7 — Cost-aware multi-provider routing
+## Phase v2.5 — Cost-aware multi-provider routing
 
-**Prerequisite:** v2.6 shipped (daemon + Docker isolation + at least Strategy A/B SpawnProviders).
+**Prerequisite:** v2.4 shipped (daemon + Docker isolation + at least Strategy A/B SpawnProviders).
 **Goal:** make hybrid LLM routing economically viable. Premium models (Claude Opus/Sonnet) for quality-critical roles (planner, implementer, security). Cheap models (DeepSeek, Qwen via Ollama) for mechanical roles (style-reviewer, plan-conformance). Long-context models (Gemini 2.5 Pro) for diff-heavy roles (api-contract, ui-consistency). Cost tracking + budget caps so autonomous mode doesn't burn through money silently.
 
 This phase is what makes autonomous mode **sustainable**. ~4-10× cost reduction on typical MEDIUM tasks while preserving quality on critical agents.
@@ -822,9 +831,9 @@ Once the tool is autonomous, the bill comes fast:
 For a personal tool used 5-10x/week → $50-150/month savings.
 For any product use → the difference between viable and not.
 
-### v2.7.1 — Additional SpawnProviderPlugins
+### v2.5.1 — Additional SpawnProviderPlugins
 
-Ship 5 more providers beyond v2.5's Anthropic SDK + Claude Code subprocess:
+Ship 5 more providers beyond v2.3's Anthropic SDK + Claude Code subprocess:
 
 - **`OpenRouterSpawnProvider`** (RECOMMENDED for multi-provider users) — single API key, access to 200+ models (Anthropic, OpenAI, Google, DeepSeek, Mistral, Llama variants, etc.) via OpenAI-compatible API at `https://openrouter.ai/api/v1`. Eliminates need for separate provider integrations for 90% of users.
 - **`OpenAiSpawnProvider`** — GPT-5.x via OpenAI Responses API directly. For users with existing OpenAI credits or who want direct billing.
@@ -867,7 +876,7 @@ tiers: {
 
 **Effort:** ~3-4 days total. OpenRouter + OpenAI are essentially the same plugin (different baseURL); DeepSeek same again; only Gemini SDK and Ollama require unique code paths.
 
-### v2.7.2 — Tier abstraction + routing decision
+### v2.5.2 — Tier abstraction + routing decision
 
 New config schema (lives in `ClaudePipelineConfig.routing`):
 
@@ -956,9 +965,9 @@ agent_tiers: {
 
 **Effort:** ~2 days.
 
-### v2.7.3 — Cost tracking infrastructure
+### v2.5.3 — Cost tracking infrastructure
 
-Already partly added in v2.5.2 (SQLite `spawn_costs` and `task_budgets` tables). v2.7.3 wires them up:
+Already partly added in v2.3.2 (SQLite `spawn_costs` and `task_budgets` tables). v2.5.3 wires them up:
 
 **HookPlugin: `costTrackingHook`** (event=`after-agent-result`):
 - Receives spawn result with `usage: {input_tokens, output_tokens}` from the SpawnProvider.
@@ -979,7 +988,7 @@ Already partly added in v2.5.2 (SQLite `spawn_costs` and `task_budgets` tables).
 
 **Effort:** ~2 days.
 
-### v2.7.4 — Cost dashboard in Web UI
+### v2.5.4 — Cost dashboard in Web UI
 
 New Web UI section (`/costs`):
 
@@ -991,7 +1000,7 @@ New Web UI section (`/costs`):
 
 **Effort:** ~3-4 days.
 
-### v2.7.5 — Local model integration (Ollama)
+### v2.5.5 — Local model integration (Ollama)
 
 Special attention because local models have unique characteristics:
 
@@ -1000,13 +1009,13 @@ Special attention because local models have unique characteristics:
 - Detection: daemon polls `localhost:11434/api/tags` on startup, auto-populates available models in Web UI.
 - Fallback handling: if Ollama unreachable, fall back to `fallback_tier` (default: "cheap" → DeepSeek).
 
-**Effort:** ~2 days. Mostly UX polish on top of v2.7.1's `OllamaSpawnProvider`.
+**Effort:** ~2 days. Mostly UX polish on top of v2.5.1's `OllamaSpawnProvider`.
 
-### v2.7 total effort
+### v2.5 total effort
 
 **~10-13 days** focused work. Could be 2-3 Claude Code sessions.
 
-### v2.7 acceptance
+### v2.5 acceptance
 
 1. All 7 SpawnProvider plugins registered (`shuttle`, `claude-code-subprocess`, `anthropic-sdk`, `openrouter`, `openai-sdk`, `deepseek-sdk`, `gemini-sdk`, `ollama`).
 2. Tier abstraction works end-to-end: changing `agent_tiers.style-reviewer` from "cheap" to "balanced" in Web UI causes next spawn of `style-reviewer` to use Claude Sonnet via `anthropic-sdk` provider (verified in audit log).
@@ -1017,11 +1026,11 @@ Special attention because local models have unique characteristics:
 7. Provider fallback: take Ollama down mid-task → next spawn requiring "local" tier falls back to `fallback_tier` and continues.
 8. Cost dashboard shows ~80%+ correlation with actual provider billing (validated by cross-checking Anthropic console + DeepSeek dashboard at end of week).
 
-### v2.7 decision gates
+### v2.5 decision gates
 
-- After v2.7.1 (providers added): which providers does the user actually use? If only Anthropic + Ollama, defer OpenAI/Gemini work to P5 era.
-- After v2.7.2 (tier routing): does the default preset hold up in practice? Re-tune based on real cost data after 2-4 weeks.
-- After v2.7.5 (Ollama): is local model quality sufficient for "cheap" tier agents? If consistently producing junk findings, reroute "cheap" tier to DeepSeek cloud and demote local to opt-in only.
+- After v2.5.1 (providers added): which providers does the user actually use? If only Anthropic + Ollama, defer OpenAI/Gemini work to P5 era.
+- After v2.5.2 (tier routing): does the default preset hold up in practice? Re-tune based on real cost data after 2-4 weeks.
+- After v2.5.5 (Ollama): is local model quality sufficient for "cheap" tier agents? If consistently producing junk findings, reroute "cheap" tier to DeepSeek cloud and demote local to opt-in only.
 
 ---
 
@@ -1196,7 +1205,7 @@ export const manifest: PluginManifest = {
 
 ## Phase P5 — Editor integrations beyond Claude Code
 
-**Goal:** run from environments other than Claude Code chat. Multi-LLM provider support lives in v2.7 (shipped before this phase).
+**Goal:** run from environments other than Claude Code chat. Multi-LLM provider support lives in v2.5 (shipped before this phase).
 
 ### P5.1 — Editor integrations beyond Claude Code
 
@@ -1253,13 +1262,13 @@ Strict prerequisite order, but each phase is independently shippable:
 v2 hardening (specs/hardening-v2.md) ← currently being implemented
   │
   ▼
-v2.5 (daemon + Web UI + multi-provider basics)  ← week 1-3
+v2.3 (daemon + Web UI + multi-provider basics)  ← week 1-3
   │
   ▼
-v2.6 (Docker isolation, default for autonomous mode)  ← week 4-5
+v2.4 (Docker isolation, default for autonomous mode)  ← week 4-5
   │
   ▼
-v2.7 (cost-aware multi-provider routing + cost dashboard)  ← week 6-8
+v2.5 (cost-aware multi-provider routing + cost dashboard)  ← week 6-8
   │  ↑ critical for autonomous mode economics
   │
   ▼
@@ -1277,12 +1286,12 @@ P1 (open source + npm + docs site)  ← week 9-12; biggest external leverage
 ```
 
 **Total horizon:**
-- ~5-6 weeks to first usable autonomous mode with Web UI (v2.5).
-- ~10-12 weeks to a financially sustainable autonomous tool with cost controls (v2.7).
+- ~5-6 weeks to first usable autonomous mode with Web UI (v2.3).
+- ~10-12 weeks to a financially sustainable autonomous tool with cost controls (v2.5).
 - ~6 months to product with paying customers (P4).
 - ~3 months with one collaborator working in parallel.
 
-**Why v2.7 before P1:** going public (P1) with a tool that burns through API budget without controls = bad first impression + unhappy users. Cost-aware routing is what makes external adoption viable.
+**Why v2.5 before P1:** going public (P1) with a tool that burns through API budget without controls = bad first impression + unhappy users. Cost-aware routing is what makes external adoption viable.
 
 ---
 

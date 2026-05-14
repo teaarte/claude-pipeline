@@ -85,3 +85,9 @@ Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
 Verdict: `REQUEST_CHANGES` iff blocking; `WARN` iff only warn-level; `APPROVE` otherwise.
 
 Only flag things that will actually matter at realistic usage scale.
+
+## Output constraints (hard validation)
+
+- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
+- `findings[].summary`: ≤ 200 chars

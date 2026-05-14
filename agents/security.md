@@ -78,3 +78,9 @@ Verdict rules:
 - `APPROVE` otherwise.
 
 Do not generate phantom concerns. Only flag real issues for this specific task and stack.
+
+## Output constraints (hard validation)
+
+- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
+- `findings[].summary`: ≤ 200 chars

@@ -21,8 +21,10 @@ import type {
   StepResult,
   DriverState,
   StepContext,
+  AgentPlugin,
+  ClaudeCodeTaskSpec,
 } from "../../types/plugin.js";
-import { askUser, complete } from "../../core/shuttle.js";
+import { askUser, complete, spawnAgentsParallel } from "../../core/shuttle.js";
 import { requireGate, requireDecision, requireSpawnProvider, requireAgent } from "../../core/registry.js";
 import { resolveAgentModel } from "../agents/resolve-model.js";
 import { defaultConfig } from "../../types/config.js";
@@ -336,17 +338,113 @@ const GIT_DIFF: StepPlugin = {
 const PRE_REVIEW: StepPlugin = {
   name: "pre-review",
   phase: "implementation",
-  async run(state) {
+  async run(state, ctx) {
     state.scratch.pre_review_done = true;
+    // Q9: invoke security_needed / ui_touched / api_touched BEFORE the review
+    // step decides which reviewers to fan out to. Their DecisionPlugins were
+    // registered but never called, so applies_to predicates on the gated
+    // reviewers always saw `undefined` and the reviewers never spawned.
+    // pre-review runs in the implementation phase, AFTER git-diff captured
+    // the change set — so diff-aware predicates (ui_touched, api_touched)
+    // can see scratch.diff_text when it's populated.
+    for (const name of ["security_needed", "ui_touched", "api_touched"] as const) {
+      const value = await Promise.resolve(
+        requireDecision<boolean>(ctx.registry, name).decide(state),
+      );
+      state.decisions[name] = value;
+    }
     return { type: "advance" };
   },
 };
+
+/**
+ * Q9: fan out the implementation review to all eligible reviewer agents
+ * (logic + challenger + style + security + performance). Filter via each
+ * AgentPlugin's `applies_to` predicate so security only fires when
+ * security_needed=true, etc. SIMPLE flow keeps the single-reviewer path
+ * (logic-reviewer only) so the existing smoke-orchestrator resume contract
+ * doesn't change.
+ */
+const REVIEW_FANOUT_AGENTS = [
+  "logic-reviewer",
+  "challenger-reviewer",
+  "style-reviewer",
+  "security",
+  "performance",
+] as const;
+
+const REVIEW_ISSUED_KEY = "__review_agents_issued";
 
 const REVIEW: StepPlugin = {
   name: "review",
   phase: "implementation",
   async run(state, ctx) {
-    return spawnOne(state, ctx, "logic-reviewer", "implementation", "review");
+    const complexity = state.decisions["complexity"] as string | undefined;
+    if (complexity === "simple") {
+      return spawnOne(state, ctx, "logic-reviewer", "implementation", "review");
+    }
+    // Resume short-circuit. continue-task increments step_index once on
+    // agents-results, but if the FSM re-enters this step with results
+    // already staged in scratch, just advance.
+    const issuedIds = state.scratch[REVIEW_ISSUED_KEY] as string[] | undefined;
+    if (issuedIds && issuedIds.length > 0) {
+      const allDone = issuedIds.every(
+        (id) => state.scratch[SPAWN_RESULT_KEY(id)] !== undefined,
+      );
+      if (allDone) {
+        delete state.scratch[REVIEW_ISSUED_KEY];
+        return { type: "advance" };
+      }
+    }
+    const eligible: AgentPlugin[] = [];
+    for (const name of REVIEW_FANOUT_AGENTS) {
+      const agent = ctx.registry.agents.get(name);
+      if (!agent) continue;
+      if (agent.applies_to && !agent.applies_to(state)) continue;
+      eligible.push(agent);
+    }
+    if (eligible.length === 0) return { type: "advance" };
+    if (eligible.length === 1) {
+      return spawnOne(state, ctx, eligible[0].name, "implementation", "review");
+    }
+    await closePriorPhases(state, "implementation");
+    const provider = requireSpawnProvider(ctx.registry);
+    const config = (state.scratch.config as any) ?? defaultConfig;
+    const newIssuedIds: string[] = [];
+    const spawns: Array<{
+      agent_run_id: string;
+      agent: string;
+      claude_code_task: ClaudeCodeTaskSpec;
+    }> = [];
+    for (const agent of eligible) {
+      const model = resolveAgentModel(agent, "implementation", config);
+      const agent_run_id = await ctx.beginSpawn(agent.name, "implementation", model);
+      newIssuedIds.push(agent_run_id);
+      const result = await provider.spawn({
+        agent: agent.name,
+        agent_run_id,
+        driver_state_id: state.driver_state_id,
+        phase: "implementation",
+        model,
+        template_path: agent.template_path,
+        prompt: `Spawn agent: ${agent.name}. Project: ${state.project_dir}. Task: ${state.task}.`,
+      });
+      if (result.type !== "shuttle" || result.response.status !== "spawn-agent") {
+        throw new Error(
+          `review fan-out: spawn provider returned unexpected shape for ${agent.name}`,
+        );
+      }
+      spawns.push({
+        agent_run_id,
+        agent: agent.name,
+        claude_code_task: result.response.claude_code_task,
+      });
+    }
+    state.scratch[REVIEW_ISSUED_KEY] = newIssuedIds;
+    return {
+      type: "shuttle",
+      response: spawnAgentsParallel(state.driver_state_id, spawns),
+    };
   },
 };
 

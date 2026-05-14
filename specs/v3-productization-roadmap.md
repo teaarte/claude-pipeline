@@ -102,7 +102,7 @@ These are bugs surfaced by **actual** real-project use of v2, not by code review
 
 | Q | Severity | Status | Notes |
 |---|----------|--------|-------|
-| Q8 | 🟡 MEDIUM | open | Gate decisions not mirrored to `pipeline_set_gate`. Observability loss. |
+| Q8 | 🟡 MEDIUM | ✓ fixed (v2.1-polish-bundle) | Gate decisions not mirrored to `pipeline_set_gate`. Observability loss. Done in v2.1-polish-bundle: `pipelineContinueTask` now resolves the gate via `gate.validate_response` on every `user-answer` event and calls `pipelineSetGate` to mirror the decision (approved/rejected; changes_requested → rejected). Idempotent flag `${gate}_mirrored` in scratch; gate1 rejections also bump `scratch.gate1_revision_count` for Q22. Emits `pipeline_gate_mirror` audit entries (per-mirror, captures `error_class`-style verdict). 4 tests in `test/driver/builtin/steps/gate-mirror.test.ts`. |
 | Q9 | 🟡 MEDIUM | open | Code review under-spawning. Needs investigation: `applies_to` predicates vs step bug vs Gate 1 revision interaction. |
 | Q10 | 🟢 LOW | open | `current_step` field stale. Either update v2 driver or remove from schema. |
 | Q11 | 🟢 LOW | open | Audit `error_class` field for verdict=error categorization. |

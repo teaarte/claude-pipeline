@@ -20,6 +20,21 @@ export interface PluginMeta {
    * in v3 once external plugins ship.
    */
   api_version?: string;
+
+  /**
+   * Domain this plugin targets. Default behavior: omitted = "code".
+   *
+   * All built-in plugins today are code-domain. Future bundles (photo,
+   * video, research, vfx) will declare their own value here so a bundle-
+   * aware loader can filter the plugin set per project. Until that loader
+   * exists (Q40 in roadmap), this field is informational only — nothing
+   * reads it for control flow.
+   *
+   * Adding the field now (forward-compatible, optional) lets a second
+   * domain be introduced later without touching every existing plugin
+   * definition.
+   */
+  domain?: string;
 }
 
 // ----- A driver-side state shape (separate from pipeline-state.json) ----

@@ -139,6 +139,60 @@ PHASE 4 — Enterprise (v3.x+, indefinite)
 - **OSS license**: stays MIT? Or core MIT + commercial layer proprietary (BSL)?
 - **Cofounders / team**: solo through Phase 2? Hire first eng after Pro launch? Or stay solo through Phase 3?
 
+## Domain boundary — what generalizes, what's code-specific
+
+The pipeline's core architecture is generic; the built-in plugin set is code-specific. This distinction is load-bearing for any future expansion to non-code domains (photo / video / research / VFX / etc.).
+
+### Generic (reusable for any multi-agent workflow with quality gates)
+
+- **FSM driver** (`mcp/src/driver/core/`) — knows nothing about code; consumes flows + steps as data
+- **7 plugin contracts** (`mcp/src/driver/types/plugin.ts`) — abstract interfaces; `AgentPlugin`, `FlowPlugin`, etc. accept any `name` / `template_path` / model
+- **MCP enforcement + 12 invariants** — protect state shape, not the domain of work
+- **Audit log + redaction** — JSONL stream of any content
+- **Gates + validate_response** — human-in-loop interaction of any kind
+- **Recovery paths** — `pipeline_abandon`, `pipeline_unlock_writes`, `pipeline_finish` — generic state management
+- **Schema validation discipline** (ajv) — applies to any JSON schema
+- **Cross-session recovery** — snapshot/resume any workflow
+- **Past-misses / feedback streams** — generic learning loop
+
+### Code-specific (would need replacement per non-code domain)
+
+- **State schema enums** — `Phase = context|planning|test_first|implementation|validation|final`, `complexity = simple|medium|complex`, `tests_mode = tdd|regression-only`, `stack = {language, package_manager, test_command, ...}`. `test_first` phase and `stack` fields are code-only
+- **Built-in agents** (`mcp/src/driver/builtin/agents/` — 20 files) — planner, code-analyzer, logic-reviewer, security-frontend, performance-react, etc. All code-domain
+- **Built-in flows** (`builtin/flows/{simple,medium,complex}.ts`) — code-workflow shapes
+- **Built-in decisions** (`builtin/decisions/`) — `tests-mode`, `stack-detect`, `ui-touched`, `api-touched`, `security-needed`. All code-only
+- **Built-in hooks** (`builtin/hooks/`) — `anti-pattern-grep` (CLAUDE.md "What NOT to Do"), `caller-context-expand` (git callers). Code-specific
+- **SpawnProviders** — currently only `shuttle` (Claude Code Task tool). Photo/video would need `DalleSpawnProvider` / `RunwaySpawnProvider` / etc.
+- **Skills** (`commands/task.md`, `commands/done.md`) — reference `git diff`, CLAUDE.md "Validation Commands", `pnpm/lint/typecheck/test/build`. Code-domain framing throughout
+- **Guard hook** (`hooks/pipeline-guard.sh`) — protects code-state working files; might not be needed (or needs different paths) for photo workflows
+
+### Future bundle abstraction (Q40, deferred)
+
+When a second domain becomes concrete, the planned refactor:
+
+1. **`PluginMeta.domain: string`** field — already added prophylactically (commit landed 2026-05-14). Currently optional, defaults to `"code"`. No runtime effect today.
+2. **`loaders/builtins.ts`** accepts `bundle: string` parameter, filters plugins by `meta.domain === bundle`.
+3. **`<project>/.claude/pipeline.config.json`** declares the project's bundle (`{"bundle": "code"}` or `{"bundle": "photo"}`, etc.).
+4. **`builtin/` reorganizes** to `builtin/<domain>/` subdirs — `builtin/code/agents/...`, `builtin/photo/agents/...`.
+
+**Explicitly out of scope for the bundle abstraction:**
+
+- State schema generalization (`Phase` / `complexity` / `tests_mode` as `<T extends string>` generics) — too disruptive for a hypothetical second domain. Defer until cross-domain workflows are real.
+- Per-bundle JSON schemas. Same reason.
+- Per-bundle MCP tools (some bundles might need bundle-specific tools, e.g., image-API tools for VFX). Defer until concrete signal.
+
+**Trigger to start Q40 work:** proof-of-concept fork on a side project showing a non-code domain delivers value with the current core + a swapped plugin set. Without that signal, building the abstraction is over-engineering for an imagined use case.
+
+**Estimated cost when triggered:** ~1-2 days for loader change + directory reorg. Plugin manifest semantics + project-level bundle config + tests. Not 2 weeks — schema enums stay code-only initially.
+
+### Strategic read
+
+The pipeline today is **"AI dev team RTS"**. Generalizing to photo/video/research would mean entering a different market with different competitors (Midjourney, Runway, Pika, Cursor, etc.) and different sales motion. Not a small pivot.
+
+That said, the **architectural moat (schema-validated state, audit, invariants, plugin framework)** has applicability beyond code. Cinema VFX production, scientific research workflows, and long-form video assembly all share the pattern: multi-step multi-agent work with quality gates and audit requirements. **None of those markets are well-served today.** Keeping the door open via the bundle abstraction (Q40) is cheap forward compatibility.
+
+**Recommended posture:** ship code-domain product first (free → Pro tier through Phase 2). Only entertain non-code domains when (a) someone external asks for it, OR (b) a side-project proof-of-concept produces a "wow, this delivers" signal. Don't proactively chase domain expansion.
+
 ## Anti-goals (what NOT to build)
 
 - ❌ **Generic AI chat interface** — Cursor/Claude Code own this. Don't compete.

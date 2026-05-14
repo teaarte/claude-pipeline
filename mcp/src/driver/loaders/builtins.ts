@@ -2,6 +2,24 @@
  * The ONE place where built-in plugins are bound to the registry. No other
  * file in core/ touches the registry directly — extensibility hinges on
  * this being the single seam.
+ *
+ * Bundle-awareness (future direction, Q40):
+ *
+ * Every plugin currently registered here targets the CODE domain. The
+ * `PluginMeta.domain` field (optional, defaults to "code") exists on the
+ * type but isn't read for control flow yet.
+ *
+ * When a second domain becomes a concrete need (photo / video / research /
+ * vfx — see specs/product-vision.md "Domain Boundary" section), this
+ * loader should grow:
+ *   1. Accept a `bundle: string` parameter (default "code")
+ *   2. Filter plugins by `plugin.meta.domain === bundle`
+ *   3. Project's bundle choice comes from `<project>/.claude/pipeline.config.json`
+ *   4. The `builtin/` directory reorganizes into `builtin/<domain>/` subdirs
+ *
+ * Until then this stays flat. Premature generalization would lock in an
+ * abstraction we haven't validated against a real second domain. See Q40
+ * in specs/v3-productization-roadmap.md for the trigger condition.
  */
 
 import type { PluginRegistry } from "../types/plugin.js";

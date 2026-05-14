@@ -1,5 +1,9 @@
 # Workflow Guide
 
+> Daily-usage patterns + command-choice flowchart. For overview + install, see [`README.md`](README.md). For positioning + UX vision, see [`specs/product-vision.md`](specs/product-vision.md) and [`specs/ui-vision.md`](specs/ui-vision.md). For the planned phases, see [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md).
+>
+> **Current state (v2.2a):** review surface unlocked — non-simple flows fan out to 5 reviewers in implementation (logic + challenger + style + security + performance) gated by `applies_to` predicates. Pre-review infrastructure files (`diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`) emit on implementation entry. Real-task runs verify Q22 metrics row, Q23 server-side cleanup, Q24/Q36 Stop hook tri-state, Q29 vocab expansion in production.
+
 ## Choosing the Right Command
 
 ```
@@ -224,3 +228,16 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 - **Don't keep stale working files.** `.claude/` has plan.md from a previous session? Run `/done` to clean up.
 - **Don't use /task for exploration.** "What would it take to add X?" → `/brainstorm`.
 - **Don't Write/Edit `.claude/pipeline-state.json`, `.claude/findings.jsonl`, `.claude/driver-state.json`, or any MCP-managed file directly.** Use the `mcp__claude-pipeline__*` tools. The `pipeline-guard.sh` PreToolUse hook mechanically denies direct edits — including via `bash -c`, command substitution, `find -delete`, embedded `python/node/perl/ruby` write-ops, and `gzip` in-place compression. If you genuinely need a one-shot bypass for debugging, call `pipeline_unlock_writes({ttl_seconds: 300, reason: "..."})`; `/done` and `pipeline_relock_writes` re-lock. Don't try to forge a bypass marker — it carries `issued_at` and the guard rejects anything where `expires_at - issued_at > 3600s`.
+
+## See also
+
+- [`README.md`](README.md) — overview + install + architecture diagram + docs index
+- [`mcp/README.md`](mcp/README.md) — MCP tool reference (21 tools) + invariants INV_001-012
+- [`hooks/README.md`](hooks/README.md) — guard hook + Stop hook mechanics + bypass
+- [`specs/product-vision.md`](specs/product-vision.md) — "AI Team RTS" positioning, pricing tiers, commercial trajectory
+- [`specs/ui-vision.md`](specs/ui-vision.md) — UX architecture: agent builder → specialist → team → curator → channels (where we're going)
+- [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) — phase index (v2.3 daemon + Web UI is next)
+- [`specs/open-backlog.md`](specs/open-backlog.md) — currently open Q-items
+- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 30 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a)
+- [`validation-log.md`](validation-log.md) — validation workflow + cross-cutting observations
+- [`validation/closed-tasks/`](validation/closed-tasks/) — per-task validation entries (5 real-task runs to date)

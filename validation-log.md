@@ -119,9 +119,9 @@ If a bug is recurrence of an existing Q-item, just reference it in this log entr
 
 Glance back at the last 3-5 entries. Look for:
 - **Same Q-item recurring** → that's a v2.1 priority. Promote to top of fix list.
-- **Same friction point** (UX, not bugs) → candidate for v2.5 UX improvement.
+- **Same friction point** (UX, not bugs) → candidate for v2.3 UX improvement.
 - **Same recovery path used repeatedly** (e.g., `pipeline_unlock_writes` for state fixes) → friction signal that v2 needs softer recovery UX.
-- **Cost trajectory** when v2.7 lands — if costs grow per task, investigate before v2.5 ships.
+- **Cost trajectory** when v2.5 lands — if costs grow per task, investigate before v2.3 ships.
 - **Vocab evolution (Q29 loop):** when a real-task run produces multiple findings with `category: "other"` AND the agent's narrative (or `proposed_new_category`) clearly names a better label, propose the new category in **this** entry's "Bugs found" block (or a dedicated "Vocab proposals" bullet). Format: `vocab[<agent>]: add "<new-category>" — example: <task-id finding context>`. Promote into `templates/schemas/category-vocab.json` once a category clears ≥1 real-task occurrence + human confirmation; the promotion goes in the next polish bundle as a one-line vocab edit.
 
 After 5+ entries, run `/metrics-report` + `/learn` for cross-task aggregates.
@@ -182,7 +182,7 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 - `_repaired` count: N
 - `force_used` count: N
 
-### Cost signal (when v2.7 lands, otherwise estimated)
+### Cost signal (when v2.5 lands, otherwise estimated)
 - Token estimate (input/output): <if known>
 - USD estimate: <if known>
 
@@ -255,7 +255,7 @@ Shipped as a single-session bundled fix on branch `v2.2-clear-bundle`. One commi
 
 **Root cause (traced):** `SpawnRecorder` type signature in `mcp/src/driver/core/fsm.ts:28-32` accepts only `{project_dir, phase, agent}` — no `model` field. `mcpSpawnRecorder` in `mcp/src/driver/tools/run-task.ts:33-40` calls `pipelineBeginAgent` without `model`. `pipelineBeginAgent` defaults `input.model ?? null` (`mcp/src/tools/begin-agent.ts:54`). The model resolved upstream by `resolveAgentModel(plugin, phase, config)` is dropped before reaching the open-spawn record.
 
-**Effect:** post-hoc cost analysis blocked (which model ran which spawn?); v2.7 cost-aware routing has no historical training data; audit trail loses model attribution.
+**Effect:** post-hoc cost analysis blocked (which model ran which spawn?); v2.5 cost-aware routing has no historical training data; audit trail loses model attribution.
 
 **Filed as Q19** (🟡 MEDIUM, ~1h fix). Three-line code change: extend SpawnRecorder type + thread model through + forward to pipeline_begin_agent. Unit test asserts non-null for each complexity.
 
@@ -384,7 +384,7 @@ After the jq-driven query pass, a line-by-line read of `pipeline-state.json` sur
 - **Q30** 🟡 MEDIUM — `state.refs_loaded: []` and `state.refs_dropped_due_to_cap: []`. `DecisionPlugin` `refs-to-load` (Global Rule #13) should inject reference files into agent prompts; never fires. Frontend TS project should at minimum get `perf-react.md` + `security-frontend.md`. Confirmed across both real-task runs on s3-panel — never any refs loaded. **Bundles with Q9 + Q27 into v2.2-review-completeness.**
 - **Q31** 🟡 MEDIUM — `phases.planning.iterations: 0` and `phases.implementation.iterations: 0` despite `reviewer_verdicts[].iteration: 1` for both phases. Field defined in schema, never written by v2 driver.
 - **Q32** 🟢 LOW — `phases.validation.acceptance_first_pass: false` despite acceptance iter1 PASS verdict. Q22 fix correctly derives `acceptance_first_pass: true` for metrics row by bypassing this stale source field. Cleanup: deprecate field OR populate it.
-- **Q33** 🟡 MEDIUM — `state.files.created: []`, `state.files.modified: []` despite git diff showing 2 modified files. v2 driver doesn't write these. `/learn` loses file-level signal; v2.7 cost-aware routing data starved.
+- **Q33** 🟡 MEDIUM — `state.files.created: []`, `state.files.modified: []` despite git diff showing 2 modified files. v2 driver doesn't write these. `/learn` loses file-level signal; v2.5 cost-aware routing data starved.
 - **Q34** 🟢 LOW — `phases.planning.grounding_check: null` despite plan-grounding-check verdict = GROUNDED. Same shape as Q31/Q32.
 
 **Architectural pattern across Q31/Q32/Q34:** v1 markdown-orchestrator wrote rich per-phase summary fields; v2 TypeScript driver writes the underlying `reviewer_verdicts[]` array (correct) but skips the per-phase legacy summary fields. **Q35 umbrella ticket**: schema-hygiene audit — decide per field whether to deprecate (remove + bump major schema_version) or sync (write at verdict-record time). Q33 is similar but the field is high-value, so populate. Q31/Q32/Q34 are cosmetic — deprecate.
@@ -517,7 +517,7 @@ After the jq-driven query pass, a line-by-line read of `pipeline-state.json` sur
 
 ### Cost signal
 - Token estimate: ~not measured (Q19 makes per-spawn model attribution impossible; Q17 makes stack-aware estimation impossible)
-- USD estimate: n/a until v2.7
+- USD estimate: n/a until v2.5
 
 ### Notes
 - This is the **first end-to-end successful run** after v2.1-hotfix. Q7 and Q16 fixes are verified in production conditions.
@@ -639,7 +639,7 @@ The driver's spawn payload puts the AgentPlugin name (`code-analyzer`, `context-
 ### Friction / UX notes
 - Plan revision at Gate 1 worked but: the second plan came back without clear indication of what changed vs first. Would be useful to see a "diff against previous plan" at Gate 1 on re-presentation.
 - Gate 2 message says "Accept (verdict=accepted) or reject (verdict=rejected) with feedback" — no summary of what was actually done. User has to read findings + diff separately to decide. Should include 1-paragraph summary of completed work inline.
-- No way to see live progress while pipeline runs (SSE live stream is v2.5 Web UI work). Currently feels like a black box for the ~3 hours.
+- No way to see live progress while pipeline runs (SSE live stream is v2.3 Web UI work). Currently feels like a black box for the ~3 hours.
 
 ### Objective signals from logs
 - `plan_iters`: 2 (one revision after Gate 1 rejection — correct)
@@ -652,8 +652,8 @@ The driver's spawn payload puts the AgentPlugin name (`code-analyzer`, `context-
 - `force_used` count: 0 (no force_bypass in this run)
 
 ### Cost signal
-- Used Claude Code subscription (no per-token tracking yet — v2.7).
-- Subjective: felt expensive given ~3h wall time. Will measure properly when v2.7 lands.
+- Used Claude Code subscription (no per-token tracking yet — v2.5).
+- Subjective: felt expensive given ~3h wall time. Will measure properly when v2.5 lands.
 
 ### Notes
 - This is the FIRST real-task run of v2 framework. Bug count is expected to be high — that's the point of validation phase.

@@ -1,367 +1,264 @@
 # Claude Pipeline
 
-Multi-agent development pipeline for Claude Code. Supports **React, Next.js, NestJS, Python/FastAPI, Flutter/Dart** — and extensible to any stack via reference files.
+Multi-agent development pipeline for Claude Code. Form a team of specialized AI agents — planner, reviewers (logic + challenger + style + security + performance), test-writer, acceptance — and let them work through a task together with human gates at key decision points.
 
-Project-specific rules live in each project's CLAUDE.md. Platform-specific agent knowledge lives in `agents/references/`.
+**Current state:** v2.2a shipped. TypeScript plugin framework, 21 MCP tools, 12 state invariants, 343 tests, 5-reviewer fan-out active on non-simple flows. Audit trail + guard hook + cross-session recovery + schema-validated state. Production-tested on 5 real-task runs.
 
-State integrity is enforced in two layers:
-- **MCP server** (`mcp/`) — `.claude/pipeline-state.json`, `.claude/findings.jsonl`, `.claude/driver-state.json`, and `.claude/mcp-audit.jsonl` mutations only happen through validated tool calls. Schema validation, phase state machine, and 12 invariants (`INV_001`–`INV_012`) are enforced at write time. See [`mcp/README.md`](mcp/README.md).
-- **Claude Code hooks** (`hooks/`) — `pipeline-guard.sh` (PreToolUse) blocks any direct `Write`/`Edit`/`Bash` mutation of MCP-owned files; `pipeline-stop.sh` (Stop) blocks session exit while a task is in flight. See [`hooks/README.md`](hooks/README.md).
+## Releases
 
-## Commands (16)
+| Tag | What | Merged |
+|---|---|---|
+| [`v2.0`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.0) | TypeScript plugin framework, 7 plugin contracts, INV_001-011, guard hook, audit log | 2026-05-13 |
+| [`v2.1`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.1) | 11 validation-driven fixes (Q8/Q11/Q14/Q17-Q24/Q36) from real-task signal | 2026-05-14 |
+| [`v2.2`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2) | Schema hygiene + polish (10 Q-items) | 2026-05-14 |
+| [`v2.2a`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2a) | Review surface unlock — Q9 wiring fix + Q27/Q30/Q41/Q42/Q43 | 2026-05-14 |
 
-### Core Workflow
-| Command | When to use |
-|---------|-------------|
-| `/task <description>` | Any task — auto-classifies complexity, runs full pipeline |
-| `/quick <description>` | Obvious change, 1-3 files, no new patterns |
-| `/task-continue` | Resume after session break or Human Gate feedback |
-| `/done` | Finish: validate, save metrics, persist issues, clean up |
+Roadmap: [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) → v2.3 daemon + Web UI is next.
 
-### Review & Quality
-| Command | When to use |
-|---------|-------------|
-| `/code-review` | 5-agent parallel review on current changes |
-| `/sweep [filter]` | Review and fix accumulated tech debt |
-| `/validate-pipeline` | Self-test pipeline config integrity |
-| `/validate-claudemd` | Audit CLAUDE.md for completeness |
-
-### Feedback & Metrics
-| Command | When to use |
-|---------|-------------|
-| `/metrics-report` | Analyze pipeline effectiveness (human-readable summary, after 10+ tasks) |
-| `/agent-feedback` | Log when a reviewer missed a real issue (writes to `agent-feedback.jsonl` with category) |
-| `/learn` | Cluster findings × category, detect drift, surface vocab promotion / pattern auto-promotion candidates |
-
-### Design & Debug
-| Command | When to use |
-|---------|-------------|
-| `/brainstorm <topic>` | Design a feature or research a library/approach |
-| `/debug-team <bug>` | Competing hypotheses for hard-to-find bugs |
-
-### Project Setup
-| Command | When to use |
-|---------|-------------|
-| `/init-claudemd` | Generate CLAUDE.md for a new project |
-| `/init-kb <path>` | Scan repo, create Knowledge Base entries |
-| `/init-kb-contracts <path>` | Generate cross-project API contracts |
-
-## Agents (23)
-
-### Enrichment
-| Agent | Role |
-|-------|------|
-| dependency-auditor | Map affected files and consumers |
-| code-analyzer | Extract real codebase patterns |
-| context-doc-verifier | Spot-checks Code Analyzer's claims (5 random + naming convention) — catches hallucinated patterns before Planner consumes them |
-| architect | Design architecture for complex tasks |
-| research | Evaluate libraries/approaches |
-
-### Planning & Implementation
-| Agent | Role |
-|-------|------|
-| planner | Create implementation plan with `file:line` citations and executable AAA test specs (3 competing mandates for complex) |
-| plan-grounding-check | Verifies every plan citation against the real code; blocks Gate 1 if hallucinated |
-| test | Write failing tests BEFORE implementation (translates AAA blocks mechanically) — or after (test-after for bug fixes) |
-| implementer | Write production code — fills skeletons when TDD, writes directly when regression-only |
-| plan-conformance | Diff vs plan: surfaces files-touched-outside-plan, unsatisfied ACs, in-file overreach |
-
-### Review
-| Agent | Role |
-|-------|------|
-| logic-reviewer | Correctness, bugs, edge cases, race conditions. Loads past-misses block on every spawn. |
-| challenger-reviewer | Adversarial counterpart to logic-reviewer (MEDIUM/COMPLEX) — runs probes (concurrency, hostile input, ordering) and flags failure modes. Independent verdict; disagreements escalated to human. |
-| style-reviewer | Naming, patterns, duplication, CLAUDE.md compliance. Past-misses-aware. |
-| security | Real vulnerabilities for this stack. Past-misses-aware. |
-| performance | Perf issues — loads platform checks from `references/perf-{stack}.md`. Past-misses-aware. |
-
-### Validation
-| Agent | Role |
-|-------|------|
-| acceptance | Acceptance criteria + mechanical checks + test coverage |
-| e2e (playwright) | E2E tests — loads from `references/e2e-{platform}.md` |
-| ui-consistency | Design system compliance — loads from `references/ui-{platform}.md` |
-| api-contract | Frontend/backend/cross-repo contract sync |
-| migration | Handle breaking changes (API, DB, proto, alembic, types) |
-
-### Standalone (auto-trigger)
-| Agent | Role |
-|-------|------|
-| runtime-debug-agent | Auto-triggers on error reports — investigates, creates fix plan |
-| test-all-agent | Fix or remove failing tests to reach 100% passing (any stack) |
-| fe-test-all-agent | Same but locates frontend directory first |
-
-## Platform Reference Files
-
-Agents are thin (role + detect stack + output format). Platform-specific knowledge lives in `agents/references/`:
-
-```
-agents/references/
-  # Platform-specific (loaded by stack)
-  perf-react.md         React/Next.js performance checks
-  perf-flutter.md       Widget rebuilds, lists, images, state, dispose
-  perf-python.md        FastAPI/asyncio checks
-  perf-nestjs.md        NestJS DB, API, architecture, memory
-
-  ui-web.md             Web accessibility, responsive
-  ui-flutter.md         Material/Cupertino, SafeArea, navigation, a11y
-
-  test-react.md         Vitest/Jest, component testing, MSW
-  test-flutter.md       flutter_test, widget tests, mocktail/Riverpod
-  test-python.md        pytest, fixtures, AsyncMock
-  test-nestjs.md        Jest, TestingModule, overrideProvider
-
-  e2e-playwright.md     Playwright process and rules
-  e2e-flutter.md        integration_test process and rules
-
-  # Senior-pattern references (Tier 1, 2, 3 — conditionally loaded by orchestrator)
-  arch-patterns.md          T1: sync/async boundaries, abstractions, idempotency, failure modes
-  db-postgres.md            T1: indexes, EXPLAIN, isolation, migration safety, N+1, pagination
-  redis.md                  T1: primitives, persistence, eviction, locks, pipelining, hot keys
-  react19.md                T1: Server Components, Actions, use(), useOptimistic, Suspense
-  caching.md                T1: layer choice, invalidation strategies, stampede, TTL discipline
-  api-design.md             T2: REST/GraphQL/gRPC, idempotency, pagination, versioning, error envelope
-  concurrency.md            T2: async patterns, locks, retries, backpressure, single-writer principle
-  test-strategy.md          T2: test pyramid, mocking, contract tests, property-based, flake mitigation
-  observability.md          T2: structured logs, traces, metrics (RED/USE), SLO, alerting hygiene
-  error-handling.md         T2: error categorization, retry policy, circuit breakers, DLQ, error envelope
-  security-backend.md       T3: auth, JWT pitfalls, SQL/NoSQL injection, secrets, CSRF, SSRF, mass assignment
-  optimization-strategy.md  T3: profile-first, latency vs throughput, big-O at scale, when NOT to optimize
-  next-app-router.md        T3: Server/Client boundary, caching layers, Server Actions, Suspense, middleware
-```
-
-**Adding a new platform** (e.g. Go, Kotlin/Android): create `perf-go.md`, `test-go.md`, etc. — no agent files need changing.
-
-**Senior-pattern references** are loaded conditionally by the orchestrator at STEP 1 (rule #24): stack-trigger (e.g. `react@>=19` → `react19.md`), diff/dependency-audit-trigger (e.g. `*.sql` → `db-postgres.md`), or task-trigger (e.g. "cache" mention → `caching.md`). Capped at 4 senior-pattern files per agent per task to avoid prompt bloat. Loaded list lands in `.claude/refs-to-load.md`.
-
-**Each reference file follows a fixed template:** When this applies → Default Stance → Patterns → Anti-Patterns (with prod failure modes) → Decision Framework → Cost Model → Red Flags in Diff. Reviewers turn the **Red Flags in Diff** sections into additional hunt targets.
-
-## Pipeline Flow
-
-```
-/task "add user settings page"
-  |
-  +- STEP -1: Trivial detection (skip pipeline for rename/typo/config)
-  +- STEP 0:  Brainstorming (if scope unclear)
-  +- STEP 1:  Stack detection + complexity + tests_mode
-  +- STEP 2:  Gate 0 — human confirms (skipped for SIMPLE)
-  |           + enrichment agents launched in background for MEDIUM/COMPLEX
-  +- STEP 3:  Context enrichment (collect background results + remaining agents)
-  |  +- 3b:   Context-Doc Verifier (MEDIUM/COMPLEX)
-  +- STEP 4:  Planning (with file:line citations + executable AAA test specs)
-  |  +- 4b:   Plan Grounding Check (MEDIUM/COMPLEX) — citations verified
-  |  +- 4c:   Plan reviewers
-  +- Gate 1 — human reviews plan
-  +- STEP 5:  Test-First (RED) — only when tests_mode: tdd
-  +- STEP 6:  Implementation (GREEN) — rollback stash created first
-  |  +- pre:  CLAUDE.md anti-pattern grep + Caller-context expansion (MEDIUM/COMPLEX)
-  |  +-       Code review (Logic ‖ Challenger MEDIUM/COMPLEX ‖ Style ‖ Security ‖ Perf)
-  |  +-       Logic vs Challenger reconciliation — disagreement escalates to Gate 2
-  +- STEP 6b: Test verification (regression check or full GREEN)
-  +- STEP 6c: Plan Conformance — drift / unfinished / AC coverage
-  +- STEP 7:  Validation (lint, typecheck, acceptance)
-  +- STEP 8:  Final report (Orchestrator)
-  +- Gate 2 — human accepts → /code-review → /done
-```
-
-### Tests Mode — Auto-Detection
-
-`tests_mode` is determined once at STEP 1 and stored in `pipeline-state.json`. It controls whether STEP 5 (Test-First) runs and how STEP 6b (verification) behaves.
-
-| Project type | tests_mode | What happens |
-|-------------|-----------|-------------|
-| Frontend app (Next.js, React, Vue, Svelte, Angular) | `regression-only` | STEP 5 skipped, existing tests checked for regressions |
-| Backend (NestJS, Express, FastAPI, Django) | `tdd` | Full TDD: skeletons → failing tests → implementation → GREEN |
-| Shared library / package | `tdd` | Full TDD |
-
-**Override flags:**
-- `--no-tests` → force `regression-only` on any project
-- `--with-tests` → force `tdd` on any project (e.g. frontend lib with contract tests)
-
-### TDD flow (when tests_mode: tdd)
-
-```
-Planner                    Test Agent                  Implementer
-   |                           |                           |
-   +-- Plan with Test Specs    |                           |
-   |   (inputs, expected       |                           |
-   |    outputs, what each     |                           |
-   |    test proves)           |                           |
-   +-------------------------->|                           |
-                               +-- Create skeletons        |
-                               |   (empty classes, DTOs,   |
-                               |    method signatures)     |
-                               +-- Write failing tests     |
-                               +-- Verify RED state        |
-                               +-------------------------->|
-                                                           +-- Replace stubs
-                                                           |   with real logic
-                                                           +-- Run tests after
-                                                           |   each major step
-                                                           +-- All GREEN ✓
-```
-
-### Regression-only flow (when tests_mode: regression-only)
-
-```
-Planner                    Implementer
-   |                           |
-   +-- Plan (no test specs)    |
-   +-------------------------->|
-                               +-- Write production code
-                               |   directly from plan
-                               +-- Existing tests checked
-                               |   for regressions
-                               +-- Validation ✓
-```
-
-### What runs at each complexity level
-
-| Step | SIMPLE | MEDIUM | COMPLEX |
-|------|--------|--------|---------|
-| Context | Inline (orchestrator) | Dep Auditor + Code Analyzer + **Context-Doc Verifier** | + Architect |
-| Planning | 1 Planner, no review | 1 Planner + **Grounding Check** + 2 reviewers | Planner Team (3 competing + cross-review) + **Grounding Check** + 4 reviewers |
-| Test-First | 1 Test Agent (if tdd) | Same | Parallel Test Agents per module (if tdd) |
-| Implementation | 1 Implementer | 1 Implementer + checkpoints | Parallel per module |
-| Pre-Review | **Anti-pattern grep** | + **Caller-context expansion** | Same as MEDIUM |
-| Code Review | Logic + Style + Security* | Logic + **Challenger** + Style + Security + Perf | Same as MEDIUM |
-| Post-Impl | **Plan Conformance** | Same | Same |
-| Validation | Acceptance | + UI/API if changed | + E2E |
-| Human Gates | Gate 1 + Gate 2 | Gate 0 + Gate 1 + Gate 2 | Same |
-
-*Security runs in SIMPLE only when task touches auth/input/API.
-
-### Accuracy mechanisms (cross-cutting)
-
-- **`file:line` citations** in every plan — verified by `plan-grounding-check` before Gate 1.
-- **Executable AAA test specs** in every plan — `test` agent translates mechanically, no interpretation.
-- **Past-misses injection** — orchestrator caches per-agent past-misses files at pipeline start from `metrics/agent-feedback.jsonl` (filtered by agent + `human_confirmed=true`, last 10). Reviewers read their `.claude/past-misses-{agent}.md`. Closes the loop between `/agent-feedback` logging and future runs.
-- **CLAUDE.md anti-pattern grep** before code review — mechanical, free of LLM cost.
-- **Caller-context expansion** (1-hop) for changed function signatures, attached to all reviewers (MEDIUM/COMPLEX).
-- **Logic vs Challenger reviewer pair** with independent verdicts. Disagreements never auto-route to Implementer — surfaced to human at Gate 2.
-- **Plan Conformance** after implementation: drift, unfinished steps, AC coverage all measured.
-- **Accuracy metrics** in `metrics/pipeline.jsonl` (append-only, one JSON object per task): `plan_drift`, `gate1_revisions`, `acceptance_first_pass`, `grounding_mismatches`, `reviewer_disagreements`, `reviewer_misses_post_merge`, `categories_seen`. Run `/learn` for clustering and drift analysis; `/metrics-report` for human-readable summary.
-
-## Key Features
-
-### Multi-Platform Support
-Orchestrator detects `project_stack` from CLAUDE.md and passes it to all agents. Agents load platform-specific checks from `references/`. Supported: React, Next.js, NestJS, Python/FastAPI, Flutter/Dart.
-
-### Smart Test Mode
-`tests_mode` auto-detected from project type. Frontend apps skip TDD (regression-only), backend and libraries get full TDD. Override with `--with-tests` or `--no-tests`. Single field in `pipeline-state.json` — all pipeline steps read from it, no scattered conditionals.
-
-### Issue Collection
-Agents find out-of-scope issues → `.claude/issues-found.md` → `/done` persists to `tech-debt.md` → `/sweep` reviews and fixes.
-
-### Self-Improvement Loop (structured, schema-driven)
-1. **Findings are first-class structured data.** Every reviewer/validator emits a fenced ```json header validated against `templates/schemas/{reviewer,validator}-output.schema.json`. Each finding has `severity`, `category` (controlled vocab in `templates/schemas/category-vocab.json`), `pattern_id`, `summary`, `evidence_excerpt`, `suggested_fix`, `ref_rule_id`. Findings stream to `.claude/findings.jsonl` **via `mcp__claude-pipeline__pipeline_record_agent_run` — orchestrator no longer writes the file manually.**
-2. `/done` writes one JSON object per task to `~/.claude/metrics/pipeline.jsonl` via `mcp__claude-pipeline__pipeline_finish` — mechanical JSON-to-JSON transform from `pipeline-state.json`, refused if invariants fail. Includes plan_drift, gate1_revisions, acceptance_first_pass, grounding_mismatches, reviewer_disagreements, categories_seen.
-3. `/agent-feedback` logs missed issues to `~/.claude/metrics/agent-feedback.jsonl` via `mcp__claude-pipeline__pipeline_log_agent_feedback` with required `category` + `pattern_to_look_for` + `human_confirmed`. Increments `reviewer_misses_post_merge` on the linked `pipeline.jsonl` row.
-4. **Future runs auto-load each agent's last 10 confirmed patterns** as a `## Past Misses` block on every spawn (orchestrator rule #15). Diff-aware filtering optionally re-ranks by relevant category.
-5. `/learn` clusters categories × agent, computes effectiveness ratios, detects drift trends, surfaces vocab promotion candidates and pattern auto-promotion candidates. Mostly mechanical; final step optionally suggests prompt edits for human review.
-6. `/metrics-report` retains its role for human-readable narrative summary of recent performance.
-
-### Background Enrichment
-MEDIUM/COMPLEX tasks launch enrichment agents in the background during Gate 0 — they work while you review the classification. By the time you confirm, context is already gathered.
-
-### Agent Teams for COMPLEX Planning
-COMPLEX tasks use agent teams (not independent parallel agents) for competing planners. Three planners with different mandates (minimalist/robust/reuse) see each other's work, challenge weak spots, and the lead synthesizes the final plan. Better than orchestrator synthesis because planners cross-review before the plan is finalized.
-
-### Cross-Session Recovery
-Pipeline state saved after every agent completion. `/task-continue` resumes from exact point.
-
-## Model Routing
-
-Canonical table is in `commands/task.md`. Simplified view:
-
-| Agent | simple/medium | complex |
-|-------|:------------:|:-------:|
-| Planner, Implementer, Logic Reviewer | opus | opus |
-| Architect, Research, Migration | opus | opus |
-| Code Analyzer, Security, Performance | sonnet | **opus** |
-| All others | sonnet | sonnet |
-
-## Setup
+## Quick start
 
 ```bash
+# 1. Clone + install MCP server
 git clone <repo-url>
 cd claude-pipeline
+cd mcp && pnpm install && pnpm build && cd ..
 
-# Symlink into ~/.claude/
-ln -sf "$(pwd)/agents" ~/.claude/agents
-ln -sf "$(pwd)/commands" ~/.claude/commands
-ln -sf "$(pwd)/pipelines" ~/.claude/pipelines
+# 2. Symlink commands, agents, templates into ~/.claude/
+ln -sf "$(pwd)/agents"    ~/.claude/agents
+ln -sf "$(pwd)/commands"  ~/.claude/commands
 ln -sf "$(pwd)/templates" ~/.claude/templates
 
-# Copy metrics (don't symlink — they're per-machine)
-mkdir -p ~/.claude/metrics
-cp metrics/*.jsonl ~/.claude/metrics/ 2>/dev/null || true
-
-# Build and register the MCP enforcement server
-cd mcp && pnpm install && pnpm build && cd ..
+# 3. Register MCP server with Claude Code
 claude mcp add --scope user claude-pipeline -- node "$(pwd)/mcp/dist/server.js"
 
-# Install the Claude Code hooks (mechanical guardrails on top of the MCP)
+# 4. Install hooks (PreToolUse guard + Stop tracker)
 mkdir -p ~/.claude/hooks
 ln -sfn "$(pwd)/hooks/pipeline-guard.sh" ~/.claude/hooks/pipeline-guard.sh
 ln -sfn "$(pwd)/hooks/pipeline-stop.sh"  ~/.claude/hooks/pipeline-stop.sh
-# then merge the PreToolUse and Stop fragments from settings.reference.json
-# into your ~/.claude/settings.json — see hooks/README.md for details
+# Merge PreToolUse + Stop fragments from settings.reference.json
+# into ~/.claude/settings.json — see hooks/README.md
 
-# Install RTK (recommended — 60-90% token savings)
-brew install rtk-ai/tap/rtk && rtk init -g
+# 5. Verify install
+claude mcp list                       # claude-pipeline ✓ Connected
+/validate-pipeline                    # self-test, should PASS
 ```
 
-### New Project Setup
-
+In any project:
 ```bash
 cd your-project/
-/init-claudemd          # Generate CLAUDE.md (auto-detects stack)
-/validate-claudemd      # Verify it's complete
-
-# Multi-repo Knowledge Base (optional)
-/init-kb /path/to/kb    # Scan each repo
-/init-kb-contracts /path/to/kb  # Generate contracts
+/init-claudemd                        # generate CLAUDE.md
+/task <description of your task>      # let the team go
 ```
 
-## File Structure
+See [`WORKFLOW.md`](WORKFLOW.md) for daily-use patterns.
+
+## What's in the box
+
+### Commands (16)
+
+**Core workflow:**
+- `/task <description>` — full pipeline, auto-classifies complexity
+- `/quick <description>` — obvious change, skip ceremony (1-3 files)
+- `/task-continue` — resume after session break or Gate feedback
+- `/done` — finalize: validate, write metrics, clean `.claude/`
+
+**Review & quality:**
+- `/code-review` — 5-agent parallel review on current changes
+- `/sweep [filter]` — review and fix accumulated tech debt
+- `/validate-pipeline` — self-test pipeline config integrity
+- `/validate-claudemd` — audit CLAUDE.md for completeness
+
+**Feedback & metrics:**
+- `/metrics-report` — human-readable pipeline-performance summary
+- `/agent-feedback` — log a reviewer miss (auto-injected into future runs via past-misses)
+- `/learn` — cluster findings × category, detect drift, suggest vocab updates
+
+**Design & debug:**
+- `/brainstorm <topic>` — design feature or pick a library
+- `/debug-team <bug>` — competing hypotheses for hard bugs
+
+**Project setup:**
+- `/init-claudemd` — generate CLAUDE.md for new project
+- `/init-kb <path>` — Knowledge Base entries from existing repo
+- `/init-kb-contracts <path>` — cross-project API contract docs
+
+### Agents (23)
+
+Reviewers/validators (output JSON header validated against schemas):
+- **logic-reviewer** + **challenger-reviewer** — independent perspectives on the same diff
+- **style-reviewer** — CLAUDE.md anti-patterns
+- **security-frontend** / **security-backend** — XSS, auth, injection, etc.
+- **performance-react** / **performance-nestjs** / **performance-python** / **performance-flutter**
+- **plan-grounding-check** — verifies plan citations against actual code
+- **plan-conformance** — post-impl: drift, unfinished steps, AC coverage
+- **acceptance** — mechanical AC checks (lint/typecheck/test/build)
+- **context-doc-verifier** — sanity-checks code-analyzer claims
+
+Non-review:
+- **planner**, **implementer**, **architect** — produce artifacts
+- **code-analyzer** — context-doc + analyzer-claims
+- **research**, **migration**, **dependency-auditor**, **test**
+
+Each agent is a markdown template in `agents/`. 25 senior-pattern reference files in `agents/references/` (with YAML frontmatter for LLM-driven selection).
+
+### MCP tools (21)
+
+State, spawn-record, driver, recovery, metrics, past-misses, meta. Full reference: [`mcp/README.md`](mcp/README.md).
+
+Key tools:
+- `pipeline_run_task` / `pipeline_continue_task` — driver entry / resume
+- `pipeline_init` / `pipeline_finish` / `pipeline_done_cleanup` — task lifecycle
+- `pipeline_record_agent_run` — parse agent output, validate, append findings
+- `pipeline_validate` — run all 12 invariants
+- `pipeline_unlock_writes` / `pipeline_relock_writes` — TTL-bounded guard bypass for recovery
+- `pipeline_abandon` / `pipeline_fix_task_id` / `pipeline_cancel_spawn` — recovery primitives
+
+## Architecture at a glance
+
+```
+┌────────────────────────────────────────────────────────┐
+│  Claude Code  (chat UI)                                │
+│  ↓ /task <description>                                 │
+│  ↓ commands/task.md (≤30-line shuttle)                 │
+└────────────────────────────────────────────────────────┘
+                       ↓
+┌────────────────────────────────────────────────────────┐
+│  MCP server  (TypeScript, stdio transport)             │
+│  ─ 21 tools, 12 invariants (INV_001-012)               │
+│  ─ Plugin framework: 7 contracts (Step / Agent /       │
+│    Flow / Gate / Decision / Hook / SpawnProvider)      │
+│  ─ FSM driver (core has zero plugin-name references)   │
+│  ─ Audit log (per-project + global, redacted)          │
+└────────────────────────────────────────────────────────┘
+                       ↓
+┌────────────────────────────────────────────────────────┐
+│  Built-in plugins (mcp/src/driver/builtin/)            │
+│  agents (23) · steps (~17) · flows (3) · gates (3)    │
+│  decisions (6) · hooks (4) · spawn provider (shuttle)  │
+└────────────────────────────────────────────────────────┘
+                       ↓ shuttle response
+┌────────────────────────────────────────────────────────┐
+│  Claude Code  spawns subagents via Task tool           │
+│  Subagents read agent template + context + refs        │
+│  Output flows back via pipeline_continue_task          │
+└────────────────────────────────────────────────────────┘
+
+Cross-cutting:
+  hooks/pipeline-guard.sh   PreToolUse — blocks raw writes to .claude/ MCP-managed files
+  hooks/pipeline-stop.sh    Stop — tracks tri-state (in-flight / gate-paused / accept-pending)
+```
+
+Two state files per project under `<project>/.claude/`:
+- `pipeline-state.json` — canonical state, schema-validated, MCP-mutated only
+- `driver-state.json` — FSM scratchpad with `step_index`, `pending_spawns`, `pending_user_answer`
+
+`.claude/findings.jsonl` collects every structured finding emitted by reviewers. `.claude/mcp-audit.jsonl` traces every MCP tool call. Cross-project metrics in `~/.claude/metrics/{pipeline,agent-feedback,mcp-audit}.jsonl`.
+
+## Documentation
+
+| Doc | What | When to read |
+|---|---|---|
+| [`README.md`](README.md) | This file — overview + install | First contact |
+| [`WORKFLOW.md`](WORKFLOW.md) | Daily usage patterns, command-choice flowchart | First `/task` |
+| [`mcp/README.md`](mcp/README.md) | MCP tool reference (21 tools) + invariants (INV_001-012) | When debugging state |
+| [`hooks/README.md`](hooks/README.md) | Guard hook + Stop hook install + bypass mechanics | When customizing or escape-hatching |
+| [`specs/product-vision.md`](specs/product-vision.md) | Product positioning — "AI Team RTS", target users, pricing tiers, commercial trajectory | When thinking about the bigger picture |
+| [`specs/ui-vision.md`](specs/ui-vision.md) | 6-layer UX architecture: agent builder → specialist → team → curator → channels + console + 3 operating modes | When planning v2.3 daemon UX |
+| [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) | Phase index → links to phase plans | When picking next bundle |
+| [`specs/phases/`](specs/phases/) | Detailed plans per phase (v2.3 / v2.4 / v2.5 / v2.6 / far-future) | When executing a phase |
+| [`specs/open-backlog.md`](specs/open-backlog.md) | Currently open + deferred + code-polish Q-items | When picking next fix |
+| [`specs/closed-q-items.md`](specs/closed-q-items.md) | Historical record of 30 closed Q-items by bundle | When recurrence-checking |
+| [`validation-log.md`](validation-log.md) | Validation workflow + cross-cutting observations + closed-task index | When running real-task validation |
+| [`validation/closed-tasks/`](validation/closed-tasks/) | Per-task validation entries (5 files, growing) | When studying past runs |
+| [`specs/done/`](specs/done/) | Archived launcher prompts (v2.1, v2.2, v2.2a) | When learning the bundle pattern |
+
+## Self-improvement loop
+
+Every reviewer emits structured findings (schema-validated). Misses are logged via `/agent-feedback` with category + pattern. Future runs auto-load the last 10 confirmed past-misses per agent. `/learn` clusters by category, detects drift, suggests vocab promotions. Source-of-truth files:
+
+- `~/.claude/metrics/pipeline.jsonl` — one row per task (post-`/done`), 18+ fields
+- `~/.claude/metrics/agent-feedback.jsonl` — one row per logged miss
+- `~/.claude/metrics/mcp-audit.jsonl` — global audit (redacted project_dir, capped 10k)
+
+5 real-task runs to date all on s3-panel (TypeScript pnpm monorepo). Second-project validation pending — see [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) "Concrete next step".
+
+## Model routing
+
+Canonical table in `commands/task.md`. Simplified view:
+
+| Agent | SIMPLE / MEDIUM | COMPLEX |
+|---|:-:|:-:|
+| planner, implementer, logic-reviewer, challenger | opus | opus |
+| architect, research, migration | opus | opus |
+| code-analyzer, security, performance | sonnet | **opus** |
+| acceptance, plan-conformance, plan-grounding-check, style | **haiku** | sonnet |
+
+Multi-provider routing (cost-aware) is v2.5 territory — see [`specs/phases/v2.5-multiprovider.md`](specs/phases/v2.5-multiprovider.md). Until then, default per-agent.
+
+## File structure
 
 ```
 claude-pipeline/
-  agents/              20 agent prompt templates (role + checklist + JSON output schema).
-    references/        platform-specific + senior-pattern knowledge files loaded by agents.
-  commands/            slash commands (task is a pure ≤30-line shuttle; orchestration lives in mcp/driver).
-  templates/
-    schemas/           JSON Schemas — finding, reviewer-output, validator-output, pipeline-state, agent-feedback, category-vocab.
-    pipeline-state.json (machine state), pipeline-state-summary.md (human glance).
-    agent-output-formats.md
-  mcp/                 MCP enforcement server (TypeScript, stdio transport).
-    src/tools/         17 MCP tool implementations.
-    src/driver/        v2 plugin framework — types, core FSM (plugin-name-free),
-                       built-in plugins (steps, agents, flows, gates, decisions,
-                       hooks, spawn), loaders, and the two MCP driver tools
-                       (pipeline_run_task, pipeline_continue_task).
-    README.md          tool reference + invariants.
-  hooks/
-    pipeline-guard.sh  PreToolUse hook — denies direct Write/Edit/Bash that mutates MCP-managed files (item 4: marker-scoped, Python/Node/Deno/Perl/Ruby/dd coverage, bypass via pipeline_unlock_writes).
-    pipeline-stop.sh   Stop hook — blocks session-stop on in-flight pipeline.
-    README.md          install instructions + escape hatches.
-  metrics/
-    pipeline.jsonl     append-only structured per-task metrics.
-    agent-feedback.jsonl  append-only structured misses with category.
-    mcp-audit.jsonl    append-only audit of every MCP tool call (item 2; FIFO-capped at 10k).
-  settings.reference.json
+├── README.md                this file
+├── WORKFLOW.md              daily-usage guide
+├── validation-log.md        validation workflow + cross-cutting observations
+├── agents/                  23 agent prompt templates
+│   └── references/          25 senior-pattern refs (YAML frontmatter + content)
+├── commands/                16 slash commands (task.md is a ≤30-line shuttle)
+├── templates/
+│   ├── schemas/             JSON Schemas — finding, reviewer/validator output, state, vocab
+│   └── pipeline-state.json  initial state template
+├── mcp/                     MCP server (TypeScript, stdio)
+│   ├── src/
+│   │   ├── tools/           21 MCP tool implementations
+│   │   ├── lib/             schemas, ids, audit, parse-frontmatter, etc.
+│   │   └── driver/          v2 plugin framework
+│   │       ├── types/       7 plugin contracts
+│   │       ├── core/        FSM + registry + shuttle (zero plugin-name refs — grep-gated)
+│   │       ├── builtin/     all built-in plugins (steps, agents, flows, gates, decisions, hooks, spawn)
+│   │       └── loaders/     builtins.ts + project-config.ts
+│   ├── test/                343 tests across 45 files
+│   └── README.md            tool reference + invariants
+├── hooks/
+│   ├── pipeline-guard.sh    PreToolUse — protects .claude/ state files (20+ evasion patterns)
+│   ├── pipeline-stop.sh     Stop — tri-state (in-flight / gate-paused / accept-pending)
+│   └── README.md            install + bypass mechanics
+├── metrics/                 (per-machine; copied to ~/.claude/metrics on install)
+├── specs/
+│   ├── product-vision.md          positioning + commercial trajectory
+│   ├── ui-vision.md               UX architecture (6 layers + 3 modes)
+│   ├── v3-productization-roadmap.md  phase index
+│   ├── open-backlog.md            active Q-items
+│   ├── closed-q-items.md          historical Q-items by bundle
+│   ├── phases/                    detailed per-phase plans
+│   └── done/                      archived launcher prompts
+├── validation/
+│   └── closed-tasks/        per-task entries (newest-first)
+├── tests/
+│   └── guard-evasion/       20 guard hook evasion fixtures (all blocked)
+└── settings.reference.json  hooks fragment to merge into ~/.claude/settings.json
 ```
 
-The v2 plugin framework lives in `mcp/src/driver/`. The core FSM
-(`driver/core/fsm.ts`) is generic — every plugin-specific name lives in
-`driver/builtin/` and is registered exclusively in `driver/loaders/builtins.ts`.
-A `grep -rEi "planner|implementer|logic-reviewer|gate-[012]" mcp/src/driver/core/`
-must return zero matches. To extend the pipeline, add a new plugin file and a
-single registry line — no core changes.
+## Extension model
+
+Adding a new reviewer:
+1. Create `agents/my-reviewer.md` (prompt template — role + checklist + JSON output schema).
+2. Create `mcp/src/driver/builtin/agents/my-reviewer.ts` (~5 lines — AgentPlugin meta: name, model, template_path, applies_to).
+3. Register in `mcp/src/driver/loaders/builtins.ts` (1 line).
+
+Core is **never** touched. `grep -rEi "planner|implementer|logic-reviewer|gate-[012]" mcp/src/driver/core/` returns zero matches — this is enforced as a build gate.
+
+Plugin framework supports 7 contracts. Adding a new LLM provider = new `SpawnProviderPlugin` (Anthropic SDK direct, Ollama, OpenAI, etc.). Adding a new task trigger source (Jira/Slack/etc.) = new `TriggerSourcePlugin` (planned for v2.6, see [`specs/ui-vision.md`](specs/ui-vision.md)).
+
+Domain bundles (photo / video / research / VFX) are forward-compat via `PluginMeta.domain` field — see [`specs/open-backlog.md`](specs/open-backlog.md) Q40.
 
 ## Requirements
+
 - Claude Code CLI
-- Node 20+ and pnpm (for the MCP server in `mcp/`)
+- Node 20+ and pnpm (for MCP server)
+- `jq`, `git`, standard Unix toolchain (macOS / Linux / WSL)
 - Recommended: [RTK](https://github.com/rtk-ai/rtk) (60-90% CLI token savings)
-- Recommended plugins: `context7` (library docs)
+
+## License
+
+MIT. See [LICENSE](LICENSE) (if present).

@@ -6,7 +6,7 @@ MCP server that makes `pipeline-state.json` and `findings.jsonl` updates mechani
 
 Without enforcement, the orchestrator can mark a task `accepted` while never spawning a single agent — `findings.jsonl` stays empty, `/learn` has nothing to cluster, past-misses injection collapses to a no-op. This server replaces every "Write to .claude/pipeline-state.json" instruction with a tool call that validates inputs against the existing schemas and refuses incoherent transitions.
 
-## Tools (19)
+## Tools (20)
 
 Grouped by role:
 
@@ -35,7 +35,7 @@ Grouped by role:
 | `pipeline_run_task` | Driver entry. Calls `pipelineInit`, runs FSM until next shuttle pause (spawn-agent / ask-user / complete / error). Refuses to overwrite in-flight state (`withDriverStateLock`). |
 | `pipeline_continue_task` | Driver resume. Accepts `agent-result`, `agents-results`, `user-answer`, `recovery` inputs. Routes spawn results through `pipelineRecord*` (closes `open_spawns`). |
 
-### Recovery (4)
+### Recovery (5)
 
 | Tool | Purpose |
 |------|---------|
@@ -43,6 +43,7 @@ Grouped by role:
 | `pipeline_abandon` | Moves `pipeline-state.json` → `abandoned-<ts>.json`, deletes `.mcp-managed` and `.mcp-bypass-allowed` markers, writes one final audit-log entry. Does NOT append to `pipeline.jsonl`. |
 | `pipeline_unlock_writes` | Writes `.mcp-bypass-allowed` marker with `{schema_version, issued_at, expires_at, reason, issued_by_task_id}`. Default TTL 300s, max 3600s, max active marker lifetime ≤ 3600s from issue (HMAC-style cap — refuses to extend active marker without `force=true`). |
 | `pipeline_relock_writes` | Deletes `.mcp-bypass-allowed` marker immediately. |
+| `pipeline_fix_task_id` | Rewrite `pipeline-state.json`'s `task_id` to a schema-valid value under `withStateLock`. Validates `new_task_id` against `^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$` and requires an audit-trail `reason`. Use when a malformed `task_id` (legacy state, manual construction) would block `pipeline_finish`. |
 
 ### Metrics + finalization (2)
 

@@ -25,6 +25,7 @@ import { pipelineRunTask, runTaskSchema } from "./driver/tools/run-task.js";
 import { pipelineContinueTask, continueTaskSchema } from "./driver/tools/continue-task.js";
 import { pipelineSetPatternConfidence, setPatternConfidenceSchema } from "./tools/set-pattern-confidence.js";
 import { pipelineMeta, metaSchema } from "./tools/meta.js";
+import { pipelineFixTaskId, fixTaskIdSchema } from "./tools/fix-task-id.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -85,6 +86,7 @@ async function main() {
   register(server, "pipeline_continue_task", "Driver resume. Apply a shuttle response (agent-result, agents-results, user-answer, or recovery) to the persisted driver-state and run the FSM forward.", continueTaskSchema, pipelineContinueTask);
   register(server, "pipeline_set_pattern_confidence", "Set manual_confidence on an agent-feedback.jsonl entry. 0.0 permanently demotes a past-miss pattern from get_past_misses ranking; 1.0 trusts fully. The only place a JSONL line is mutated.", setPatternConfidenceSchema, pipelineSetPatternConfidence);
   register(server, "pipeline_meta", "Return {protocol_version, plugin_api_version, schema_versions, tools[]}. Shuttle markdown asserts mcp_protocol_required against this; halts on mismatch.", metaSchema, pipelineMeta);
+  register(server, "pipeline_fix_task_id", "Recovery primitive: rewrite pipeline-state.json's task_id under lock to a schema-valid value. Validates new_task_id against ^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}$. Use when a malformed task_id (legacy state, manual construction) blocks pipeline_finish at /done.", fixTaskIdSchema, pipelineFixTaskId);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

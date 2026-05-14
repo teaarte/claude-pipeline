@@ -1,3 +1,18 @@
+---
+tags: [testing, flutter, dart, widget-test, mobile]
+stack_signals:
+  - language: [dart]
+  - project_type: [mobile, frontend-app]
+summary: |
+  Flutter / Dart testing — widget tests for logic-bearing widgets, naming
+  conventions, do-not-test rules for pure layout.
+when_to_load: |
+  Task writes or changes tests for a Flutter codebase, OR review of test
+  code in a Flutter project. pubspec.yaml with flutter_test in
+  dev_dependencies.
+agent_hints: [test, acceptance, logic-reviewer]
+---
+
 # Testing: Flutter / Dart
 
 ## Framework Detection

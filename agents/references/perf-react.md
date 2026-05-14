@@ -1,3 +1,20 @@
+---
+tags: [performance, react, nextjs, rendering, bundle, hydration, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  React/Next.js performance checklist — unnecessary re-renders, heavy
+  build/render paths, bundle bloat, hydration mismatches, asset
+  optimization, App Router server/client boundary choices.
+when_to_load: |
+  Task touches React/Next.js components, hooks, rendering perf, bundle size,
+  image/font loading, or Next.js-specific perf concerns (revalidate, ISR,
+  Server vs Client components). Reviewer fan-out includes performance-reviewer
+  or UI-consistency on a React/Next stack.
+agent_hints: [performance-reviewer, logic-reviewer, ui-consistency]
+---
+
 # Performance: React / Next.js
 
 ## Rendering

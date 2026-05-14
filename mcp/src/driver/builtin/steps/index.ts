@@ -142,8 +142,20 @@ const CLASSIFY: StepPlugin = {
     const tests_mode = requireDecision<"tdd" | "regression-only">(ctx.registry, "tests_mode").decide(state);
     state.decisions["complexity"] = complexity;
     state.decisions["tests_mode"] = tests_mode;
+    // Q41: refs-to-load is LLM-driven when the spawn provider exposes a
+    // `query()` method. Pass the active flow's agents + provider through so
+    // the decision can build a useful classification prompt.
+    const flow = ctx.registry.flows.get(state.flow_name);
+    // Best-effort hint: flow step names are a decent proxy for "what kinds
+    // of agents will read these refs". We don't model an explicit
+    // step->agents mapping (steps name their agents inline) — the LLM can
+    // infer roles from the step names + the per-ref agent_hints metadata.
+    const activeAgents = flow ? flow.steps : [];
     state.decisions["refs_to_load"] = await Promise.resolve(
-      requireDecision<string[]>(ctx.registry, "refs_to_load").decide(state),
+      requireDecision<string[]>(ctx.registry, "refs_to_load").decide(state, {
+        active_agents: activeAgents,
+        spawn_provider: ctx.registry.spawn_provider,
+      }),
     );
     return { type: "advance" };
   },

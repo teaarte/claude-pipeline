@@ -1,3 +1,18 @@
+---
+tags: [performance, python, fastapi, asyncio, backend]
+stack_signals:
+  - language: [python]
+  - project_type: [backend, monorepo]
+summary: |
+  Python / FastAPI / asyncio performance checklist — N+1, pagination, async
+  pool sizing, transaction scope, gather vs serial calls.
+when_to_load: |
+  Task touches Python backend code (FastAPI, Django, Flask) with perf
+  concerns, scale targets, or async/await + DB interaction. Diff in
+  *.py with route handlers, async functions, or DB query construction.
+agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+---
+
 # Performance: Python / FastAPI / asyncio
 
 ## Database

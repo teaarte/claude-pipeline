@@ -1,3 +1,19 @@
+---
+tags: [concurrency, async, parallel, race-condition, atomicity, locks, retry]
+stack_signals: []
+summary: |
+  Concurrency design and race-condition reasoning — atomicity is bought, not
+  assumed. Patterns for Promise.all, async gather, queues, locks, and shared
+  state mutation.
+when_to_load: |
+  Task touches async functions, parallel work, queues, locks, atomic
+  operations, retry/timeout logic, request handlers under load, background
+  jobs, or race-condition-prone state mutations. Diff including Promise.all,
+  asyncio.gather, parallel HTTP calls, mutex/lock usage, or read-modify-write
+  patterns on shared state also qualifies.
+agent_hints: [challenger-reviewer, logic-reviewer, security-reviewer]
+---
+
 # Concurrency — Senior Stance
 
 ## When this applies

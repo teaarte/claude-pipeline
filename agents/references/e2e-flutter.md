@@ -1,3 +1,17 @@
+---
+tags: [e2e, flutter, integration-test, mobile]
+stack_signals:
+  - language: [dart]
+  - project_type: [mobile, frontend-app]
+summary: |
+  Flutter integration test patterns — IntegrationTestWidgetsFlutterBinding,
+  Key-based finders, pumpAndSettle, provider-override mocks.
+when_to_load: |
+  Task writes Flutter integration tests, OR project has integration_test/
+  directory. Validation step asserts end-to-end behavior on a Flutter app.
+agent_hints: [test, acceptance]
+---
+
 # E2E: Flutter Integration Tests
 
 ## Detection

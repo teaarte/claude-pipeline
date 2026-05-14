@@ -1,3 +1,18 @@
+---
+tags: [performance, nestjs, nodejs, orm, n-plus-one, backend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [backend, monorepo]
+summary: |
+  NestJS / Node.js performance checklist — N+1 patterns, missing indexes,
+  pagination, eager loading, ORM mistakes, request-handler hot paths.
+when_to_load: |
+  Task touches NestJS controllers / services / providers, TypeORM or Prisma
+  queries, request-pipeline middleware on a Node.js backend with perf
+  concerns or scale targets.
+agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+---
+
 # Performance: NestJS / Node.js
 
 ## Database & ORM

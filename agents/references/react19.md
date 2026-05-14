@@ -1,3 +1,20 @@
+---
+tags: [react, react19, rsc, server-components, server-actions, suspense, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  React 19 stance — Server Components, Server Actions, use(), useOptimistic,
+  useFormStatus, useActionState, Suspense boundaries, React Compiler.
+  Delete code that used to be hand-rolled, but don't over-apply primitives.
+when_to_load: |
+  Project uses react@>=19 (per package.json) or Next.js ≥15 (depends on React
+  19). Diff includes Server/Client component boundary changes, Server Actions,
+  use() hook, useOptimistic, useFormStatus, useActionState, useTransition,
+  Suspense boundaries, or React Compiler annotations.
+agent_hints: [logic-reviewer, performance-reviewer, ui-consistency, challenger-reviewer]
+---
+
 # React 19 — Senior Stance
 
 ## When this applies

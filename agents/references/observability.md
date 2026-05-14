@@ -1,3 +1,19 @@
+---
+tags: [observability, logging, tracing, metrics, alerts, slo, opentelemetry]
+stack_signals: []
+summary: |
+  Observability design — logs for forensics, metrics for alerts, traces for
+  request paths. Every new endpoint, job, or external dependency emits at
+  least one metric, structured logs, and propagates trace context.
+when_to_load: |
+  Task touches logging, structured logs, tracing (OpenTelemetry, distributed
+  tracing), metrics emission, health checks, alerting rules, dashboards, or
+  error reporting. Diff including new endpoints, new background jobs, new
+  external integrations, or any change that ships behavior-the-team-needs-to-watch
+  also qualifies.
+agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+---
+
 # Observability — Senior Stance
 
 ## When this applies

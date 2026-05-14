@@ -119,6 +119,30 @@ function buildPrompt(
   return lines.join("\n");
 }
 
+/**
+ * The shuttle SpawnProvider returns control to Claude Code's Task tool via
+ * a shuttle response — the spawned agent runs in Claude Code's context, not
+ * in this MCP server's process. Two consequences worth knowing:
+ *
+ * 1. `spawn(req)` doesn't await the agent's result. It returns a shuttle that
+ *    Claude Code observes; the agent's output later comes back through
+ *    `pipeline_continue_task({type:"agent-result", ...})` round-trip.
+ *
+ * 2. `query?()` (Q41 — synchronous one-shot LLM classification call used by
+ *    DecisionPlugins like refs-to-load) is intentionally NOT implemented
+ *    here. The shuttle pattern cannot issue a synchronous out-of-band LLM
+ *    call — we don't have an LLM transport in this process; the LLM lives
+ *    behind Claude Code. The optional `?` on `SpawnProviderPlugin.query?()`
+ *    encodes this: DecisionPlugins must handle `ctx.spawn_provider?.query`
+ *    being undefined and fall back gracefully (refs-to-load uses regex
+ *    fallback when query is absent).
+ *
+ *    `query?()` will be implemented by the v2.3 daemon's direct-API
+ *    SpawnProvider (Anthropic SDK or OpenAI SDK running in the daemon
+ *    process — no shuttle, real async). At that point Q41's LLM-driven
+ *    refs selection activates automatically with no changes here or in
+ *    refs-to-load.
+ */
 export const shuttleSpawnProvider: SpawnProviderPlugin = {
   name: "shuttle",
   async spawn(req: AgentSpawnRequest): Promise<StepResult> {

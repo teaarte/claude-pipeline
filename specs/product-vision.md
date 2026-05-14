@@ -193,6 +193,105 @@ That said, the **architectural moat (schema-validated state, audit, invariants, 
 
 **Recommended posture:** ship code-domain product first (free → Pro tier through Phase 2). Only entertain non-code domains when (a) someone external asks for it, OR (b) a side-project proof-of-concept produces a "wow, this delivers" signal. Don't proactively chase domain expansion.
 
+## Trigger sources & autonomous mode
+
+The pipeline today fires only when a human types `/task` in Claude Code. The RTS positioning ("I create a task, the team picks it up and does it") requires task **pickup loops** from external systems and **auto-gate policies** that skip human approval on routine work. This section sketches the architecture; v2.6 territory.
+
+### Three plugin contracts needed (not yet defined)
+
+```typescript
+interface TriggerSourcePlugin extends PluginMeta {
+  name: string;
+  start(ctx: TriggerContext): Promise<void>;   // begin listening/polling
+  stop(): Promise<void>;
+}
+//  Implementations: JiraPollerPlugin, SlackEventPlugin, GithubWebhookPlugin,
+//                   CronPlugin, QueuePlugin (SQS/Redis/RabbitMQ)
+
+interface AutoGatePolicyPlugin extends PluginMeta {
+  name: string;
+  decide_gate(state: DriverState, gate: "gate-0" | "gate-1" | "gate-2"):
+    "auto-approve" | "human-required";
+}
+//  Examples:
+//    - auto-approve gate-0 if complexity=simple AND project ∈ trusted
+//    - auto-approve gate-1 if grounding=GROUNDED AND no security touched
+//    - human-required always on gate-2 of complex tasks
+
+interface OutputRoutingPlugin extends PluginMeta {
+  name: string;
+  on_complete(state: DriverState, verdict: Verdict): Promise<void>;
+}
+//  Implementations: JiraCommentPlugin, SlackDMPlugin, GithubPRPlugin,
+//                   CuratorEscalationPlugin (only non-routine → human)
+```
+
+These are forward-compat additions. Plugin framework already supports new contracts via `loaders/builtins.ts` extension; no core refactor needed. `PluginMeta.domain` (already added) lets a trigger source declare which bundle it belongs to (e.g., Jira → code bundle, Slack-photo-bot → photo bundle).
+
+### Example: Jira ticket → autonomous run
+
+```
+1. Daemon running (v2.3 prerequisite).
+2. JiraPollerPlugin registered with config:
+   { jira_url, project_keys: ["DEV"], poll_interval: "5m",
+     filter: "label=ai-eligible AND status=todo",
+     template_preset: "senior-backend-typescript" }
+3. Plugin polls every 5min. Finds eligible ticket DEV-123.
+4. Ticket body normalized → POST to daemon's /tasks endpoint with
+   { description, source: "jira", source_id: "DEV-123",
+     auto_approve_categories: ["medium-frontend"],
+     output_routing: ["slack:@reporter", "github:open-pr"] }
+5. Pipeline applies the template preset (which agents, refs, model routing).
+6. Each gate: AutoGatePolicyPlugin checks. Routine? auto-approve.
+   Non-routine? CuratorEscalationPlugin DMs the reporter on Slack with a
+   compact summary + a 30-min response window. Timeout → escalate to lead.
+7. On completion: GithubPRPlugin opens PR with branch + summary.
+   JiraCommentPlugin updates DEV-123 with PR link.
+   SlackDMPlugin notifies reporter.
+```
+
+### Example: Slack command → autonomous run
+
+```
+User in #engineering: /pipeline run "fix login button alignment"
+  → SlackEventPlugin parses → POST /tasks
+  → Daemon dispatches to a free instance (Fleet abstraction, v3.0)
+  → Pipeline runs autonomously, Curator DMs user only on gate non-routine
+  → Result: thread reply with PR link + 1-paragraph summary
+```
+
+### Required capabilities (mapping to phases)
+
+| Capability | Phase | Required for autonomous pickup |
+|---|---|---|
+| Daemon HTTP API + Web UI | v2.3 | YES — must be running |
+| Templates / presets | v2.3 | YES — preset per task profile |
+| Multi-provider cost-aware routing | v2.5 | NICE — cheaper for routine ingest |
+| Curator agent | v2.6 | YES — handles non-routine escalation |
+| `TriggerSourcePlugin` contract | v2.6 | YES — core requirement |
+| `AutoGatePolicyPlugin` contract | v2.6 | YES — without human at each gate |
+| `OutputRoutingPlugin` contract | v2.6 | YES — completion notifications |
+| Fleet abstraction (multi-instance dispatch) | v3.0 | NICE — for high-volume |
+
+**Timeline from today:** ~2-3 months to single-instance Jira/Slack autonomous mode (v2.6); ~4-5 months to fleet dispatch (v3.0).
+
+### Trust / safety considerations
+
+Autonomous mode adds risk vectors:
+
+- **Trigger source compromise** — if Jira instance is compromised, attacker can dispatch tasks. Mitigations: per-trigger-source allowlist of repo paths; per-trigger-source rate limits; explicit `verified_reporter` allowlist in config; audit-log entry per trigger acceptance.
+- **Auto-approve policy too permissive** — wrong gate auto-approved on a security-sensitive change. Mitigations: AutoGatePolicy plugins always run AFTER review verdicts; require unanimous reviewer APPROVE; require zero blocking findings; security-needed=true → always human gate.
+- **Curator escalation flooded** — high-volume mode swamps the human with DMs. Mitigations: per-user DM rate limit; batch summaries; weekly digest mode.
+- **Side-effect operations** (PR open, git push, ticket comment) — these are publicly visible. Existing guardrails (guard hook, OutputRoutingPlugin allowlist, dry-run mode for first 10 runs of any new trigger source).
+
+These are NOT cheap problems. They're the difference between "v2.6 ships with autonomous-mode disabled by default" and "v2.6 ships with safe autonomous-mode enabled by default". Likely path: ship disabled in v2.6, validate in dogfood for 2-4 weeks, enable for trusted users in v2.7.
+
+### Strategic posture
+
+Autonomous mode is **THE differentiator** versus single-agent autonomous tools (Devin, Cognition) — those tools execute one task at a time when invoked. Fleet of multi-agent teams with team-lead mediation, pickup from N trigger sources, output to N destinations — this is the RTS positioning.
+
+But it's also **the easiest place to over-promise.** "Just give me a Jira ticket, the AI does the rest" is a marketing message that survives reality less than "human-in-loop with strong assistance". Plan to ship autonomous mode **disabled by default + opt-in per trigger source**, not as the headline feature. The headline stays: "command a team of AI agents." Autonomous pickup is a Pro/Team tier capability that mature users unlock.
+
 ## Anti-goals (what NOT to build)
 
 - ❌ **Generic AI chat interface** — Cursor/Claude Code own this. Don't compete.

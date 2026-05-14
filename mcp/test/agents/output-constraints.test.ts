@@ -43,6 +43,8 @@ describe("Q21 — agent output constraints", () => {
     expect(md).toContain("`summary_line`: ≤ 100 chars");
     expect(md).toContain("f-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{6}");
     expect(md).toContain("`findings[].summary`: ≤ 200 chars");
+    // Q28: per-finding schema_version rule must appear in every template
+    expect(md).toContain("`findings[].schema_version`: required");
   });
 
   it("schema rejects a summary_line over 100 chars", async () => {
@@ -125,6 +127,78 @@ describe("Q21 — agent output constraints", () => {
     };
     const r = await validate("finding.schema.json", finding);
     expect(r.ok).toBe(true);
+  });
+
+  it("Q28: reviewer-output validates clean when each finding carries schema_version", async () => {
+    const header = {
+      schema_version: "1.0",
+      agent: "logic-reviewer",
+      task_id: "t-2026-05-14-q28test",
+      iteration: 1,
+      verdict: "APPROVE",
+      summary_line: "no issues",
+      findings: [
+        {
+          schema_version: "1.0",
+          id: "f-2026-05-14-a3b9k7",
+          agent: "logic-reviewer",
+          iteration: 1,
+          task_id: "t-2026-05-14-q28test",
+          file: "src/x.ts",
+          line_start: 1,
+          line_end: 2,
+          severity: "info",
+          category: "other",
+          summary: "x",
+          evidence_excerpt: "x",
+          suggested_fix: "x",
+          status: "open",
+        },
+      ],
+      past_misses_applied: 0,
+      past_miss_matches: [],
+      ref_rules_consulted: [],
+    };
+    const r = await validate("reviewer-output.schema.json", header);
+    expect(r.ok).toBe(true);
+  });
+
+  it("Q28: validator-output rejects a finding missing schema_version", async () => {
+    const header = {
+      schema_version: "1.0",
+      agent: "acceptance",
+      task_id: "t-2026-05-14-q28test",
+      iteration: 1,
+      verdict: "PASS",
+      summary_line: "ok",
+      findings: [
+        {
+          // intentionally omit schema_version
+          id: "f-2026-05-14-a3b9k7",
+          agent: "acceptance",
+          iteration: 1,
+          task_id: "t-2026-05-14-q28test",
+          file: null,
+          line_start: null,
+          line_end: null,
+          severity: "warn",
+          category: "other",
+          summary: "x",
+          evidence_excerpt: null,
+          suggested_fix: null,
+          status: "open",
+        },
+      ],
+    };
+    const r = await validate("validator-output.schema.json", header);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(
+        r.errors.some(
+          (e) => /findings\/0/.test(e.path) && /schema_version/.test(e.message + e.path),
+        ),
+      ).toBe(true);
+    }
   });
 
   it("finding.schema rejects a summary > 200 chars", async () => {

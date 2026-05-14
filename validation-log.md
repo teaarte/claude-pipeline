@@ -282,6 +282,20 @@ The driver's spawn payload puts the AgentPlugin name (`code-analyzer`, `context-
 4. **🟢 LOW — Q10: `current_step` field in `pipeline-state.json` stays stale.**
    Shows `"STEP 1"` while phases context/planning/implementation are `completed` and validation is `in_progress`. The v2 driver updates FSM state in `driver-state.json:step_index` and leaves `pipeline-state.json:current_step` untouched. Either the v2 driver should update it, or the field is obsolete and should be removed from the schema.
 
+6. **🟡 MEDIUM — Q17: `pipeline-state.json:stack` fields never populated.**
+   Inspection of `pipeline-state.json` post-run shows:
+   ```json
+   "stack": {
+     "language": "unknown",
+     "package_manager": null,
+     "test_command": null,
+     "lint_command": null,
+     "build_command": null,
+     "project_type": null
+   }
+   ```
+   Despite the s3-panel project having clear stack indicators (CLAUDE.md "Stack" section: React 19 + TypeScript 5.7 + pnpm + Vitest + Rsbuild; package.json with `pnpm` workspaces; etc.). `pipeline_init` accepts a `stack` parameter (per `smoke.ts` fixture), but the v2 driver entry doesn't compute it pre-flight. Agents receive all-null `project_stack` context → reference loading degraded; metrics row in `pipeline.jsonl` carries useless stack info for cross-stack `/learn` analysis. **Effort ~2-4h** — add stack-detection helper + wire into driver's pre-flight before `pipeline_init`. **See roadmap Q17.**
+
 5. **🟢 LOW — Q11: 10/21 `pipeline_continue_task` calls returned `verdict: "error"`.**
    Half of continue-task calls errored; last call succeeded so pipeline recovered. Likely combination of (a) JSON-parse retries via soft parser, (b) `closePriorPhases` swallowed `INV_002/010/011` during phase boundary crossings, (c) `INV_011` prereq check fires when step tries to begin agent before prior phase recorded as `completed`. Audit log has the errors:
    ```bash

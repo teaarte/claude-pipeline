@@ -63,4 +63,38 @@ describe("pipeline_begin_agent", () => {
       await proj.cleanup();
     }
   });
+
+  it.each(["haiku", "sonnet", "opus"] as const)(
+    "Q19: persists explicit model '%s' onto the open_spawn entry",
+    async (model) => {
+      const proj = await tempProject();
+      try {
+        await pipelineInit(initArgs(proj.dir));
+        await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+        await pipelineBeginAgent({
+          project_dir: proj.dir,
+          phase: "planning",
+          agent: "planner",
+          model,
+        });
+        const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+        expect(state.phases.planning.open_spawns[0].model).toBe(model);
+      } finally {
+        await proj.cleanup();
+      }
+    },
+  );
+
+  it("Q19: open_spawn.model defaults to null when caller omits model (backward compat)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await pipelineBeginAgent({ project_dir: proj.dir, phase: "planning", agent: "planner" });
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      expect(state.phases.planning.open_spawns[0].model).toBeNull();
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

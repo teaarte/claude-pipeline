@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   DriverState,
+  ModelName,
   PluginRegistry,
   StepContext,
   StepResult,
@@ -29,6 +30,13 @@ export type SpawnRecorder = (req: {
   project_dir: string;
   phase: Phase;
   agent: string;
+  /**
+   * Resolved effective model for this spawn. Threaded through Q19 so
+   * `open_spawns[]` and the eventual metrics row carry the model that
+   * actually ran (not just `plugin.default_model`). `null` when no
+   * resolution happened (legacy callers / synthetic tests).
+   */
+  model?: ModelName | null;
 }) => Promise<{ agent_run_id: string }>;
 
 export interface RunFSMOptions {
@@ -111,7 +119,7 @@ function buildStepContext(
 ): StepContext {
   return {
     registry,
-    async beginSpawn(agent, phase) {
+    async beginSpawn(agent, phase, model) {
       // When a SpawnRecorder is injected (production MCP path), it owns
       // agent_run_id minting and persists the open_spawn into pipeline-state.
       // The fallback path mints in-memory for smoke / unit tests where
@@ -121,11 +129,13 @@ function buildStepContext(
           project_dir: state.project_dir,
           phase,
           agent,
+          model: model ?? null,
         });
         state.pending_spawns[agent_run_id] = {
           agent,
           phase,
           started_at: new Date().toISOString(),
+          model: model ?? null,
         };
         return agent_run_id;
       }
@@ -134,6 +144,7 @@ function buildStepContext(
         agent,
         phase,
         started_at: new Date().toISOString(),
+        model: model ?? null,
       };
       return id;
     },

@@ -55,7 +55,7 @@ ALWAYS emit output in this exact order:
 1. A single fenced ```json block conforming to `templates/schemas/reviewer-output.schema.json`. This is the machine-parseable surface — the MCP server validates it.
 2. Markdown narrative below the block.
 
-Every `category` value MUST be drawn from `templates/schemas/category-vocab.json` under `vocab["logic-reviewer"]`. Use `"other"` + `proposed_new_category` only when no existing entry fits.
+The driver injects the allowed `category` values for `logic-reviewer` inline in your spawn prompt (under "## Allowed `category` values"). Use one of those values, or `"other"` + `proposed_new_category` when no existing entry fits.
 
 Template:
 
@@ -122,3 +122,9 @@ Verdict rules:
 - `verdict = "APPROVE"` otherwise (info/warn findings allowed).
 - `summary_line` ≤ 100 chars, useful at-a-glance.
 - Every finding MUST have a `category`. If no entry fits, set `"category": "other"` AND populate `proposed_new_category` — the MCP server routes that to `/agent-feedback` for vocab promotion.
+
+## Output constraints (hard validation)
+
+- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
+- `findings[].summary`: ≤ 200 chars

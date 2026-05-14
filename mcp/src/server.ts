@@ -26,6 +26,7 @@ import { pipelineContinueTask, continueTaskSchema } from "./driver/tools/continu
 import { pipelineSetPatternConfidence, setPatternConfidenceSchema } from "./tools/set-pattern-confidence.js";
 import { pipelineMeta, metaSchema } from "./tools/meta.js";
 import { pipelineFixTaskId, fixTaskIdSchema } from "./tools/fix-task-id.js";
+import { pipelineDoneCleanup, doneCleanupSchema } from "./tools/done-cleanup.js";
 import { withAudit } from "./lib/audit.js";
 
 function toolResponse(value: unknown): { content: { type: "text"; text: string }[] } {
@@ -61,6 +62,29 @@ function register<I, O>(
   });
 }
 
+/**
+ * Q23: register a tool WITHOUT the withAudit wrapper. Used only by
+ * pipeline_done_cleanup — it deletes mcp-audit.jsonl, and a post-impl
+ * audit emission would re-create the file (the Q14 regression). The
+ * task's completion is already audited by pipeline_finish, so dropping
+ * one extra entry costs nothing.
+ */
+function registerNoAudit<I, O>(
+  server: McpServer,
+  name: string,
+  desc: string,
+  schema: any,
+  impl: ToolImpl<I, O>,
+): void {
+  server.tool(name, desc, schema, async (args: any) => {
+    try {
+      return toolResponse(await impl(args));
+    } catch (e) {
+      return errorResponse(e);
+    }
+  });
+}
+
 async function main() {
   const server = new McpServer({
     name: "claude-pipeline",
@@ -87,6 +111,7 @@ async function main() {
   register(server, "pipeline_set_pattern_confidence", "Set manual_confidence on an agent-feedback.jsonl entry. 0.0 permanently demotes a past-miss pattern from get_past_misses ranking; 1.0 trusts fully. The only place a JSONL line is mutated.", setPatternConfidenceSchema, pipelineSetPatternConfidence);
   register(server, "pipeline_meta", "Return {protocol_version, plugin_api_version, schema_versions, tools[]}. Shuttle markdown asserts mcp_protocol_required against this; halts on mismatch.", metaSchema, pipelineMeta);
   register(server, "pipeline_fix_task_id", "Recovery primitive: rewrite pipeline-state.json's task_id under lock to a schema-valid value. Validates new_task_id against ^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}$. Use when a malformed task_id (legacy state, manual construction) blocks pipeline_finish at /done.", fixTaskIdSchema, pipelineFixTaskId);
+  registerNoAudit(server, "pipeline_done_cleanup", "Server-side /done cleanup: deletes every orchestrator working file from <project>/.claude/ in deterministic order (mcp-audit.jsonl LAST so it isn't regenerated). Preserves settings.local.json. No guard bypass needed — this is MCP-internal IO. Returns {removed[], kept[]}.", doneCleanupSchema, pipelineDoneCleanup);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

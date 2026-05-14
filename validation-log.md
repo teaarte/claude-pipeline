@@ -249,9 +249,146 @@ find ~ -name "category-vocab.json"
 
 ---
 
+## t-2026-05-14-contextreadfirstinth — Phase 0.5 Step 3: Identity base contract
+
+> **✓ Closed 2026-05-14.** User accepted at Gate 2; `/done` ran cleanly. Q23 cleanup **perfect** — `.claude/` post-`/done` contains only `settings.local.json` (no `mcp-audit.jsonl` stub → **Q14 confirmed subsumed by Q23 in production**). Q22 metrics row **fully populated**: `tests_mode:"regression-only"`, `impl_iters:1`, `plan_iters:1`, `acceptance_first_pass:true`, `gate1_revisions:0`, `verdict:"accepted"`, 5 `reviewer_verdicts` with `phase` field (Q20). **Post-`/done` issues:** Q36 (Stop hook scary message after Gate 2 accept — **already fixed on this branch** in commit `d6f7438`) + Q37 NEW (`stack: null` in metrics row despite state populated — Q22 family extension, ~30min, filed for v2.2d).
+
+- **Project:** `~/Work/AI-FACTORY/s3-panel`
+- **Complexity (auto):** medium ✓
+- **tests_mode (auto):** regression-only ✓
+- **Wall time:** ~90 min (started 14:42Z, Gate 2 reached 15:23Z)
+- **Agents count:** 8 (context: 2, planning: 3, test_first: 0 skipped, implementation: 2, validation: 1)
+- **Verdict:** at Gate 2, paused for analysis before `/done`
+- **Subjective rating:** 8/10 — first run after v2.1-polish-bundle landed; **7 of 10 bundled fixes verified working in production**
+
+### What worked — v2.1-polish-bundle fixes verified end-to-end
+
+| Q | Production evidence |
+|---|---|
+| **Q7** (slug) | `task_id="t-2026-05-14-contextreadfirstinth"` — schema-valid format |
+| **Q8** (gate mirror) | `gates = {gate0:"approved", gate1:"approved", gate1_feedback:"approve", gate2:"pending"}`. **2 audit-entries `pipeline_gate_mirror` in correct order.** Scratch flags `gate-0_mirrored`/`gate-1_mirrored` present (idempotency). |
+| **Q11** (error_class) | The 1 audit-error carries `error_class: "schema-validation"` — categorization working |
+| **Q17** (stack populate) | `state.stack` has `language:"typescript"`, `package_manager:"pnpm"` populated (no longer all-null) — **but see Q26** below for wrong values |
+| **Q20** (verdict.phase) | All 5 `reviewer_verdicts[]` entries carry `phase` field — logic-reviewer rows in `planning` vs `implementation` now distinguishable |
+| **Q22** (metrics row) | `state.tests_mode = "regression-only"` (was null in prior runs). `pipeline_finish` will produce a correct metrics row this time. |
+| **Q24** (Stop hook) | `pending_user_answer = {gate:"gate-2", message:"..."}` correctly populated. Stop hook stays silent at Gate 2 pause. **No more scary "Pipeline is in flight" message.** |
+
+Audit error rate: **1/15 = 7%** (was 48% on first run → 27% → 7%). Strong improving trend.
+
+### Gate interaction (real conversation)
+- **Gate 0:** approved as-is on first prompt
+- **Gate 1:** approved on first plan (no revision; plan-grounding-check verdict = `GROUNDED` first try)
+- **Gate 2:** **pending** — user requested thorough pre-`/done` analysis
+
+### Bugs found (4 new + 2 recurrences)
+
+1. **🟡 MEDIUM — Q9 RECURRENCE (3rd time): code review under-spawned.**
+   - **Implementation phase:** 2 agents (`implementer` + `logic-reviewer` only). Spec says 6 (impl + 5 reviewers).
+   - **Validation phase:** 1 agent (`acceptance` only). Spec says 4+ (acceptance + plan-conformance + UI-consistency + API-contract + optionally playwright).
+   - Now confirmed across THREE separate real-task runs. Hypothesis space narrowing — likely `applies_to` predicates or step impl in `builtin/steps/index.ts`. Filed for v2.2-review-completeness bundle alongside Q27.
+
+2. **🟡 MEDIUM — Q26 NEW: Q17 stack-detector takes wrong command values.**
+   - Detected: `test_command:"npm run test"`, `lint_command:"npm run lint"`, `build_command:"npm run build"`, `project_type:"library"`.
+   - Real (from s3-panel CLAUDE.md "Validation Commands"): `pnpm -r lint`, `pnpm -r test`, `pnpm -r typecheck`, `pnpm -r build`. Project is a pnpm monorepo, not a library.
+   - Q17 spec required CLAUDE.md > package.json priority chain; detector skipped CLAUDE.md parsing entirely.
+   - Filed as new Q26.
+
+3. **🟡 MEDIUM — Q27 NEW: pre-review infrastructure files missing.**
+   - **All four expected files absent:** `.claude/diff.txt`, `.claude/caller-context.md`, `.claude/antipattern-candidates.md`, `.claude/past-misses-*.md`.
+   - Confirmed via state: `past_misses_applied: 0` for ALL 5 reviewer_verdicts.
+   - **Compound effect with Q9:** the 1/5 reviewer that fires (Q9 deficit) is reviewing **blind to 4 of its expected input files**. Real review value far below already-low Q9 baseline.
+   - Filed as new Q27. **Top priority for v2.2 alongside Q9** — bundled as "v2.2-review-completeness".
+
+4. **🟢 LOW — Q28 NEW: schema_version missing in per-finding entries.**
+   - The 1 audit-error: `must have required property 'schema_version'` on `/findings/0`. Retry-recovered.
+   - Q21 added bullet-list constraints for `summary_line`/`id`/`summary` but missed `schema_version` per-finding requirement.
+   - Filed as Q28 (Q21 extension).
+
+5. **🟢 LOW — Q29 NEW: logic-reviewer overuses `category:"other"`.**
+   - 4 of 5 findings categorized as `other`. The natural categories LLM wanted are not in vocab: `spec-deviation`, `scope-creep`, `coverage-gap`.
+   - Q18 fixed inline-resolution; vocab itself needs expansion.
+   - Filed as Q29.
+
+6. **🟢 LOW — Q10 RECURRENCE:** `current_step: "STEP 1"` while `step_index=20`. Known cosmetic.
+
+### Friction / UX notes (not bugs)
+
+- **task_id slug semantics** (cross-cutting observation already filed): generated slug `contextreadfirstinth` came from preamble *"## Context (read first, in this order)"*. Third confirmation of the universal preamble pattern. Cross-cutting observation now has 3 supporting data points — could promote to Q30 if next 1-2 runs confirm same pattern.
+
+### Objective signals from logs
+
+- `plan_iters`: 1 (plan-grounding-check first-try GROUNDED, no replan)
+- `impl_iters`: 1 (logic-reviewer iter1 APPROVE, no revision)
+- `reviewer_disagreements`: 0 (challenger didn't spawn — Q9)
+- `acceptance_first_pass`: yes
+- `agents_count by complexity`: 8 (observed) vs ~12 expected for MEDIUM with full review fan-out — Q9 + Q27 deficit
+- Output size outliers: not directly measurable
+- `_repaired` count: 0
+- `force_used` count: 0
+- Audit verdict distribution: 14 ok / 1 error / 0 force_used — **error rate 7%, down from 27%**
+- error_class breakdown: 1× `schema-validation` (Q28 root cause)
+
+### Quality of actual delivery
+
+| Aspect | Result |
+|---|---|
+| Diff | 2 files changed (`docs/ROADMAP.md` + `packages/module-contract/src/index.ts`), +42/-4 lines — focused ✓ |
+| Plan | 306 lines, Approach Summary + locked-in Constraints + 22 atomic steps ✓ |
+| Identity interface | All 10 fields per SPEC.md §3.2 + REFERENCE-osc-context.md §3 ✓ |
+| ROADMAP boxes 125-129 | All ticked ✓ |
+| analyzer-claims | 12 structured claims, queryable JSON ✓ |
+| typecheck/lint/build | passed per acceptance verdict ✓ |
+| Blockers caught | 0 (5 info findings, all advisory) — but Q9+Q27 mean we can't trust "0 blockers" |
+
+**Work itself is correct.** All issues found are in pipeline plumbing, not in delivered output.
+
+### Notes
+
+- This run is the **first end-to-end execution of v2.1-polish-bundle** code in production. 7/10 bundle fixes verified working: Q7, Q8, Q11, Q17 (partial — see Q26), Q20, Q22, Q24. The remaining 3 (Q18, Q19, Q23, Q21) work but weren't directly testable from this state.
+- The trend on audit-error rate (48% → 27% → 7%) is real signal — Q11 categorization + better prompt examples + cleaner state shape compound.
+- Two structural gaps remain (Q9 + Q27 + Q30) that limit how much we can claim about "review quality". Until all three close, the value-prop "multi-perspective adversarial review" is aspirational.
+
+### Additional findings from full state-file read (Q30-Q34)
+
+After the jq-driven query pass, a line-by-line read of `pipeline-state.json` surfaced **5 more issues** that aggregate-shape queries miss — a category of "v1-era legacy fields the v2 driver doesn't maintain":
+
+- **Q30** 🟡 MEDIUM — `state.refs_loaded: []` and `state.refs_dropped_due_to_cap: []`. `DecisionPlugin` `refs-to-load` (Global Rule #13) should inject reference files into agent prompts; never fires. Frontend TS project should at minimum get `perf-react.md` + `security-frontend.md`. Confirmed across both real-task runs on s3-panel — never any refs loaded. **Bundles with Q9 + Q27 into v2.2-review-completeness.**
+- **Q31** 🟡 MEDIUM — `phases.planning.iterations: 0` and `phases.implementation.iterations: 0` despite `reviewer_verdicts[].iteration: 1` for both phases. Field defined in schema, never written by v2 driver.
+- **Q32** 🟢 LOW — `phases.validation.acceptance_first_pass: false` despite acceptance iter1 PASS verdict. Q22 fix correctly derives `acceptance_first_pass: true` for metrics row by bypassing this stale source field. Cleanup: deprecate field OR populate it.
+- **Q33** 🟡 MEDIUM — `state.files.created: []`, `state.files.modified: []` despite git diff showing 2 modified files. v2 driver doesn't write these. `/learn` loses file-level signal; v2.7 cost-aware routing data starved.
+- **Q34** 🟢 LOW — `phases.planning.grounding_check: null` despite plan-grounding-check verdict = GROUNDED. Same shape as Q31/Q32.
+
+**Architectural pattern across Q31/Q32/Q34:** v1 markdown-orchestrator wrote rich per-phase summary fields; v2 TypeScript driver writes the underlying `reviewer_verdicts[]` array (correct) but skips the per-phase legacy summary fields. **Q35 umbrella ticket**: schema-hygiene audit — decide per field whether to deprecate (remove + bump major schema_version) or sync (write at verdict-record time). Q33 is similar but the field is high-value, so populate. Q31/Q32/Q34 are cosmetic — deprecate.
+
+**Sibling observations (not filed as Q-items):**
+- `logic_vs_challenger_disagreement: false` is vacuously-false because challenger never spawns (Q9). Could be `null` / `"n/a"` until challenger fires. Tied to Q9 — defer.
+- `state.task` stores 2600+ chars of raw input including `## Context (read first, in this order)` preamble + leading whitespace + `\n` escapes. Source of slug semantics issue (cross-cutting observation already filed). Not a bug per se but explains why slug = "contextreadfirstinth".
+- `checkpoint_results: []` — TDD-only field, correct empty in `regression-only` mode. Not a bug.
+
+---
+
 ## t-2026-05-14-workingdirectoryuser — apps/curator → apps/core rename refactor (Phase 0.5 Steps 1-2)
 
 > **✓ Closed 2026-05-14.** `/done` ran successfully. Metrics row written to `~/.claude/metrics/pipeline.jsonl` (`verdict: accepted`, 8 agents, 5 reviewer_verdicts preserved). State files cleaned. Q12 + Q13 fixes verified holding. **New issues observed post-`/done`:** Q22 (metrics row has null `tests_mode` / `impl_iters=0` despite 1 revision) and Q23 (architectural — Plan B `pipeline_done_cleanup` MCP tool was deferred; Q14 audit regen recurred as expected). Q14 also recurred (267-byte `mcp-audit.jsonl` stub remains).
+>
+> **✓ RESOLVED 2026-05-14 by v2.1-polish-bundle (branch `v2.1-polish-bundle`, 9 commits):**
+> - Q19 fixed in commit `c114f21` (`fix(driver): Q19 — thread resolved model through SpawnRecorder to open_spawns`).
+> - Q20 fixed in commit `e7741d0` (`feat(state): Q20 — add phase field to reviewer_verdicts entries`).
+> - Q8 fixed in commit `359f566` (`fix(driver): Q8 — mirror gate decisions from scratch to pipeline-state.gates`).
+> - Q11 fixed in commit `c290fb8` (`feat(audit): Q11 — add error_class field for verdict=error categorization`).
+> - Q22 fixed in commit `a038293` (`fix(finish): Q22 — extract tests_mode + impl_iters + acceptance_first_pass correctly`).
+> - Q23 fixed in commit `dda67cd` (`feat(tools): Q23 — pipeline_done_cleanup MCP tool (closes Q14, supersedes Q12 Plan A)`). Q14 subsumed by Q23 (no more audit-regen stub); Q12 Plan A retired.
+> - Q17 fixed in commit `9b35bd3` (`feat(driver): Q17 — auto-detect project stack and persist to pipeline-state`).
+> - Q18 fixed in commit `226f994` (`feat(driver): Q18 — embed category vocab inline in agent spawn prompts`). No more file-system `find` hunting.
+> - Q21 fixed in commit `eb445e0` (`fix(agents): Q21 — output examples respect header schema constraints`).
+> - Bug-list 1-9 from this entry: Q8 ✓, Q9 deferred (needs auth/perf task profile), Q11 ✓, Q17 ✓, Q18 ✓, Q20 ✓, Q21 ✓, Q22 ✓, Q23 ✓.
+> - Tests: 209 → 265 (+56). Tool count: 20 → 21. `mcp-audit.jsonl` stub will not recur after Q23 lands.
+>
+> **+ Q24 hot-fix during polish-bundle real-run validation (2026-05-15):** during the s3-panel run that exercised Q8/Q11/Q17/Q22 fixes in production, Stop hook surfaced a confusing `decision: "block"` message at Gate 0 ("Pipeline is in flight at step STEP 1 with verdict=null. Run /done..."). Pipeline was correctly paused awaiting user input — but the hook didn't check `driver-state.pending_user_answer`. Filed + fixed on the same branch:
+> - Q24 fixed in commit (TBD `git log` after this entry) — `hooks/pipeline-stop.sh` reads `driver-state.json:pending_user_answer`; Case 2 block guard requires both `verdict` empty AND no pending answer. 6 vitest tests in `mcp/test/hooks/pipeline-stop.test.ts`.
+> - Tests: 265 → 271 (+6). Test files: 38 → 39.
+> - Made Q10 (`current_step` stale → message read "STEP 1" while step_index=3) more visible. Q10 stays open as cosmetic.
+> - Bonus signal from this run: **Q8 confirmed working in production** — `pipeline-state.gates.gate0 = "approved"` (was always `pending` before).
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

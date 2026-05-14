@@ -27,7 +27,7 @@ Spot-check `.claude/context-doc.md` for hallucinated patterns before the Planner
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`validator-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["context-doc-verifier"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json
@@ -84,3 +84,9 @@ Verdict rules:
 - 2+ blocking mismatches → `NEEDS_RERUN` (re-spawn Code Analyzer)
 - 1 mismatch → `WARN` (propagate correction to Planner, no re-run)
 - 0 mismatches → `VERIFIED`
+
+## Output constraints (hard validation)
+
+- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
+- `findings[].summary`: ≤ 200 chars

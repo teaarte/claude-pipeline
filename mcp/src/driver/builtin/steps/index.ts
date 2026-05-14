@@ -28,8 +28,11 @@ import { resolveAgentModel } from "../agents/resolve-model.js";
 import { defaultConfig } from "../../types/config.js";
 import { PHASES, type Phase } from "../../../lib/phase-state-machine.js";
 import { pipelineSetPhaseStatus } from "../../../tools/set-phase-status.js";
+import { pipelineSetGate } from "../../../tools/set-gate.js";
 import { readStateSafe } from "../../../lib/state-io.js";
 import { stateFile } from "../../../lib/paths.js";
+import { audit } from "../../../lib/audit.js";
+import type { PluginRegistry } from "../../types/plugin.js";
 
 /**
  * Mark every phase strictly before `currentPhase` as closed in pipeline-state.
@@ -109,7 +112,7 @@ async function spawnOne(
   const provider = requireSpawnProvider(ctx.registry);
   const config = (state.scratch.config as any) ?? defaultConfig;
   const model = resolveAgentModel(agent, phase, config);
-  const agent_run_id = await ctx.beginSpawn(agentName, phase);
+  const agent_run_id = await ctx.beginSpawn(agentName, phase, model);
   state.scratch[SPAWN_ISSUED_KEY(stepName)] = agent_run_id;
   return provider.spawn({
     agent: agentName,
@@ -146,14 +149,75 @@ const CLASSIFY: StepPlugin = {
   },
 };
 
+/**
+ * Q8: when the FSM resumes from an ask-user shuttle, mirror the captured
+ * decision from driver-state.scratch onto pipeline-state.gates so the canonical
+ * record is up to date — without this step, INV_005/INV_006 never fire and the
+ * pipeline_finish metrics row reads `gate1_revisions=0` even when the human
+ * actually rejected an iteration of the plan.
+ *
+ * Idempotent: tracks `${gateName}_mirrored` in scratch so re-running the same
+ * gate step (e.g. after a transient FSM error and retry) doesn't double-write.
+ */
+export async function mirrorGateDecision(
+  state: DriverState,
+  registry: PluginRegistry,
+  gateName: string,
+): Promise<void> {
+  if (state.scratch[`${gateName}_mirrored`]) return;
+  const answer = state.scratch[`${gateName}_decision`];
+  if (typeof answer !== "string") return;
+  const gate = requireGate(registry, gateName);
+  const parsed = gate.validate_response(answer);
+  if (!parsed.ok) return; // upstream validation already rejected — nothing to mirror
+  // pipeline-state.gates accepts only {pending, approved, rejected, skipped}.
+  // changes_requested collapses to rejected; the human's free-form feedback
+  // is preserved in gate1_feedback / gate2_feedback so the planner sees it.
+  const status: "approved" | "rejected" =
+    parsed.decision === "approved" ? "approved" : "rejected";
+  const gateKey = gateName.replace("-", "") as "gate0" | "gate1" | "gate2";
+  try {
+    await pipelineSetGate({
+      project_dir: state.project_dir,
+      gate: gateKey,
+      status,
+      feedback: parsed.feedback ?? null,
+    });
+    if (parsed.decision !== "approved" && gateName === "gate-1") {
+      // Counter used by the Q22 metrics-row extractor (gate1_revisions).
+      const prev = (state.scratch.gate1_revision_count as number | undefined) ?? 0;
+      state.scratch.gate1_revision_count = prev + 1;
+    }
+    state.scratch[`${gateName}_mirrored`] = true;
+    await audit({
+      tool: "pipeline_gate_mirror",
+      args: { gate: gateKey, decision: parsed.decision, status },
+      projectDir: state.project_dir,
+      verdict: "ok",
+    }).catch(() => undefined);
+  } catch (e) {
+    // pipeline-state might be absent in smoke/unit paths — best-effort.
+    const msg = e instanceof Error ? e.message : String(e);
+    await audit({
+      tool: "pipeline_gate_mirror",
+      args: { gate: gateKey, decision: parsed.decision, status },
+      projectDir: state.project_dir,
+      verdict: "error",
+      error: msg,
+    }).catch(() => undefined);
+  }
+}
+
 function gateStep(name: string, gateName: string, phase: StepPlugin["phase"]): StepPlugin {
   return {
     name,
     phase,
     async run(state, ctx) {
       // Resume: if pipeline_continue_task already routed in a user-answer
-      // for this gate, advance.
+      // for this gate, advance — but first mirror the decision to canonical
+      // pipeline-state.gates (Q8).
       if (state.scratch[`${gateName}_decision`] !== undefined) {
+        await mirrorGateDecision(state, ctx.registry, gateName);
         return { type: "advance" };
       }
       // Close any prior phases (idempotent) before pausing for the human.

@@ -42,7 +42,7 @@ export interface DriverState {
    */
   pending_spawns: Record<
     string,
-    { agent: string; phase: Phase; started_at: string }
+    { agent: string; phase: Phase; started_at: string; model?: ModelName | null }
   >;
   /**
    * Set when the driver returned a "ask-user" shuttle and is waiting on the
@@ -79,9 +79,11 @@ export interface StepContext {
   /**
    * Records an agent-spawn request the step has issued. The driver assigns
    * the agent_run_id and returns it. The step then bundles those ids into a
-   * shuttle response.
+   * shuttle response. `model` (Q19) is the resolved effective model so the
+   * open_spawn[] entry can record what was actually invoked — required for
+   * cost analysis and v2.7 historical training data.
    */
-  beginSpawn(agent: string, phase: Phase): Promise<string>;
+  beginSpawn(agent: string, phase: Phase, model?: ModelName | null): Promise<string>;
 }
 
 export interface StepPlugin extends PluginMeta {

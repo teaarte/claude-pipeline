@@ -10,6 +10,18 @@ export const AUDIT_PROJECT_CAP = 50_000;
 
 export type AuditVerdict = "ok" | "error" | "force_bypass";
 
+/**
+ * Q11: categorical label attached to `verdict=error` (and informational
+ * for `retry-recovered` paths). Lets post-hoc analysis tell genuine
+ * failures from the documented-and-handled noise.
+ */
+export type ErrorClass =
+  | "swallowed-inv"        // closePriorPhases swallowing INV_002/010/011
+  | "retry-recovered"      // JSON-header lenient parse repaired the payload
+  | "schema-validation"    // reviewer-output / validator-output / finding schema fail
+  | "vocab-rejected"       // category not in vocab for agent
+  | "genuine-failure";     // anything we don't recognise — investigate
+
 export type AuditEntry = {
   schema_version: "1.0";
   ts: string;
@@ -19,8 +31,23 @@ export type AuditEntry = {
   args_summary: Record<string, unknown>;
   verdict: AuditVerdict;
   error?: string;
+  error_class?: ErrorClass;
   force_used: boolean;
 };
+
+/**
+ * Map a thrown-error message to a Q11 ErrorClass. Best-effort regex
+ * heuristic over the observed message vocabulary; unrecognised messages
+ * fall through to `genuine-failure` so the operator can grep for them.
+ */
+export function classifyErrorMessage(msg: string): ErrorClass {
+  if (/INV_(002|010|011|012)/.test(msg)) return "swallowed-inv";
+  if (/Finding category .+ is not in vocab/.test(msg)) return "vocab-rejected";
+  if (/(reviewer-output|validator-output|finding)\.schema\.json validation/i.test(msg)) return "schema-validation";
+  if (/Finding failed schema validation/i.test(msg)) return "schema-validation";
+  if (/Failed to parse JSON header|no fenced .* block/i.test(msg)) return "schema-validation";
+  return "genuine-failure";
+}
 
 export function globalAuditFile(): string {
   return join(homeMetricsDir, "mcp-audit.jsonl");
@@ -144,6 +171,7 @@ export type AuditCall = {
   projectDir?: string | null;
   verdict: AuditVerdict;
   error?: string;
+  error_class?: ErrorClass;
   force_used?: boolean;
 };
 
@@ -169,6 +197,7 @@ export async function audit(call: AuditCall): Promise<void> {
     force_used: call.force_used ?? false,
   };
   if (call.error) entry.error = call.error;
+  if (call.error_class) entry.error_class = call.error_class;
 
   try {
     await appendCapped(globalAuditFile(), redactForGlobal(entry), AUDIT_GLOBAL_CAP);
@@ -251,6 +280,7 @@ export function withAudit<I, O>(
           projectDir,
           verdict: "error",
           error: msg,
+          error_class: classifyErrorMessage(msg),
           force_used: forceUsed,
         });
       } catch {

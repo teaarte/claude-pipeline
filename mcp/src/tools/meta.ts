@@ -26,6 +26,7 @@ const TOOLS = [
   "pipeline_continue_task",
   "pipeline_meta",
   "pipeline_fix_task_id",
+  "pipeline_done_cleanup",
 ];
 
 export async function pipelineMeta(_input: Record<string, never>): Promise<{

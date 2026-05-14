@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import {
   audit,
+  classifyErrorMessage,
   makeArgsSummary,
   pickProjectDir,
   pickForceFlag,
@@ -194,6 +195,75 @@ describe("withAudit() wrapper", () => {
     } finally {
       await proj.cleanup();
     }
+  });
+});
+
+describe("Q11 — error_class field on audit entries", () => {
+  beforeEach(async () => {
+    await clearAuditFiles();
+  });
+  afterEach(async () => {
+    await clearMetrics();
+    await clearAuditFiles();
+  });
+
+  it("classifyErrorMessage maps each observed pattern correctly", () => {
+    expect(classifyErrorMessage("INV_011: cannot advance phase 'planning'")).toBe("swallowed-inv");
+    expect(classifyErrorMessage("INV_002: phase 'planning' has 0 agents")).toBe("swallowed-inv");
+    expect(classifyErrorMessage("INV_010: invalid status transition")).toBe("swallowed-inv");
+    expect(classifyErrorMessage("Agent header failed reviewer-output.schema.json validation: ...")).toBe("schema-validation");
+    expect(classifyErrorMessage("Finding failed schema validation: /id mismatch")).toBe("schema-validation");
+    expect(classifyErrorMessage("Failed to parse JSON header: unexpected token")).toBe("schema-validation");
+    expect(classifyErrorMessage("Finding category 'made-up' is not in vocab for agent 'logic-reviewer'")).toBe("vocab-rejected");
+    expect(classifyErrorMessage("pipeline-state.json not found")).toBe("genuine-failure");
+    expect(classifyErrorMessage("ECONNRESET: socket hang up")).toBe("genuine-failure");
+  });
+
+  it("audit() round-trips an explicit error_class field", async () => {
+    await audit({
+      tool: "pipeline_record_agent_run",
+      args: {},
+      projectDir: null,
+      verdict: "ok",
+      error_class: "retry-recovered",
+    });
+    const rows = await readJsonl(globalAuditFile());
+    const last = rows[rows.length - 1];
+    expect(last.verdict).toBe("ok");
+    expect(last.error_class).toBe("retry-recovered");
+  });
+
+  it("audit() omits error_class when not supplied (legacy callers)", async () => {
+    await audit({
+      tool: "pipeline_state_get",
+      args: {},
+      projectDir: null,
+      verdict: "ok",
+    });
+    const rows = await readJsonl(globalAuditFile());
+    const last = rows[rows.length - 1];
+    expect(last.error_class).toBeUndefined();
+  });
+
+  it("withAudit() auto-classifies a thrown error from its message", async () => {
+    const wrapped = withAudit("pipeline_record_agent_run", async () => {
+      throw new Error("Finding category 'invented' is not in vocab for agent 'logic-reviewer'");
+    });
+    await expect(wrapped({ project_dir: "/x" })).rejects.toThrow();
+    const rows = await readJsonl(globalAuditFile());
+    const last = rows[rows.length - 1];
+    expect(last.verdict).toBe("error");
+    expect(last.error_class).toBe("vocab-rejected");
+  });
+
+  it("withAudit() falls back to genuine-failure for unrecognised errors", async () => {
+    const wrapped = withAudit("pipeline_state_get", async () => {
+      throw new Error("disk on fire");
+    });
+    await expect(wrapped({ project_dir: "/x" })).rejects.toThrow();
+    const rows = await readJsonl(globalAuditFile());
+    const last = rows[rows.length - 1];
+    expect(last.error_class).toBe("genuine-failure");
   });
 });
 

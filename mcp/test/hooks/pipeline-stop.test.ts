@@ -122,4 +122,65 @@ describe("pipeline-stop hook — Q24", () => {
     expect(res.status).toBe(0);
     expect(res.stderr).toContain("PIPELINE VIOLATION");
   });
+
+  it("Q36: gate2=approved + verdict null → blocks with positive 'finalize' message, not 'in flight'", () => {
+    writePipelineState(root, {
+      verdict: null,
+      gates: {
+        gate0: "approved",
+        gate1: "approved",
+        gate2: "approved",
+        gate1_feedback: "approve",
+        gate2_feedback: "accept",
+      },
+    });
+    writeDriverState(root, {
+      complete: true,
+      verdict: "accepted",
+      pending_user_answer: null,
+    });
+
+    const res = runHook(root);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('"decision": "block"');
+    expect(res.stdout).toContain("Task accepted at Gate 2");
+    expect(res.stdout).toContain("/done");
+    expect(res.stdout).not.toContain("Pipeline is in flight");
+    expect(res.stdout).not.toContain("STEP 1");
+  });
+
+  it("Q36: gate2=accepted (legacy verbiage) also recognized", () => {
+    writePipelineState(root, {
+      verdict: null,
+      gates: {
+        gate0: "approved",
+        gate1: "approved",
+        gate2: "accepted",
+        gate1_feedback: null,
+        gate2_feedback: "accept",
+      },
+    });
+    writeDriverState(root, { pending_user_answer: null });
+
+    const res = runHook(root);
+    expect(res.stdout).toContain("Task accepted at Gate 2");
+  });
+
+  it("Q36: gate2=pending → falls through to original 'in flight' block message", () => {
+    writePipelineState(root, {
+      verdict: null,
+      gates: {
+        gate0: "approved",
+        gate1: "approved",
+        gate2: "pending",
+        gate1_feedback: "approve",
+        gate2_feedback: null,
+      },
+    });
+    writeDriverState(root, { pending_user_answer: null });
+
+    const res = runHook(root);
+    expect(res.stdout).toContain("Pipeline is in flight");
+    expect(res.stdout).not.toContain("Task accepted at Gate 2");
+  });
 });

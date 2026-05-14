@@ -31,6 +31,14 @@ complexity=$(jq -r '.complexity // empty' "$state" 2>/dev/null)
 violation=$(jq -r '.pipeline_violation // empty' "$state" 2>/dev/null)
 current_step=$(jq -r '.current_step // empty' "$state" 2>/dev/null)
 
+# Q36: Gate 2 decision tri-state. After user accepts at Gate 2,
+# pipeline_continue_task mirrors gates.gate2="approved" but verdict
+# stays null until /done -> pipeline_finish runs. Distinguishing this
+# from a genuinely-mid-flight task lets the Stop hook emit a positive
+# message ("just /done to finalize") instead of a scary "in flight"
+# warning that suggests the user broke something.
+gate2_status=$(jq -r '.gates.gate2 // empty' "$state" 2>/dev/null)
+
 # Q24: driver-state.pending_user_answer marks a legitimate pause (gate
 # awaiting user input). Treat it as "not in flight" so the Stop hook
 # stays silent — otherwise the user gets a scary "run /done" message
@@ -55,6 +63,15 @@ fi
 if [ -z "$verdict" ] && [ -z "$pending_user_answer" ]; then
   if [ "$stop_hook_active" = "true" ] || [ "${PIPELINE_ALLOW_RAW:-0}" = "1" ]; then
     echo "[claude-pipeline] pipeline still in flight at step: $current_step — exit anyway (stop_hook_active or PIPELINE_ALLOW_RAW=1)." >&2
+  elif [ "$gate2_status" = "approved" ] || [ "$gate2_status" = "accepted" ]; then
+    # Q36: tri-state #3 — Gate 2 accepted, only awaiting /done finalization.
+    # Block (to prevent data loss) but with positive framing: the task
+    # itself is approved, this is just paperwork.
+    jq -n '{
+      "decision": "block",
+      "reason": "Task accepted at Gate 2 — one step left to finalize. Run /done: it calls mcp__claude-pipeline__pipeline_finish (writes the metrics row to ~/.claude/metrics/pipeline.jsonl) and mcp__claude-pipeline__pipeline_done_cleanup (server-side atomic cleanup of .claude/ working files). The task is approved; this is the closing paperwork."
+    }'
+    exit 0
   else
     jq -n --arg step "$current_step" '{
       "decision": "block",

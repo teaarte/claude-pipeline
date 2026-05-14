@@ -84,15 +84,17 @@ These are unusual for AI dev tools at 2-3 day age — and they compound:
 ## Commercial trajectory phases
 
 ```
-NOW: v2.1 shipped, v2.2 active
-     ├─ free-tier dogfooding on s3-panel (single user, solo author)
+NOW: v2.2a shipped (review surface unlocked), second-project validation active (wandr-be)
+     ├─ free-tier dogfooding on s3-panel + wandr-be (single user, solo author)
      └─ no public discovery, no paid tier
 
-PHASE 1 — Foundation (v2.2 + v2.3 + v2.4, ~6-8 weeks)
-     ├─ v2.2: review completeness + clear-bundle fixes
-     ├─ v2.3: daemon + Web UI on single instance + templates/presets system
-     └─ v2.4: Docker isolation
+PHASE 1 — Foundation (v2.2.5 + v2.3 + v2.4, ~7-9 weeks)
+     ├─ v2.2.5: Bundle foundation (multi-domain substrate; closes Q40)
+     ├─ v2.3: daemon + Web UI on single instance, BUNDLE-AWARE FROM DAY 1
+     │         + templates/presets system + agent-builder UI
+     └─ v2.4: Docker isolation (per-bundle docker images possible)
      EXIT: pipeline survives 5+ external alpha-user runs without showstoppers
+     EXIT: at least 1 code-domain alpha user runs /task end-to-end via Web UI
 
 PHASE 2 — Pro tier launch (v2.5 + v2.6, ~6-10 weeks after Phase 1)
      ├─ v2.5: cost-aware multi-provider routing (commercial prereq!)
@@ -166,32 +168,37 @@ The pipeline's core architecture is generic; the built-in plugin set is code-spe
 - **Skills** (`commands/task.md`, `commands/done.md`) — reference `git diff`, CLAUDE.md "Validation Commands", `pnpm/lint/typecheck/test/build`. Code-domain framing throughout
 - **Guard hook** (`hooks/pipeline-guard.sh`) — protects code-state working files; might not be needed (or needs different paths) for photo workflows
 
-### Future bundle abstraction (Q40, deferred)
+### Bundle abstraction (Q40, **scheduled for v2.2.5** — 2026-05-14 promotion)
 
-When a second domain becomes concrete, the planned refactor:
+**Promoted from "deferred" to "next phase" 2026-05-14.** Triggering observation: when planning v2.3 daemon + Web UI it became clear that building UI code-only and retrofitting bundle-awareness later means rewriting React components. Inserting v2.2.5 (~5-7d) BEFORE v2.3 is cheaper than the post-hoc refactor. See [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md).
 
-1. **`PluginMeta.domain: string`** field — already added prophylactically (commit landed 2026-05-14). Currently optional, defaults to `"code"`. No runtime effect today.
-2. **`loaders/builtins.ts`** accepts `bundle: string` parameter, filters plugins by `meta.domain === bundle`.
-3. **`<project>/.claude/pipeline.config.json`** declares the project's bundle (`{"bundle": "code"}` or `{"bundle": "photo"}`, etc.).
-4. **`builtin/` reorganizes** to `builtin/<domain>/` subdirs — `builtin/code/agents/...`, `builtin/photo/agents/...`.
+**What ships in v2.2.5:**
 
-**Explicitly out of scope for the bundle abstraction:**
+1. **Directory restructure:** `mcp/src/driver/builtin/` → `mcp/src/driver/bundles/code/`. New `_template/` skeleton for future domains.
+2. **`BundleManifest` interface** in `types/bundle.ts` — declares supported flows / decisions / agents / steps / hooks / gates + task-prompt-template path + state-schema-extension path + knowledge directory.
+3. **`loaders/bundles.ts`** — accepts `bundle: string` parameter, loads that bundle's plugins.
+4. **`state.bundle: string`** required field (default `"code"`, auto-set by `pipeline_init`).
+5. **`Phase` becomes `string`** (was enum). `FlowPlugin` declares `phases: string[]`. Code-bundle flows declare current 6 phases.
+6. **State schema split:** base schema (universal) + per-bundle extension schema (`bundles/code/state-extension.schema.json`). ajv conditional validation by `state.bundle`.
+7. **`<project>/.claude/pipeline.config.json`** — project-level config: `{"bundle": "code", "mcp_clients": [], "team_knowledge_refs": []}`. Default works without it.
+8. **Skills bundle-parameterized:** `commands/task.md` reads bundle from config; bundle's `task-prompt.md` injects preamble.
+9. **`MCPClientPlugin` contract** (NEW) — pipeline becomes both MCP server AND client. Daemon spawns external MCP servers (e.g., `claude-mem`), exposes their tools to agents. Unlocks declarative integration of external MCP servers without code changes.
+10. **`state.team_knowledge_refs: string[]`** slot — team-scoped shared knowledge files. Write API ships in v2.6 (curator); slot is reserved now.
 
-- State schema generalization (`Phase` / `complexity` / `tests_mode` as `<T extends string>` generics) — too disruptive for a hypothetical second domain. Defer until cross-domain workflows are real.
-- Per-bundle JSON schemas. Same reason.
-- Per-bundle MCP tools (some bundles might need bundle-specific tools, e.g., image-API tools for VFX). Defer until concrete signal.
+**Explicitly out of scope for v2.2.5:**
 
-**Trigger to start Q40 work:** proof-of-concept fork on a side project showing a non-code domain delivers value with the current core + a swapped plugin set. Without that signal, building the abstraction is over-engineering for an imagined use case.
-
-**Estimated cost when triggered:** ~1-2 days for loader change + directory reorg. Plugin manifest semantics + project-level bundle config + tests. Not 2 weeks — schema enums stay code-only initially.
+- **No new domain bundles** beyond the `code` bundle (and `_template/` skeleton docs). Authoring `tiktok/` / `marketing/` waits for validated demand.
+- **No write API for team knowledge** — v2.6 curator decides what gets promoted.
+- **No `pipeline.config.json` editor UI** — v2.3 Web UI delivers that.
+- **No MCP marketplace** — external MCP integration is config-level. Curated catalog v2.6.
 
 ### Strategic read
 
-The pipeline today is **"AI dev team RTS"**. Generalizing to photo/video/research would mean entering a different market with different competitors (Midjourney, Runway, Pika, Cursor, etc.) and different sales motion. Not a small pivot.
+The pipeline today is **"AI dev team RTS"** focused on code. v2.2.5 makes the architecture **honestly multi-domain capable** — moving the bundle abstraction from "future Q40" to "shipped substrate" closes the gap between vision (multi-domain virtual teams) and reality (code-only built-ins).
 
-That said, the **architectural moat (schema-validated state, audit, invariants, plugin framework)** has applicability beyond code. Cinema VFX production, scientific research workflows, and long-form video assembly all share the pattern: multi-step multi-agent work with quality gates and audit requirements. **None of those markets are well-served today.** Keeping the door open via the bundle abstraction (Q40) is cheap forward compatibility.
+Code remains the **first and primary bundle** through Phase 2. Other bundles (content / marketing / research / VFX) only get authored when validated external demand appears. Architectural readiness ≠ market commitment.
 
-**Recommended posture:** ship code-domain product first (free → Pro tier through Phase 2). Only entertain non-code domains when (a) someone external asks for it, OR (b) a side-project proof-of-concept produces a "wow, this delivers" signal. Don't proactively chase domain expansion.
+**Recommended posture:** ship v2.2.5 substrate. Continue building code-domain product first. Entertain non-code bundles only when (a) someone external asks for it, OR (b) a side-project proof-of-concept produces a "wow, this delivers" signal. Architecture is now ready when those moments come; no rework cost.
 
 ## Trigger sources & autonomous mode
 

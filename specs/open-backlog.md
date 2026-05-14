@@ -12,12 +12,17 @@ For closed items, see [`closed-q-items.md`](closed-q-items.md). For pipeline pha
 
 (Just one item — and even this isn't blocking. v2.2a closed all 6 review-completeness items; Q41 is the residual "contract present, LLM call needs daemon" piece.)
 
+## Scheduled (was deferred)
+
+| Q | Severity | Where it lands | Notes |
+|---|---|---|---|
+| Q40 | architectural | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) | **Promoted from deferred 2026-05-14.** End-goal is virtual teams for any niche (code / content / marketing / research / VFX) per [`ui-vision.md`](ui-vision.md). Bundle abstraction becomes prerequisite for v2.3 daemon + Web UI rather than a post-hoc retrofit. Phase v2.2.5 (~5-7d) ships: `Bundle` first-class concept, directory move `builtin/` → `bundles/code/`, `loaders/bundles.ts`, `state.bundle` field, Phase enum → flow-declared, `pipeline.config.json` per project, skills bundle-parameterized, `MCPClientPlugin` contract (external MCP consumer), `state.team_knowledge_refs` slot. |
+
 ## Deferred (no trigger to fix yet)
 
 | Q | Severity | Why deferred | Trigger to activate |
 |---|---|---|---|
 | Q38 | 🟢 LOW | Terminal-tab auto-rename via OSC-0 — Claude Code Bash tool subprocess has no TTY; can't reach user terminal. | Solved natively by v2.3 Web UI (browser tabs instead of terminal escape codes). No fix needed in pipeline. |
-| Q40 | future-arch | Domain bundle abstraction (photo / video / research / VFX) — refactor `loaders/builtins.ts` to accept `bundle: string`, filter plugins by `meta.domain`, reorganize `builtin/` into `builtin/<domain>/` subdirs. | Proof-of-concept fork on a side project showing a non-code domain delivers value with current core + swapped plugin set. Without this signal, premature. |
 
 ## Code-quality follow-ups (v2.2-code-polish bundle, separate)
 

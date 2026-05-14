@@ -26,11 +26,14 @@ This file is the **navigation index**. Detailed phase plans live in [`phases/`](
 
 | Phase | Status | Detail | Estimated effort |
 |---|---|---|---|
-| **v2.3** — Daemon + Web UI + Multi-provider foundation | next | [`phases/v2.3-daemon-webui.md`](phases/v2.3-daemon-webui.md) | ~1-2 weeks |
+| **v2.2.5** — Bundle foundation (inserted 2026-05-14) | next | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) | ~5-7 days |
+| **v2.3** — Daemon + Web UI + Multi-provider foundation | scheduled | [`phases/v2.3-daemon-webui.md`](phases/v2.3-daemon-webui.md) | ~1-2 weeks |
 | **v2.4** — Container isolation + Docker distribution | scheduled | [`phases/v2.4-docker.md`](phases/v2.4-docker.md) | ~1 week |
 | **v2.5** — Cost-aware multi-provider routing | scheduled | [`phases/v2.5-multiprovider.md`](phases/v2.5-multiprovider.md) | ~2-3 weeks |
 | **v2.6** — Plugin marketplace + curator agent | scheduled | [`phases/v2.6-marketplace.md`](phases/v2.6-marketplace.md) | ~2-3 weeks |
 | **v3.0** — Fleet + multi-tenancy + commercial launch | future | not yet detailed — see `product-vision.md` commercial trajectory | ~1-2 months |
+
+**Why v2.2.5 was inserted (2026-05-14):** end-goal vision is virtual teams for any niche (code / content / marketing / research / VFX) — see [`ui-vision.md`](ui-vision.md). Current architecture is generic at the core but coupled to code-domain at four layers (state schema, built-in plugins, skills, planned Web UI). Building v2.3 daemon + Web UI code-only and retrofitting bundle-awareness later means rewriting React components. v2.2.5 (~5-7d) locks in the substrate cheaply so v2.3+ ships bundle-aware from day 1. **Closes Q40** (domain bundle abstraction) — no longer deferred, becomes shipped foundation.
 
 Far-future P1/P3/P4/P5 phases (OSS distribution, team features, hosted tier, editor integrations) sketched in [`phases/far-future.md`](phases/far-future.md).
 
@@ -38,14 +41,17 @@ Far-future P1/P3/P4/P5 phases (OSS distribution, team features, hosted tier, edi
 
 ## Recommended execution order
 
-1. **Validation pause** — before v2.3, run `/task` on 2-3 different projects (NOT s3-panel) to surface domain-genericity bugs. ~3-6h. See "Second-project validation" note below.
-2. **v2.3** — daemon + Web UI on single instance. Activates Q41's LLM path automatically.
-3. **v2.4** — Docker isolation (orthogonal to v2.3, can be parallel if energy permits).
-4. **v2.5** — Cost-aware multi-provider routing. Commercial prerequisite (margin calculus). Activates haiku-routing for ~60% of agents.
-5. **v2.6** — Plugin marketplace + curator agent. First Pro-tier feature.
-6. **v3.0** — Fleet abstraction (multi-tenant, multi-machine, central metric store).
+1. **Validation pause + second-project signal** — run `/task` on 2-3 different projects (NOT s3-panel) to surface domain-genericity bugs. ~3-6h. wandr-be (backend) run currently active.
+2. **v2.2.5** — Bundle foundation. Substrate for multi-domain pipeline. Closes Q40. Builds on top of validation signal from step 1.
+3. **v2.3** — daemon + Web UI on single instance (now bundle-aware from day 1). Activates Q41's LLM path automatically via non-shuttle SpawnProvider.
+4. **v2.4** — Docker isolation. Bundle-aware: each bundle can ship own docker image.
+5. **v2.5** — Cost-aware multi-provider routing. Commercial prerequisite. Bundle-aware model preferences.
+6. **v2.6** — Plugin marketplace + curator agent. Marketplace ships **bundles** (full domain implementations), not just plugins.
+7. **v3.0** — Fleet abstraction (multi-tenant, multi-machine, central metric store, multi-bundle teams).
 
-**Second-project validation rationale:** all 5 real-task runs to date have been on `s3-panel` (TypeScript pnpm-monorepo frontend). Generalizability to Python/Go/Rust/library/different-monorepo-shapes untested. Validating on 2-3 different projects before v2.3 is ~3-6h investment vs ~1-2 weeks on daemon — cheap signal acquisition.
+**Second-project validation rationale:** all 5 real-task runs to date have been on `s3-panel` (TypeScript pnpm-monorepo frontend). Generalizability to Python/Go/Rust/library/different-monorepo-shapes untested. Validating on 2-3 different projects before v2.2.5/v2.3 is ~3-6h investment vs ~5-7d on bundle foundation or ~1-2 weeks on daemon — cheap signal acquisition that reduces rework risk.
+
+**v2.2.5 rationale (Bundle foundation insertion):** end-goal is "AI Team RTS" for ANY niche (code / content / marketing / research / VFX) per [`product-vision.md`](product-vision.md) and [`ui-vision.md`](ui-vision.md). Current architecture is core-generic, leaf-code-specific. Bundle abstraction makes "swap leaf set for another domain" a config-level change instead of a refactor. Inserted BEFORE v2.3 because retrofitting bundle-awareness into a built Web UI = expensive React rework; laying substrate first = cheap. Single bundle (`code`) ships in v2.2.5 — actual second-domain bundle authoring waits for validated demand.
 
 ---
 
@@ -87,9 +93,11 @@ See [`product-vision.md`](product-vision.md) "Anti-goals" section for sharper bo
 
 After v2.2a merge:
 
-1. Real-task verification on a security + UI + API task (e.g., password-change form). Mid-flight check: `jq '.phases.implementation.agents' .claude/pipeline-state.json` should show 5+ reviewers, not just 2. If yes → Q9 fix unlocked. If not → file v2.2b items.
-2. Second-project validation (2-3 different projects). Surface domain-genericity bugs.
-3. Start [`phases/v2.3-daemon-webui.md`](phases/v2.3-daemon-webui.md) work when validation signal is stable.
+1. ⚙️ **(in progress)** Real-task validation on second project — `wandr-be` (Python/Node backend) run active. Surface domain-genericity bugs.
+2. Continue second-project validation on 1-2 more projects of different shape (library / Rust / Go / OSS PR target).
+3. Optional: real-task verification on s3-panel security+UI+API task (password-change form) to confirm Q9 5-reviewer fan-out works on the original codebase.
+4. Start [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) work (~5-7d) when validation signal is stable. Closes Q40, lays bundle substrate for v2.3+.
+5. Then [`phases/v2.3-daemon-webui.md`](phases/v2.3-daemon-webui.md) — bundle-aware Web UI from day 1.
 
 ---
 

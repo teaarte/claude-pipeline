@@ -151,6 +151,7 @@ export async function pipelineRecordAgentRun(input: {
     const nonBlocking = writtenFindings.filter((f) => f.severity !== "blocking").length;
     state.reviewer_verdicts.push({
       agent,
+      phase: input.phase,
       iteration: header.iteration ?? 1,
       verdict: header.verdict,
       blocking_issues: blocking,

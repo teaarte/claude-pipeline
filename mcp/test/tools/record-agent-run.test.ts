@@ -147,6 +147,59 @@ describe("pipeline_record_agent_run", () => {
     }
   });
 
+  it("Q20: tags each reviewer_verdicts entry with its phase, so multi-phase agents stay distinguishable", async () => {
+    const proj = await tempProject();
+    try {
+      await bootstrapToImpl(proj.dir);
+      // Reviewer in implementation phase (bootstrap already opened it).
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      // Close implementation, open validation, run a second reviewer there.
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+
+      const { pipelineStateGet } = await import("../../src/tools/state-get.js");
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      const verdicts = state.reviewer_verdicts as Array<{ agent: string; phase: string }>;
+      expect(verdicts).toHaveLength(2);
+      expect(verdicts[0].agent).toBe("logic-reviewer");
+      expect(verdicts[0].phase).toBe("implementation");
+      expect(verdicts[1].agent).toBe("acceptance");
+      expect(verdicts[1].phase).toBe("validation");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q20: same reviewer running in two phases yields two distinguishable verdicts", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      // logic-reviewer at planning (plan-review).
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await spawnReviewer(proj.dir, "planning", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      // logic-reviewer at implementation (review).
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+
+      const { pipelineStateGet } = await import("../../src/tools/state-get.js");
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      const lrVerdicts = (state.reviewer_verdicts as Array<{ agent: string; phase: string }>)
+        .filter((v) => v.agent === "logic-reviewer");
+      expect(lrVerdicts).toHaveLength(2);
+      expect(lrVerdicts.map((v) => v.phase).sort()).toEqual(["implementation", "planning"]);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("rejects when agent_run_id does not match the output's agent (INV_012)", async () => {
     const proj = await tempProject();
     try {

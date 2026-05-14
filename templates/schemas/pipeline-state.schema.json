@@ -36,7 +36,7 @@
         "test_command": { "type": ["string", "null"] },
         "lint_command": { "type": ["string", "null"] },
         "build_command": { "type": ["string", "null"] },
-        "project_type": { "type": ["string", "null"], "enum": [null, "frontend-app", "backend", "library"] }
+        "project_type": { "type": ["string", "null"], "enum": [null, "frontend-app", "backend", "library", "monorepo"] }
       },
       "additionalProperties": true
     },

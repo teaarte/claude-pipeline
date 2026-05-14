@@ -171,6 +171,65 @@ describe("pipeline_set_phase_status", () => {
     }
   });
 
+  it("Q30: persists refs_to_load from driver-state to pipeline-state.refs_loaded at planning close", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      // Stage a driver-state.json with refs_to_load + refs_dropped_due_to_cap.
+      const driverFile = join(proj.dir, ".claude", "driver-state.json");
+      await writeFile(
+        driverFile,
+        JSON.stringify({
+          schema_version: "1.0",
+          driver_state_id: "ds-test",
+          project_dir: proj.dir,
+          task: "test",
+          task_id: null,
+          flow_name: "medium",
+          step_index: 0,
+          started_at: new Date().toISOString(),
+          pending_spawns: {},
+          pending_user_answer: null,
+          decisions: {
+            refs_to_load: ["agents/references/security-backend.md", "agents/references/react19.md"],
+            refs_dropped_due_to_cap: ["agents/references/caching.md"],
+          },
+          complete: false,
+          verdict: null,
+          scratch: {},
+        }),
+        "utf8",
+      );
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      expect(state.refs_loaded).toEqual([
+        "agents/references/security-backend.md",
+        "agents/references/react19.md",
+      ]);
+      expect(state.refs_dropped_due_to_cap).toEqual(["agents/references/caching.md"]);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q30: missing driver-state degrades silently (refs_loaded stays as initial)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      // No driver-state.json written.
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      const state = (await pipelineStateGet({ project_dir: proj.dir })).state;
+      // Initial template seeds [] — close-handler should not blow up.
+      expect(state.refs_loaded).toEqual([]);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("INV_012: refuses to complete a phase with an open spawn", async () => {
     const proj = await tempProject();
     try {

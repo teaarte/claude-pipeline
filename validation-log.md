@@ -302,9 +302,21 @@ find ~ -name "category-vocab.json"
 
 ---
 
-## t-2026-05-14-contextreadfirstinth — Phase 0.5 Step 3: Identity base contract
+## t-2026-05-14-contextreadfirstinth — Phase 0.5 Step 4: synthetic _demo-contract
 
-> **✓ Closed 2026-05-14.** User accepted at Gate 2; `/done` ran cleanly. Q23 cleanup **perfect** — `.claude/` post-`/done` contains only `settings.local.json` (no `mcp-audit.jsonl` stub → **Q14 confirmed subsumed by Q23 in production**). Q22 metrics row **fully populated**: `tests_mode:"regression-only"`, `impl_iters:1`, `plan_iters:1`, `acceptance_first_pass:true`, `gate1_revisions:0`, `verdict:"accepted"`, 5 `reviewer_verdicts` with `phase` field (Q20). **Post-`/done` issues:** Q36 (Stop hook scary message after Gate 2 accept — **already fixed on this branch** in commit `d6f7438`) + Q37 NEW (`stack: null` in metrics row despite state populated — Q22 family extension, ~30min, filed for v2.2d).
+> **✓ Closed 2026-05-14 (Step 4 run on s3-panel — see also separate Step 3 entry below with same `task_id` due to Q42 slug collision).** First end-to-end run on post-v2.2-clear-bundle main. Auto-`/done` after user accepted with a small in-flight fix (.js extension cleanup). **Major production verifications:**
+>
+> - **Q17 + Q26 + Q37 end-to-end stack threading** ✓ — `pipeline.jsonl` row carries `stack: {language:"typescript", package_manager:"pnpm", project_type:"monorepo", test/lint/build commands from CLAUDE.md}`. Q26 priority chain works (commands from CLAUDE.md, not `npm run X`); Q26 monorepo enum addition works; Q37 stack-to-row threading works.
+> - **Q22 metrics row** ✓ — `tests_mode:"regression-only"`, `impl_iters:1`, `plan_iters:1`, `gate1_revisions:0`, `verdict:"accepted"`, `reviewer_count:5`. All correctly populated.
+> - **Q23 cleanup** ✓ — `.claude/` post-`/done` contains only `settings.local.json` (no `mcp-audit.jsonl` stub).
+> - **Q24 + Q36 Stop hook** ✓ — block message shows `flow=medium step=21` (Q10 deprecation + Stop-hook refactor), NOT stale "STEP 1". Q36 positive framing held when Gate 2 was accepted.
+> - **Q29 vocab expansion** ✓ **VERIFIED IN PRODUCTION** — `categories_seen: ["spec-deviation", "scope-creep", "other"]`. Both new categories from Q29 (`spec-deviation`, `scope-creep`) used by logic-reviewer on real findings. Q29 fix delivered exactly what it promised.
+>
+> **New issues surfaced (filed):**
+> - **Q41 NEW** — `refs-to-load` decision is stack-blind. For frontend monorepo task, it picked `[arch-patterns, db-postgres, redis, api-design, concurrency]` — all backend refs. Root cause: regex-on-task-text only, no `state.stack` awareness. Filed with **LLM-driven design** (refs become self-describing via YAML frontmatter; decision becomes async + LLM-classification). Bundles into v2.2a alongside Q30 (persistence — same decision).
+> - **Q42 NEW** — `task_id` slug collision. Step 3 (Identity contract) and Step 4 (_demo-contract) produced **identical `task_id: t-2026-05-14-contextreadfirstinth`** because both `/task` invocations begin with the same `## Context (read first, in this order)` preamble. Promoted from cross-cutting observation (had 3 supporting data points) to filed Q-item because of **concrete metric collision** — `~/.claude/metrics/pipeline.jsonl` now has two rows with same `task_id` but different `task_short`, breaking cross-task aggregation. Fix: hash-suffix on collision detection.
+>
+> **Anomaly worth noting:** `acceptance_first_pass: false` in metrics row, despite acceptance ostensibly passing first try. Possible Q22 derivation edge-case interaction with the post-acceptance fix (user dropped `.js` extensions after first acceptance call → second pass triggered? need audit-log inspection on next run to verify). Not filing yet — collect 1-2 more data points.
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

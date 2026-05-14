@@ -63,7 +63,6 @@
             {
               "type": "object",
               "properties": {
-                "iterations": { "type": "integer", "minimum": 0 },
                 "gate1_revisions": { "type": "integer", "minimum": 0 },
                 "grounding_mismatches": { "type": "integer", "minimum": 0 }
               }
@@ -98,7 +97,6 @@
             {
               "type": "object",
               "properties": {
-                "iterations": { "type": "integer", "minimum": 0 },
                 "antipattern_candidates_count": { "type": "integer", "minimum": 0 },
                 "caller_context_sites_count": { "type": "integer", "minimum": 0 },
                 "logic_vs_challenger_disagreement": { "type": "boolean", "default": false },

@@ -20,7 +20,6 @@
     "context": { "status": "pending", "agents": [], "open_spawns": [] },
     "planning": {
       "status": "pending",
-      "iterations": 0,
       "gate1_revisions": 0,
       "grounding_mismatches": 0,
       "agents": [],
@@ -38,7 +37,6 @@
     },
     "implementation": {
       "status": "pending",
-      "iterations": 0,
       "antipattern_candidates_count": 0,
       "caller_context_sites_count": 0,
       "logic_vs_challenger_disagreement": false,

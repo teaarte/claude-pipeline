@@ -4,7 +4,6 @@ import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
-import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
 const NONREVIEW_AGENTS = [
@@ -26,10 +25,6 @@ export const recordNonreviewSchema = {
     .regex(AGENT_RUN_ID_PATTERN)
     .describe("Run id returned by pipeline_begin_agent. Required — must match an entry in phase.open_spawns[]."),
   output_file: z.string().optional().describe("Relative path to the file the agent produced, e.g. '.claude/plan.md'"),
-  iterations: z
-    .union([z.number(), z.string()])
-    .optional()
-    .describe("If this is a re-spawn, current iteration count. Numeric strings like '3' are coerced; approximations like '~5' or '3-4' are rejected."),
 };
 
 export async function pipelineRecordNonreviewAgent(input: {
@@ -38,10 +33,7 @@ export async function pipelineRecordNonreviewAgent(input: {
   agent: (typeof NONREVIEW_AGENTS)[number];
   agent_run_id: string;
   output_file?: string;
-  iterations?: number | string;
 }): Promise<any> {
-  // Item 7: coerce stringified integers; reject approximations.
-  const iterations = coerceIntegerOpt(input.iterations, "iterations");
   const file = stateFile(input.project_dir);
   const summary = summaryFile(input.project_dir);
 
@@ -63,9 +55,9 @@ export async function pipelineRecordNonreviewAgent(input: {
     phase.agents.push(input.agent);
     if (phase.status === "pending") phase.status = "in_progress";
 
-    if (iterations != null && "iterations" in phase) {
-      phase.iterations = iterations;
-    }
+    // Q31 (v2.2-clear-bundle): phase.iterations was a v1 summary slot
+    // that the v2 driver never maintained. reviewer_verdicts[].iteration
+    // is now the only source. No write here.
 
     state.agents_count = (state.agents_count ?? 0) + 1;
 

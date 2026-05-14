@@ -173,6 +173,23 @@ describe("pipeline_finish", () => {
     }
   });
 
+  it("Q37: metrics row carries state.stack (object, not null)", async () => {
+    const proj = await tempProject();
+    try {
+      await runFullPipeline(proj.dir);
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.stack).toBeDefined();
+      expect(fin.metrics_row.stack).not.toBeNull();
+      // setup.ts seeds defaultStack { language: "TypeScript", package_manager: "pnpm", ... }
+      expect(fin.metrics_row.stack.language).toBe("TypeScript");
+      expect(fin.metrics_row.stack.package_manager).toBe("pnpm");
+      expect(fin.metrics_row.stack.test_command).toBe("pnpm test");
+      expect(fin.metrics_row.stack.project_type).toBe("backend");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("refuses to finish when invariants fail", async () => {
     const proj = await tempProject();
     try {

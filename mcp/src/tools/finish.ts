@@ -96,6 +96,7 @@ export async function pipelineFinish(input: {
       task_short: input.task_short ?? short,
       complexity: state.complexity,
       tests_mode: state.tests_mode ?? null,
+      stack: state.stack ?? null,
       plan_iters: planIters,
       gate1_revisions: phases.planning?.gate1_revisions ?? 0,
       impl_iters: implIters,

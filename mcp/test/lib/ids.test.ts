@@ -1,11 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   TASK_ID_PATTERN,
   sanitizeTaskIdSlug,
   makeTaskId,
+  makeUniqueTaskId,
 } from "../../src/lib/ids.js";
+import { pipelineJsonl } from "../../src/lib/paths.js";
+import { clearMetrics } from "../helpers/setup.js";
 
-const SCHEMA_RE = /^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$/;
+// Q42: TASK_ID_PATTERN now accepts an optional -[a-f0-9]{4} collision suffix.
+// The base shape (no suffix) is still valid; tests below cover both branches.
+const SCHEMA_RE = /^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}(?:-[a-f0-9]{4})?$/;
 
 describe("sanitizeTaskIdSlug", () => {
   it("strips spaces and lowercases", () => {
@@ -88,5 +95,84 @@ describe("makeTaskId", () => {
   it("rejects an explicit task_id that violates the schema", () => {
     expect(() => makeTaskId({ task: "x", task_id: "t-2026-05-14-bad-slug" })).toThrow(/does not match/);
     expect(() => makeTaskId({ task: "x", task_id: "t-2026-05-14-ab" })).toThrow(/does not match/);
+  });
+
+  it("Q42: accepts an explicit task_id carrying a collision suffix", () => {
+    const id = makeTaskId({ task: "anything", task_id: "t-2026-05-14-contextreadfirstinth-a3f9" });
+    expect(id).toBe("t-2026-05-14-contextreadfirstinth-a3f9");
+    expect(id).toMatch(TASK_ID_PATTERN);
+  });
+});
+
+describe("makeUniqueTaskId (Q42)", () => {
+  afterEach(async () => {
+    await clearMetrics();
+  });
+
+  it("returns the bare slug when no collision exists in recent metrics", async () => {
+    const id = await makeUniqueTaskId({
+      task: "rename foo to bar",
+      date: new Date("2026-05-14T00:00:00Z"),
+    });
+    expect(id).toBe("t-2026-05-14-renamefootobar");
+    expect(id).toMatch(SCHEMA_RE);
+  });
+
+  it("appends an -[a-f0-9]{4} suffix when slug collides with a recent metrics row", async () => {
+    const existing = "t-2026-05-14-contextreadfirstinth";
+    await writeFile(pipelineJsonl, JSON.stringify({ task_id: existing }) + "\n", "utf8");
+    const id = await makeUniqueTaskId({
+      task: "## Context (read first, in this order) — different task body",
+      date: new Date("2026-05-14T00:00:00Z"),
+    });
+    expect(id).not.toBe(existing);
+    expect(id.startsWith(`${existing}-`)).toBe(true);
+    // 4-hex collision suffix.
+    expect(id).toMatch(/^t-2026-05-14-contextreadfirstinth-[a-f0-9]{4}$/);
+    expect(id).toMatch(TASK_ID_PATTERN);
+  });
+
+  it("schema-validates the suffixed id against TASK_ID_PATTERN", async () => {
+    const existing = "t-2026-05-14-renamefootobar";
+    await writeFile(pipelineJsonl, JSON.stringify({ task_id: existing }) + "\n", "utf8");
+    const id = await makeUniqueTaskId({
+      task: "rename foo to bar",
+      date: new Date("2026-05-14T00:00:00Z"),
+    });
+    expect(id).toMatch(TASK_ID_PATTERN);
+  });
+
+  it("explicit task_id bypasses collision detection (caller owns uniqueness)", async () => {
+    const existing = "t-2026-05-14-explicitid";
+    await writeFile(pipelineJsonl, JSON.stringify({ task_id: existing }) + "\n", "utf8");
+    const id = await makeUniqueTaskId({
+      task: "anything",
+      task_id: existing,
+    });
+    expect(id).toBe(existing);
+  });
+
+  it("missing metrics file degrades to no-collision (returns bare slug)", async () => {
+    // Use a path that doesn't exist instead of clearing — the readFile catch
+    // branch is what we're exercising.
+    const id = await makeUniqueTaskId({
+      task: "rename foo to bar",
+      date: new Date("2026-05-14T00:00:00Z"),
+      metricsFile: join(pipelineJsonl, "..", "does-not-exist-xyz.jsonl"),
+    });
+    expect(id).toBe("t-2026-05-14-renamefootobar");
+  });
+
+  it("ignores malformed lines in pipeline.jsonl without crashing", async () => {
+    await writeFile(
+      pipelineJsonl,
+      ["not-json", "{}", JSON.stringify({ task_id: "t-2026-05-14-renamefootobar" })].join("\n") + "\n",
+      "utf8",
+    );
+    const id = await makeUniqueTaskId({
+      task: "rename foo to bar",
+      date: new Date("2026-05-14T00:00:00Z"),
+    });
+    expect(id).toMatch(/^t-2026-05-14-renamefootobar-[a-f0-9]{4}$/);
   });
 });

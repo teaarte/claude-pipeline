@@ -11,6 +11,8 @@
  * cancel-spawn.ts so the format and producer stay in lockstep.
  */
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { pipelineJsonl } from "./paths.js";
 
 const SLUG_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -18,8 +20,13 @@ const SLUG_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
  * task_id pattern shared with the JSON schema and the zod schemas in
  * `tools/init.ts` and `driver/tools/run-task.ts`. Slug part is
  * alphanumeric-only — hyphens, underscores, and unicode are stripped.
+ *
+ * Q42: optional `-[a-f0-9]{4}` collision-suffix added when two tasks would
+ * otherwise share a slug (e.g. consecutive /task runs whose descriptions
+ * start with the same preamble). Schema, init zod, and fix-task-id zod
+ * all use this same pattern via TASK_ID_PATTERN.
  */
-export const TASK_ID_PATTERN = /^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$/;
+export const TASK_ID_PATTERN = /^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}(?:-[a-f0-9]{4})?$/;
 
 const SLUG_MIN_LEN = 4;
 const SLUG_MAX_LEN = 20;
@@ -97,4 +104,68 @@ export function makeTaskId(input: { task: string; task_id?: string; date?: Date 
   }
   const date = input.date ?? new Date();
   return `t-${formatTaskIdDate(date)}-${sanitizeTaskIdSlug(input.task)}`;
+}
+
+/**
+ * Q42: read the most recent task_ids from `pipeline.jsonl` for collision
+ * detection. Bounded by `limit` (default 50) — newer rows are sufficient,
+ * older runs aren't realistically reachable by the slug-collision pattern
+ * (preamble-based collisions cluster within a workday).
+ *
+ * Returns an empty set if the file is missing or unreadable; collision
+ * detection then degrades to "no collisions known" (safe — we'd just
+ * skip the suffix, same as a pre-Q42 run).
+ */
+async function readRecentTaskIds(jsonlPath: string, limit = 50): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let raw: string;
+  try {
+    raw = await readFile(jsonlPath, "utf8");
+  } catch {
+    return ids;
+  }
+  const lines = raw.split("\n").filter(Boolean);
+  const recent = lines.length > limit ? lines.slice(-limit) : lines;
+  for (const line of recent) {
+    try {
+      const row = JSON.parse(line);
+      if (typeof row.task_id === "string") ids.add(row.task_id);
+    } catch {
+      // Malformed line — skip. (paths.ts owns metrics-file format; we
+      // tolerate hand-edited cruft rather than crashing.)
+    }
+  }
+  return ids;
+}
+
+/**
+ * Q42: like `makeTaskId`, but additionally checks the suffix-free candidate
+ * against recent rows in `pipeline.jsonl` and appends a 4-hex-char
+ * suffix (`-a3f9`) when a collision is detected. Used by
+ * `driver/tools/run-task.ts` so two `/task` invocations with the same
+ * preamble don't end up with identical task_ids.
+ *
+ * Explicit `task_id` (caller-provided) passes through `makeTaskId` and
+ * is NEVER suffixed — explicit ids are the user's responsibility.
+ */
+export async function makeUniqueTaskId(input: {
+  task: string;
+  task_id?: string;
+  date?: Date;
+  metricsFile?: string;
+}): Promise<string> {
+  if (input.task_id) {
+    return makeTaskId({ task: input.task, task_id: input.task_id });
+  }
+  const base = makeTaskId({ task: input.task, date: input.date });
+  const jsonl = input.metricsFile ?? pipelineJsonl;
+  const recent = await readRecentTaskIds(jsonl);
+  if (!recent.has(base)) return base;
+
+  // Collision — append a short hash suffix. Re-roll once if the suffixed
+  // form also collides (probability ≈ 1/65536, essentially never).
+  const mkSuffixed = () => `${base}-${randomBytes(2).toString("hex")}`;
+  let candidate = mkSuffixed();
+  if (recent.has(candidate)) candidate = mkSuffixed();
+  return candidate;
 }

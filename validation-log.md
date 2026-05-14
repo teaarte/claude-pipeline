@@ -197,6 +197,29 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
 
+### 2026-05-14 — `open_spawns[].model` always `null`
+
+**Observed:** Real-task `pipeline-state.json` consistently shows `model: null` on every open-spawn entry:
+
+```json
+"open_spawns": [
+  {
+    "id": "ar-9145be56-9a65-481f-ba32-0d353ab1fb23",
+    "agent": "implementer",
+    "model": null,
+    "started_at": "2026-05-14T02:13:35.977Z"
+  }
+]
+```
+
+**Root cause (traced):** `SpawnRecorder` type signature in `mcp/src/driver/core/fsm.ts:28-32` accepts only `{project_dir, phase, agent}` — no `model` field. `mcpSpawnRecorder` in `mcp/src/driver/tools/run-task.ts:33-40` calls `pipelineBeginAgent` without `model`. `pipelineBeginAgent` defaults `input.model ?? null` (`mcp/src/tools/begin-agent.ts:54`). The model resolved upstream by `resolveAgentModel(plugin, phase, config)` is dropped before reaching the open-spawn record.
+
+**Effect:** post-hoc cost analysis blocked (which model ran which spawn?); v2.7 cost-aware routing has no historical training data; audit trail loses model attribution.
+
+**Filed as Q19** (🟡 MEDIUM, ~1h fix). Three-line code change: extend SpawnRecorder type + thread model through + forward to pipeline_begin_agent. Unit test asserts non-null for each complexity.
+
+---
+
 ### 2026-05-14 — Agents `find`-hunting for `templates/schemas/category-vocab.json`
 
 **Observed:** Logic-reviewer (and likely other reviewer/validator agents) running multiple `find` commands in real-task runs trying to locate the vocab file:

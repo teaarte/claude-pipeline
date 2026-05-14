@@ -17,7 +17,7 @@ import type {
   StepResult,
 } from "../../types/plugin.js";
 import { spawnAgent } from "../../core/shuttle.js";
-import { pipelineRoot } from "../../../lib/paths.js";
+import { pipelineRoot, schemasDir } from "../../../lib/paths.js";
 
 /**
  * Claude Code's `Task` tool only accepts a fixed set of subagent_type values
@@ -27,6 +27,47 @@ import { pipelineRoot } from "../../../lib/paths.js";
  * `specs/v3-productization-roadmap.md`.
  */
 const CC_GENERIC_SUBAGENT_TYPE = "general-purpose" as const;
+
+/**
+ * Q18: cached per-agent category vocab. Loaded lazily on the first spawn
+ * so the registry doesn't need to know about it. `null` → file load
+ * failed; we degrade gracefully and skip the inline section.
+ */
+let vocabCache: Record<string, string[]> | null | undefined;
+
+async function loadCategoryVocab(): Promise<Record<string, string[]> | null> {
+  if (vocabCache !== undefined) return vocabCache;
+  try {
+    const raw = await readFile(join(schemasDir, "category-vocab.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    vocabCache = (parsed?.vocab as Record<string, string[]>) ?? null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // eslint-disable-next-line no-console
+    console.error(`[shuttle-provider] failed to load category-vocab.json: ${msg}`);
+    vocabCache = null;
+  }
+  return vocabCache;
+}
+
+/** Test-only — reset between cases that mutate the schemas dir. */
+export function __resetVocabCacheForTests(): void {
+  vocabCache = undefined;
+}
+
+function vocabSection(agent: string, vocab: Record<string, string[]> | null): string | null {
+  if (!vocab) return null;
+  const allowed = vocab[agent];
+  if (!allowed || allowed.length === 0) return null;
+  const lines: string[] = [];
+  lines.push("## Allowed `category` values for findings");
+  lines.push("");
+  lines.push(`When emitting a finding, the \`category\` field MUST be one of:`);
+  for (const v of allowed) lines.push(`- ${v}`);
+  lines.push("");
+  lines.push(`If no entry fits, set \`category: "other"\` AND populate \`proposed_new_category: "<your-suggestion>"\` for future vocab expansion.`);
+  return lines.join("\n");
+}
 
 async function readTemplate(templatePath: string | undefined): Promise<string | null> {
   if (!templatePath) return null;
@@ -44,7 +85,11 @@ async function readTemplate(templatePath: string | undefined): Promise<string | 
   }
 }
 
-function buildPrompt(req: AgentSpawnRequest, template: string | null): string {
+function buildPrompt(
+  req: AgentSpawnRequest,
+  template: string | null,
+  vocab: Record<string, string[]> | null,
+): string {
   const lines: string[] = [];
   lines.push(`# You are the ${req.agent} agent`);
   lines.push("");
@@ -63,6 +108,11 @@ function buildPrompt(req: AgentSpawnRequest, template: string | null): string {
     lines.push(template.trim());
     lines.push("");
   }
+  const vs = vocabSection(req.agent, vocab);
+  if (vs) {
+    lines.push(vs);
+    lines.push("");
+  }
   lines.push("## Spawn context");
   lines.push("");
   lines.push(req.prompt);
@@ -72,8 +122,11 @@ function buildPrompt(req: AgentSpawnRequest, template: string | null): string {
 export const shuttleSpawnProvider: SpawnProviderPlugin = {
   name: "shuttle",
   async spawn(req: AgentSpawnRequest): Promise<StepResult> {
-    const template = await readTemplate(req.template_path);
-    const prompt = buildPrompt(req, template);
+    const [template, vocab] = await Promise.all([
+      readTemplate(req.template_path),
+      loadCategoryVocab(),
+    ]);
+    const prompt = buildPrompt(req, template, vocab);
     return {
       type: "shuttle",
       response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {

@@ -26,6 +26,7 @@ import { pipelineRecordNonreviewAgent } from "../../tools/record-nonreview-agent
 import { pipelineCancelSpawn } from "../../tools/cancel-spawn.js";
 import { pipelineAbandon } from "../../tools/abandon.js";
 import { mcpSpawnRecorder } from "./run-task.js";
+import { mirrorGateDecision } from "../builtin/steps/index.js";
 import type { ContinueTaskInput, DriverResponse } from "../types/shuttle.js";
 
 export const continueTaskSchema = {
@@ -148,8 +149,18 @@ export async function pipelineContinueTask(input: {
       if (!state.pending_user_answer) {
         throw new Error("Driver was not waiting for a user answer");
       }
-      state.scratch[`${state.pending_user_answer.gate}_decision`] = evt.answer;
+      const gateName = state.pending_user_answer.gate;
+      state.scratch[`${gateName}_decision`] = evt.answer;
       state.pending_user_answer = null;
+      // Build a registry just for the gate plugin lookup. We do it again
+      // below for runFSM — registries are cheap to construct (no IO) and
+      // doing it here keeps the mirror call self-contained.
+      {
+        const r = createRegistry();
+        loadBuiltinPlugins(r);
+        await loadProjectConfigIfPresent(r, input.project_dir);
+        await mirrorGateDecision(state, r, gateName);
+      }
       state.step_index++;
     } else if (evt.type === "recovery") {
       if (evt.choice === "abandon") {

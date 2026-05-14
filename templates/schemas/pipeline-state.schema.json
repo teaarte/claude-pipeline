@@ -155,6 +155,11 @@
         "required": ["agent", "iteration", "verdict"],
         "properties": {
           "agent": { "type": "string" },
+          "phase": {
+            "type": "string",
+            "enum": ["context", "planning", "test_first", "implementation", "validation", "final"],
+            "description": "Pipeline phase this verdict came from (Q20). Lets the same agent appear in multiple phases without verdicts collapsing into an indistinguishable bag."
+          },
           "iteration": { "type": "integer", "minimum": 1 },
           "verdict": { "type": "string" },
           "blocking_issues": { "type": "integer", "minimum": 0 },

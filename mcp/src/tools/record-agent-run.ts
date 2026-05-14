@@ -8,6 +8,7 @@ import {
 import { extractJsonHeader } from "../lib/parse-json-header.js";
 import { makeFindingId, AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
+import { audit } from "../lib/audit.js";
 import { buildSummary } from "../lib/summary.js";
 import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { coerceIntegerOpt } from "../lib/coerce.js";
@@ -59,6 +60,18 @@ export async function pipelineRecordAgentRun(input: {
   }
   const header = parsed.value;
   const repaired = parsed.repaired;
+  if (repaired) {
+    // Q11: surface lenient-parse repairs as their own audit class so the
+    // post-hoc analyser can separate "agent emitted a malformed fence but
+    // the body was salvageable" (retry-recovered) from genuine failures.
+    await audit({
+      tool: "pipeline_record_agent_run",
+      args: { phase: input.phase, agent_run_id: input.agent_run_id },
+      projectDir: input.project_dir,
+      verdict: "ok",
+      error_class: "retry-recovered",
+    }).catch(() => undefined);
+  }
   const agent = header.agent;
   if (!agent || typeof agent !== "string") {
     throw new Error("JSON header missing 'agent' field");
@@ -151,6 +164,7 @@ export async function pipelineRecordAgentRun(input: {
     const nonBlocking = writtenFindings.filter((f) => f.severity !== "blocking").length;
     state.reviewer_verdicts.push({
       agent,
+      phase: input.phase,
       iteration: header.iteration ?? 1,
       verdict: header.verdict,
       blocking_issues: blocking,

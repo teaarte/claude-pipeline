@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { shuttleSpawnProvider } from "../../../../src/driver/builtin/spawn/shuttle-provider.js";
+import {
+  shuttleSpawnProvider,
+  __resetVocabCacheForTests,
+} from "../../../../src/driver/builtin/spawn/shuttle-provider.js";
 import type { AgentSpawnRequest } from "../../../../src/driver/types/plugin.js";
 
 function makeReq(overrides: Partial<AgentSpawnRequest> = {}): AgentSpawnRequest {
@@ -96,5 +99,39 @@ describe("shuttleSpawnProvider", () => {
     }
     expect(r.response.claude_code_task.prompt).toMatch(/template read failed/);
     expect(r.response.claude_code_task.subagent_type).toBe("general-purpose");
+  });
+
+  it("Q18: embeds vocab inline for an agent with a vocab entry (logic-reviewer)", async () => {
+    __resetVocabCacheForTests();
+    const r = await shuttleSpawnProvider.spawn(makeReq({ agent: "logic-reviewer" }));
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    const prompt = r.response.claude_code_task.prompt;
+    expect(prompt).toContain("## Allowed `category` values");
+    expect(prompt).toContain("race-condition");
+    expect(prompt).toContain("off-by-one");
+    // No file-path leak.
+    expect(prompt).not.toContain("templates/schemas/category-vocab.json");
+  });
+
+  it("Q18: omits vocab section for an agent with no vocab entry (planner)", async () => {
+    __resetVocabCacheForTests();
+    const r = await shuttleSpawnProvider.spawn(makeReq({ agent: "planner" }));
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    expect(r.response.claude_code_task.prompt).not.toContain("## Allowed `category` values");
+  });
+
+  it("Q18: security agent prompt carries security-specific vocab", async () => {
+    __resetVocabCacheForTests();
+    const r = await shuttleSpawnProvider.spawn(makeReq({ agent: "security" }));
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    const prompt = r.response.claude_code_task.prompt;
+    expect(prompt).toContain("injection-sql-or-nosql");
+    expect(prompt).toContain("auth-bypass");
   });
 });

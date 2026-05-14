@@ -64,6 +64,30 @@ export async function pipelineFinish(input: {
     );
     const phases = state.phases ?? {};
 
+    // Q22: compute iter counts from reviewer_verdicts when phase is known
+    // (Q20 enables this — pre-Q20 verdicts without `phase` fall back to the
+    // older phases.<x>.iterations counter). impl_iters = max iteration of a
+    // reviewer in implementation; plan_iters = same for planning.
+    const maxIterInPhase = (phase: string): number => {
+      let max = 0;
+      for (const v of verdicts) {
+        if (v.phase === phase && typeof v.iteration === "number" && v.iteration > max) {
+          max = v.iteration;
+        }
+      }
+      return max;
+    };
+    const implIters = maxIterInPhase("implementation") || phases.implementation?.iterations || 0;
+    const planIters = maxIterInPhase("planning") || phases.planning?.iterations || 0;
+    // acceptance_first_pass = iteration-1 acceptance verdict has verdict=PASS.
+    // Fall back to phases.validation.acceptance_first_pass for legacy state.
+    const acceptanceFirst = verdicts.find(
+      (v) => v.agent === "acceptance" && (v.phase === undefined || v.phase === "validation") && v.iteration === 1,
+    );
+    const acceptanceFirstPass = acceptanceFirst
+      ? acceptanceFirst.verdict === "PASS"
+      : (phases.validation?.acceptance_first_pass ?? false);
+
     const row = {
       schema_version: "1.0",
       date,
@@ -71,13 +95,15 @@ export async function pipelineFinish(input: {
       project: input.project_short ?? "",
       task_short: input.task_short ?? short,
       complexity: state.complexity,
-      plan_iters: phases.planning?.iterations ?? 0,
+      tests_mode: state.tests_mode ?? null,
+      plan_iters: planIters,
       gate1_revisions: phases.planning?.gate1_revisions ?? 0,
-      impl_iters: phases.implementation?.iterations ?? 0,
+      impl_iters: implIters,
       blockers_found: state.blockers_found ?? 0,
       reviewers_with_blockers: reviewersWithBlockers,
       reviewer_verdicts: verdicts.map((v) => ({
         agent: v.agent,
+        phase: v.phase,
         verdict: v.verdict,
         blocking_issues: v.blocking_issues ?? 0,
       })),
@@ -86,7 +112,7 @@ export async function pipelineFinish(input: {
         verdict: phases.implementation?.plan_conformance,
         drift_files: phases.implementation?.drift_files_count ?? 0,
       },
-      acceptance_first_pass: phases.validation?.acceptance_first_pass ?? false,
+      acceptance_first_pass: acceptanceFirstPass,
       grounding_mismatches: phases.planning?.grounding_mismatches ?? 0,
       tests_written: state.tests_written,
       agents_count: state.agents_count ?? 0,

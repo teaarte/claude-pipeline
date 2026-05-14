@@ -251,7 +251,7 @@ find ~ -name "category-vocab.json"
 
 ## t-2026-05-14-workingdirectoryuser — apps/curator → apps/core rename refactor (Phase 0.5 Steps 1-2)
 
-> **Pre-`/done` snapshot.** Resolution row will be added after `/done` if `pipeline_finish` records the metrics row cleanly.
+> **✓ Closed 2026-05-14.** `/done` ran successfully. Metrics row written to `~/.claude/metrics/pipeline.jsonl` (`verdict: accepted`, 8 agents, 5 reviewer_verdicts preserved). State files cleaned. Q12 + Q13 fixes verified holding. **New issues observed post-`/done`:** Q22 (metrics row has null `tests_mode` / `impl_iters=0` despite 1 revision) and Q23 (architectural — Plan B `pipeline_done_cleanup` MCP tool was deferred; Q14 audit regen recurred as expected). Q14 also recurred (267-byte `mcp-audit.jsonl` stub remains).
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓
@@ -303,6 +303,35 @@ find ~ -name "category-vocab.json"
 
 7. **🟡 MEDIUM — Q21 NEW: Agents systematically violate output-header schema.**
    Two-of-two reviewer header validation failures: `summary_line > 100 chars` and `findings[].id` doesn't match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$`. Retry-recovered (agents iterate to satisfy the schema), but each retry burns a Task-tool invocation. Root cause likely the canonical output example in `agents/*.md` either omits the length constraint, or LLMs naturally produce sentences >100 chars for `summary_line`. Two-pronged fix: (a) tighten the agent prompt's example to actually exceed the 100-char limit so LLM sees the constraint actively; (b) consider relaxing the schema if 100 chars is too tight in practice. Connects to Q6 (single source of truth for output examples) and Q11 (would mark as `error_class: "agent-retry-recovered"`). Filed as Q21.
+
+8. **🟡 MEDIUM — Q22 NEW: metrics row in `pipeline.jsonl` has null/wrong fields after `pipeline_finish`.**
+   Inspecting the just-written row at `~/.claude/metrics/pipeline.jsonl`:
+   ```json
+   { "tests_mode": null,    // should be "regression-only" — auto-detected at /task time
+     "plan_iters": 0,       // OK — Gate 1 approved first plan
+     "gate1_revisions": 0,  // Q8 recurrence — gates never mirrored to pipeline-state
+     "impl_iters": 0,       // ❌ should be ≥1: logic-reviewer ran REQUEST_CHANGES → APPROVE = 1 revision
+     "acceptance_first_pass": false,  // confusing — acceptance ran ONCE with verdict PASS
+     "tests_written": null  // OK for tests_mode=regression-only
+   }
+   ```
+   `tests_mode` and `impl_iters` are clear bugs — metric aggregation by tests-mode / impl-iteration distribution will be broken across runs. `acceptance_first_pass` field semantics are confusing and may need rename or removal. Likely cause: `pipeline_finish` mechanical extraction reads from `pipeline-state.json` but the fields it reads from (tests_mode, iterations) aren't being maintained during the run, OR the extraction logic is bugged. Need to inspect `mcp/src/tools/finish.ts` extraction logic + verify source-of-truth fields in pipeline-state. Filed as Q22.
+
+9. **🟡 MEDIUM — Q23 NEW (architectural): `/done` cleanup should go through a dedicated MCP tool, not Bash `rm` via guard-unlock window.**
+   Current Q12 fix (Plan A) keeps cleanup logic in `commands/done.md` markdown and uses the unlock_writes/relock_writes dance + `Bash rm -f`. Real-run revealed three correlated issues:
+   - User noticed cleanup is done via `Bash(rm -f ...)` and questioned the design — guard exists to prevent raw writes, then we open a 300s bypass window to do raw writes anyway.
+   - Q14 (audit regen) recurred exactly as predicted: 267-byte `mcp-audit.jsonl` stub left behind because `pipeline_relock_writes` audits itself AFTER `rm` deleted the audit file.
+   - File-list maintenance lives in markdown — drifts from MCP-side reality (e.g., new state files don't auto-extend cleanup).
+
+   Original Q12 spec acknowledged Plan B (dedicated MCP tool) as "preferred". Filing as Q23 with explicit supersession path: implement `pipeline_done_cleanup({project_dir})` MCP tool that (a) runs entirely server-side, (b) deletes `mcp-audit.jsonl` LAST after all internal state writes, (c) needs no guard bypass at all (it's an MCP-internal operation). This will close Q14 automatically and let `commands/done.md` shrink to ~5 lines.
+
+### Post-`/done` verification snapshot
+
+- ✓ State files removed: `plan.md`, `pipeline-state.json`, `pipeline-state-summary.md`, `findings.jsonl`, `driver-state.json`, `context-doc.md`, `analyzer-claims.json` — all gone.
+- ✓ `.mcp-bypass-allowed` removed by `pipeline_relock_writes` (Q13 fix held).
+- ✓ `settings.local.json` preserved (Claude Code project settings, correctly out of scope).
+- ⚠️ `mcp-audit.jsonl` regenerated as 267-byte stub (Q14 recurrence; will be closed by Q23).
+- ✓ Metrics row written to `~/.claude/metrics/pipeline.jsonl` (5 reviewer_verdicts preserved, verdict=accepted) — but with field gaps (Q22).
 
 ### Friction / UX notes (not bugs, but pain points)
 

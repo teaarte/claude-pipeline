@@ -122,6 +122,7 @@ Glance back at the last 3-5 entries. Look for:
 - **Same friction point** (UX, not bugs) → candidate for v2.5 UX improvement.
 - **Same recovery path used repeatedly** (e.g., `pipeline_unlock_writes` for state fixes) → friction signal that v2 needs softer recovery UX.
 - **Cost trajectory** when v2.7 lands — if costs grow per task, investigate before v2.5 ships.
+- **Vocab evolution (Q29 loop):** when a real-task run produces multiple findings with `category: "other"` AND the agent's narrative (or `proposed_new_category`) clearly names a better label, propose the new category in **this** entry's "Bugs found" block (or a dedicated "Vocab proposals" bullet). Format: `vocab[<agent>]: add "<new-category>" — example: <task-id finding context>`. Promote into `templates/schemas/category-vocab.json` once a category clears ≥1 real-task occurrence + human confirmation; the promotion goes in the next polish bundle as a one-line vocab edit.
 
 After 5+ entries, run `/metrics-report` + `/learn` for cross-task aggregates.
 

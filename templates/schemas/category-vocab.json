@@ -18,6 +18,9 @@
       "regression-risk",
       "unhandled-async",
       "unbounded-recursion-or-loop",
+      "spec-deviation",
+      "scope-creep",
+      "coverage-gap",
       "other"
     ],
     "challenger-reviewer": [

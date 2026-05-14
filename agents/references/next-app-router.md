@@ -1,3 +1,20 @@
+---
+tags: [nextjs, app-router, rsc, route-handlers, layouts, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  Next.js App Router stance — Server Components by default, Client only where
+  needed, layered cache (data/route/full-route/edge) decided per route. Each
+  file convention has a specific contract; mixing them creates subtle bugs.
+when_to_load: |
+  Project uses Next.js ≥13 with App Router (app/ directory, not pages/).
+  Diff includes files under app/, 'use client'/'use server' directives,
+  loading.tsx, error.tsx, not-found.tsx, route.ts, layout.tsx, revalidate,
+  cacheTag, cacheLife, parallel/intercepted routes, or middleware.
+agent_hints: [logic-reviewer, performance-reviewer, ui-consistency, api-contract]
+---
+
 # Next.js App Router — Senior Stance
 
 ## When this applies

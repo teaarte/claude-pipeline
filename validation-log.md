@@ -198,6 +198,21 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
 
+### 2026-05-14 — v2.2a "review-completeness" bundle landed (resolution block)
+
+Six validation-driven Q-items shipped on branch `v2.2a-review-completeness` as one PR (6 commits, ordered easy → architectural):
+
+- **Q43** `cda5046` — `impl_iters` / `plan_iters` derive by `count(verdicts WHERE phase=X)`, not `max(iteration)`. Legacy fallback dropped.
+- **Q42** `39ff1a9` — `task_id` slug collisions resolve via `-[a-f0-9]{4}` suffix; `TASK_ID_PATTERN` relaxed (additive). New `makeUniqueTaskId()` in `mcp/src/lib/ids.ts`.
+- **Q41** `a810dbe` — refs become self-describing (YAML frontmatter on all 25 `agents/references/*.md`); `DecisionPlugin.decide()` accepts optional `DecisionContext{active_agents, spawn_provider}`; `SpawnProviderPlugin.query?()` added (optional one-shot LLM classification); refs-to-load is LLM-driven when `query()` is present, regex-fallback otherwise. Hand-rolled frontmatter parser, no new runtime dep.
+- **Q9** `f806977` — pre-review step invokes `security_needed` / `ui_touched` / `api_touched` decisions; review step fans out via `spawn-agents-parallel` (logic + challenger + style + security + performance, filtered by `applies_to`) for non-simple flows. SIMPLE flow keeps single logic-reviewer.
+- **Q30** `82cf886` — `set-phase-status.ts` at planning-close reads `driver-state.json` and copies `decisions.refs_to_load` → `state.refs_loaded` (+ `refs_dropped_due_to_cap`). Missing driver-state degrades silently.
+- **Q27** `da3952d` — four hooks (`git-diff-snapshot`, `load-past-misses`, `anti-pattern-grep`, `caller-context-expand`) emit the documented files at `before-step` on `review`. Each falls back to an explicit stub when its source is empty.
+
+**Final acceptance:** 343 tests / 45 files (baseline 295/41). `pnpm typecheck`, `pnpm test`, `pnpm smoke`, `pnpm smoke:orchestrator` all green per commit. Framework-purity grep gate over `mcp/src/driver/core/` still empty. Tool count unchanged at 21.
+
+**Real-task verification: pending.** Recommended next validation run: a task touching security + UI + API simultaneously (e.g. "password-change form + /api/auth/password endpoint + rate-limit + form validation") to exercise the full reviewer fan-out + all four pre-review files in a single MEDIUM/COMPLEX task. Expected: 5 reviewers in implementation + 4+ validators (acceptance / plan-conformance / UI-consistency / API-contract). Q41's LLM classification path requires a `SpawnProviderPlugin.query()` implementation — the shipped shuttle provider leaves it `undefined`, so refs-to-load currently uses the regex fallback. Wiring a real `query()` implementation (Anthropic SDK direct call) is out of scope for v2.2a and tracked separately.
+
 ### 2026-05-14 — Bash-tool subprocess has no TTY (assumption invalidated)
 
 **Observed:** Attempted to ship `scripts/set-tab-title.sh` that emits OSC-0 escape (`\033]0;<title>\007`) to `/dev/tty`, intended to be called from `commands/task.md` / `commands/done.md` via Claude Code's Bash tool, to auto-rename the user's terminal tab to `<project> · <task_id>`. Smoke test in the planning Claude Code session itself returned:

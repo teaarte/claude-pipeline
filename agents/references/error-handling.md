@@ -1,3 +1,19 @@
+---
+tags: [error-handling, retry, fallback, circuit-breaker, exception, resilience]
+stack_signals: []
+summary: |
+  Error-handling design — errors are first-class, fail-fast over
+  swallow-and-continue. Patterns for retry, fallback, circuit breakers,
+  error envelopes, and dead-letter queues.
+when_to_load: |
+  Task touches try/catch blocks, error responses, retry logic, circuit
+  breakers, fallback paths, error envelopes, exception types, error logging,
+  or dead-letter queues. Diff including new external calls, new HTTP
+  handlers, new background jobs, or any change to error-handling code also
+  qualifies.
+agent_hints: [logic-reviewer, challenger-reviewer, security-reviewer]
+---
+
 # Error Handling — Senior Stance
 
 ## When this applies

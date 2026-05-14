@@ -1,3 +1,18 @@
+---
+tags: [e2e, playwright, web, integration-test, frontend]
+stack_signals:
+  - language: [typescript, javascript]
+  - project_type: [frontend-app, monorepo]
+summary: |
+  Playwright E2E patterns — page object usage, getByRole / getByLabel /
+  getByText selector preference, test.describe per feature.
+when_to_load: |
+  Task writes E2E tests, OR project has Playwright config / e2e directory
+  with *.spec.ts. Validation step asserts end-to-end behavior on a web
+  stack.
+agent_hints: [test, acceptance]
+---
+
 # E2E: Playwright (Web)
 
 ## Detection

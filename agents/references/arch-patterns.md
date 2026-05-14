@@ -1,3 +1,17 @@
+---
+tags: [architecture, design, complexity, refactor, boundaries, service-split]
+stack_signals: []
+summary: |
+  Architectural decision patterns — prefer the cheapest abstraction that
+  survives 6 months. Boundary cost framing for service splits, shared
+  modules, and async hops.
+when_to_load: |
+  COMPLEX tasks; task requires architectural decisions; Architect or Planner
+  is reasoning about new components, services, or boundaries; refactor scope
+  spans multiple modules or introduces a new abstraction layer.
+agent_hints: [architect, planner, logic-reviewer, challenger-reviewer]
+---
+
 # Architecture Patterns — Senior Stance
 
 ## When this applies

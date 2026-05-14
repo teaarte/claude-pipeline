@@ -21,7 +21,7 @@
     "schema_version": { "type": "string", "const": "1.0" },
     "task_id": {
       "type": "string",
-      "pattern": "^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}$",
+      "pattern": "^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}(?:-[a-f0-9]{4})?$",
       "description": "t-<YYYY-MM-DD>-<short-slug>"
     },
     "task": { "type": "string" },

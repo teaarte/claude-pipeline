@@ -1,3 +1,18 @@
+---
+tags: [performance, flutter, dart, widget-rebuild, mobile]
+stack_signals:
+  - language: [dart]
+  - project_type: [mobile, frontend-app]
+summary: |
+  Flutter / Dart performance checklist — const constructors, build() scope,
+  setState() placement, list virtualization, image caching.
+when_to_load: |
+  Task touches Flutter widgets, Dart code with perf concerns, or mobile-app
+  scale targets. Diff in *.dart with widget tree changes, setState() calls,
+  or list/scroll views.
+agent_hints: [performance-reviewer, logic-reviewer, ui-consistency]
+---
+
 # Performance: Flutter / Dart
 
 ## Widget Rebuilds

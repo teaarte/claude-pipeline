@@ -12,6 +12,7 @@ import {
 } from "../lib/phase-state-machine.js";
 import { captureGitDiff } from "../lib/git-diff.js";
 import { audit } from "../lib/audit.js";
+import { readDriverState } from "../driver/core/state.js";
 
 const SKIPPED_REASON_BY_PHASE: Record<string, readonly string[]> = {
   test_first: ["regression-only", "no-test-framework-tdd-blocked", "user-override-no-tests"],
@@ -103,6 +104,26 @@ export async function pipelineSetPhaseStatus(input: {
       state.pipeline_violation = state.pipeline_violation
         ? `${state.pipeline_violation}; phase-force-${input.phase}`
         : `phase-force-${input.phase}`;
+    }
+
+    // Q30: at planning close, persist the driver's refs_to_load decision
+    // (and refs_dropped_due_to_cap, when Q41's classifier emits it) onto the
+    // canonical pipeline-state. Without this, /learn cross-task aggregation
+    // can't answer "which refs were loaded on which task" by reading
+    // pipeline.jsonl + pipeline-state alone — the decision lived only in
+    // driver-state.json.
+    if (input.phase === "planning" && input.status === "completed") {
+      const driverState = await readDriverState(input.project_dir).catch(() => null);
+      const refsLoaded = driverState?.decisions?.refs_to_load;
+      if (Array.isArray(refsLoaded)) {
+        state.refs_loaded = refsLoaded.filter((r): r is string => typeof r === "string");
+      }
+      const refsDropped = driverState?.decisions?.refs_dropped_due_to_cap;
+      if (Array.isArray(refsDropped)) {
+        state.refs_dropped_due_to_cap = refsDropped.filter(
+          (r): r is string => typeof r === "string",
+        );
+      }
     }
 
     // Q33: at implementation close, snapshot the working-tree diff so

@@ -1,3 +1,19 @@
+---
+tags: [redis, cache, session, queue, rate-limit, pubsub, distributed-lock]
+stack_signals:
+  - project_type: [backend, monorepo]
+summary: |
+  Redis design — single-threaded per shard, in-memory budget. Keep keys
+  small, commands O(1) or bounded, and design every feature to degrade
+  gracefully on a Redis blip.
+when_to_load: |
+  Task touches cache layer, session store, rate limiter, queue (BullMQ,
+  Sidekiq, RQ), pub/sub, distributed lock, ratelimit, or real-time presence.
+  Diff including Redis client calls (redis., ioredis, node-redis, redis-py,
+  lettuce, Bull, BullMQ, RedisCacheStore) qualifies.
+agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+---
+
 # Redis — Senior Stance
 
 ## When this applies

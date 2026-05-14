@@ -1,3 +1,17 @@
+---
+tags: [testing, strategy, coverage, mocks, flake, integration, tdd]
+stack_signals: []
+summary: |
+  Cross-stack test strategy — pin behavior not implementation; coverage % is
+  vanity; flaky tests are worse than no tests. Decisions for what to test,
+  how to mock, and when integration > unit.
+when_to_load: |
+  Plan review and acceptance steps; COMPLEX tasks reviewing test specs; or
+  any task where the test surface itself is being designed (TDD bootstrap,
+  test refactor, mock-strategy review).
+agent_hints: [test, logic-reviewer, acceptance, challenger-reviewer]
+---
+
 # Test Strategy — Senior Stance
 
 ## When this applies

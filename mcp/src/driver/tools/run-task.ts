@@ -35,6 +35,7 @@ export const mcpSpawnRecorder: SpawnRecorder = async (req) => {
     project_dir: req.project_dir,
     phase: req.phase,
     agent: req.agent,
+    model: req.model ?? null,
   });
   return { agent_run_id: r.agent_run_id };
 };

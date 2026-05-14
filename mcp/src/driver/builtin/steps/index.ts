@@ -109,7 +109,7 @@ async function spawnOne(
   const provider = requireSpawnProvider(ctx.registry);
   const config = (state.scratch.config as any) ?? defaultConfig;
   const model = resolveAgentModel(agent, phase, config);
-  const agent_run_id = await ctx.beginSpawn(agentName, phase);
+  const agent_run_id = await ctx.beginSpawn(agentName, phase, model);
   state.scratch[SPAWN_ISSUED_KEY(stepName)] = agent_run_id;
   return provider.spawn({
     agent: agentName,

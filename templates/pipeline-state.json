@@ -22,7 +22,6 @@
       "status": "pending",
       "iterations": 0,
       "gate1_revisions": 0,
-      "grounding_check": null,
       "grounding_mismatches": 0,
       "agents": [],
       "open_spawns": []

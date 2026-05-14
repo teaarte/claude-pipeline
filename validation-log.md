@@ -197,6 +197,18 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
 
+### 2026-05-14 — `task_id` slug derived from task-text preamble, not task essence
+
+**Observed:** Real-task run on s3-panel produced `task_id = "t-2026-05-14-workingdirectoryuser"`. The actual task was a rename refactor (`apps/curator` → `apps/core`), but the slug came from the boilerplate preamble that prefixes every `/task` invocation: *"Working directory: /Users/teaarte/Work/AI-FACTORY/s3-panel ## Context (read first, in this order) ..."*.
+
+**Root cause:** `deriveTaskId` in `mcp/src/driver/tools/run-task.ts` calls `makeTaskId(task)` which slugifies whatever leading text it finds. Real-world `/task` invocations consistently start with a "Working directory:" preamble (added by the Orchestrator skill) so the first slug-friendly token-run is always `"workingdirectoryuser"`, `"workingdirectoryYou"`, etc.
+
+**Effect:** task_id is no longer useful for human recognition or grep-friendly cross-referencing. Q7 fixed the format (schema-valid) but not the semantics. Workaround: caller passes explicit `task_id` to `pipeline_run_task`.
+
+**Not yet filed as a Q-item** — borderline between bug and UX-polish. Could be addressed by either (a) better heuristic in `deriveTaskId` (strip known preamble prefixes; prefer first imperative verb / first `##` heading content), or (b) accept the slug as cosmetic and rely on `task_id` being a database key, not human-readable. Decision deferred — collect 1-2 more runs to confirm preamble pattern is universal before fixing.
+
+---
+
 ### 2026-05-14 — `open_spawns[].model` always `null`
 
 **Observed:** Real-task `pipeline-state.json` consistently shows `model: null` on every open-spawn entry:
@@ -234,6 +246,88 @@ find ~ -name "category-vocab.json"
 **Root cause:** agent prompts reference `templates/schemas/category-vocab.json` by **relative path**, which only resolves from the claude-pipeline repo root. Agent is spawned inside the user's project (e.g. `s3-panel/`) → path doesn't resolve → `find` fallback wastes tokens + slow filesystem walks.
 
 **Filed as Q18** (🟡 MEDIUM, ~1-2h fix). Architectural answer: driver embeds vocab inline in prompt at spawn build time. Connects to Q6 (similar SoT principle for output examples).
+
+---
+
+## t-2026-05-14-workingdirectoryuser — apps/curator → apps/core rename refactor (Phase 0.5 Steps 1-2)
+
+> **Pre-`/done` snapshot.** Resolution row will be added after `/done` if `pipeline_finish` records the metrics row cleanly.
+
+- **Project:** `~/Work/AI-FACTORY/s3-panel`
+- **Complexity (auto):** medium ✓
+- **tests_mode (auto):** regression-only ✓ (frontend project; correct)
+- **Wall time:** ~40 min (started 01:53Z, Gate 2 reached ~02:33Z)
+- **Agents count:** 8 (context: 2, planning: 3, test_first: 0 skipped, implementation: 2, validation: 1)
+- **Verdict:** at Gate 2, paused for analysis before `/done`
+- **Subjective rating:** 8/10 — first run after v2.1-hotfix shipped; Q7/Q16 fixes verified working end-to-end
+
+### What worked
+- **Q7 fix confirmed:** `task_id="t-2026-05-14-workingdirectoryuser"` matches `^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$`. `pipeline_validate` returns `{ok:true, violations:[]}`.
+- **Q16 fix confirmed:** all plugin agents spawned successfully (code-analyzer, planner, logic-reviewer, acceptance — none are CC built-in subagent_types). Without Q16 fix this would have blocked at context phase like t-2026-05-14-blocked-at-context did.
+- **INV_012 enforcement working:** `open_spawns` empty across every closed phase (context/planning/implementation). Atomic spawn-record contract held.
+- Iterative review loop worked: logic-reviewer iter1 `REQUEST_CHANGES` (2 blocking: `missing-edge-case`, `duplicate-logic`) → revision → iter2 `APPROVE`.
+- context-doc-verifier `WARN` (1 non-blocking `claim-mismatch`) — non-blocking flow handled correctly.
+- plan-grounding-check `GROUNDED` first try, no replan loop.
+- acceptance `PASS` (all 13 ACs).
+- Audit log captured 15 MCP calls (~26.5KB) with 11 ok / 4 error — **error rate 27%, down from 48% on first run** (Q11 trend improving).
+- 3 structured findings written to `findings.jsonl` with valid agent/severity/category.
+
+### Gate interaction (real conversation, not log)
+- **Gate 0:** approved as-is (medium classification confirmed without re-classification).
+- **Gate 1:** approved on first plan (no revision; plan-grounding-check passed first try).
+- **Gate 2:** **pending** — user requested pre-`/done` analysis before closing.
+
+### Bugs found
+
+1. **🟡 MEDIUM — Q8 RECURRENCE: Gate decisions not mirrored to `pipeline-state.gates`.**
+   `driver-state.scratch.gate-0_decision=approve` + `gate-1_decision` present, but `pipeline-state.gates = {gate0:"pending", gate1:"pending", gate2:"pending"}`. `pipeline_finish` will compute `gate1_revisions=0` from missing data. Root cause unchanged — step impl in `builtin/steps/index.ts` not calling `pipelineSetGate`.
+
+2. **🟡 MEDIUM — Q9 RECURRENCE: Code review still under-spawned.**
+   - **Implementation phase:** 1/5 reviewers (only `logic-reviewer`; missing challenger, style, security, performance).
+   - **Validation phase:** 1 agent (`acceptance` only; missing `plan-conformance` per Global Rule #21, plus optionally UI-consistency / API-contract / playwright depending on touched layers).
+   - Confirms hypothesis is real, not first-run noise. Need to inspect `applies_to` decisions + step spawn logic.
+
+3. **🟡 MEDIUM — Q11 RECURRENCE: 4/15 (27%) audit error rate.**
+   Two patterns each appearing 2×:
+   - `Agent header failed validator/reviewer-output.schema.json validation` (summary_line >100 chars; finding.id wrong pattern; finding.summary >200 chars).
+   - `Finding category '<X>' is not in vocab for agent 'logic-reviewer'` (categories `inconsistent-spec` and `plan-incomplete` — not in vocab but sound plausible for logic-reviewer; agent fell back to retry with `other`).
+   Without Q11's `error_class` field, these look identical to genuine failures.
+
+4. **🟡 MEDIUM — Q17 RECURRENCE: `pipeline-state.stack` still all `null`/`"unknown"`.**
+   `language="unknown"`, all command fields `null`. Unchanged since first run.
+
+5. **🟡 MEDIUM — Q18 RECURRENCE (indirect):** the two rejected vocab categories suggest logic-reviewer didn't have inline vocab at spawn time — same Q18 architectural fix (embed vocab inline) would prevent the agent from inventing categories in the first place.
+
+6. **🟢 LOW — Q20 NEW: `reviewer_verdicts[].phase` field is missing.**
+   `pipeline-state.reviewer_verdicts[]` entries have `{agent, iteration, verdict, blocking_issues, non_blocking, past_misses_applied, past_miss_matches, categories_seen}` — **no `phase` field**. logic-reviewer ran in both `planning` and `implementation` phases this run; the two rows are indistinguishable except by `iteration` and order. Should add `phase: Phase` field in `templates/schemas/pipeline-state.schema.json` `reviewer_verdicts` shape and populate from `pipeline_record_agent_run`. Filed as Q20.
+
+7. **🟡 MEDIUM — Q21 NEW: Agents systematically violate output-header schema.**
+   Two-of-two reviewer header validation failures: `summary_line > 100 chars` and `findings[].id` doesn't match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$`. Retry-recovered (agents iterate to satisfy the schema), but each retry burns a Task-tool invocation. Root cause likely the canonical output example in `agents/*.md` either omits the length constraint, or LLMs naturally produce sentences >100 chars for `summary_line`. Two-pronged fix: (a) tighten the agent prompt's example to actually exceed the 100-char limit so LLM sees the constraint actively; (b) consider relaxing the schema if 100 chars is too tight in practice. Connects to Q6 (single source of truth for output examples) and Q11 (would mark as `error_class: "agent-retry-recovered"`). Filed as Q21.
+
+### Friction / UX notes (not bugs, but pain points)
+
+- **task_id slug semantics:** generated slug = `workingdirectoryuser` — derived from the first words of the task description, which began with the boilerplate preamble *"Working directory: /Users/teaarte/Work/AI-FACTORY/s3-panel ## Context (read first, in this order) ..."*. The actual task ("rename apps/curator to apps/core") never surfaces in the id. Q7 fix made the format valid; semantics still noisy. Workaround: pass explicit `task_id` to `pipeline_run_task`. Cross-cutting observation added below.
+- `driver-state.step_history_len: 0` even though `step_index=20`. Either step_history isn't being persisted by `writeDriverState`, or it lives in a different key. Worth checking before relying on it for crash recovery.
+
+### Objective signals from logs (jq queries)
+
+- `plan_iters`: 1 (plan-grounding-check GROUNDED first try)
+- `impl_iters`: 2 (logic-reviewer REQUEST_CHANGES → APPROVE)
+- `reviewer_disagreements`: 0 (challenger didn't spawn — Q9)
+- `acceptance_first_pass`: yes
+- `agents_count by complexity`: 8 (observed) vs ~12 expected for MEDIUM (5 reviewers in impl + plan-conformance/UI/API in validation) — Q9 deficit
+- Output size outliers: not measurable directly (audit captures call meta, not payload sizes)
+- `_repaired` count: 0 (no JSON-header repairs needed this run)
+- `force_used` count: 0
+
+### Cost signal
+- Token estimate: ~not measured (Q19 makes per-spawn model attribution impossible; Q17 makes stack-aware estimation impossible)
+- USD estimate: n/a until v2.7
+
+### Notes
+- This is the **first end-to-end successful run** after v2.1-hotfix. Q7 and Q16 fixes are verified in production conditions.
+- Pipeline reached Gate 2 cleanly with `pipeline_validate ok:true` — `/done` should record a metrics row without recovery needed.
+- Next real-task validation should consciously cover: (a) a task that should spawn challenger/style/security/performance (auth or perf-sensitive change) to nail Q9; (b) a task that touches API to verify `applies_to` predicate works at all.
 
 ---
 

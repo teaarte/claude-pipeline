@@ -251,7 +251,7 @@ find ~ -name "category-vocab.json"
 
 ## t-2026-05-14-contextreadfirstinth — Phase 0.5 Step 3: Identity base contract
 
-> **Pre-`/done` snapshot at Gate 2.** Pipeline reached Gate 2 cleanly with all v2.1-polish-bundle fixes verified in production. User reviewing before acceptance.
+> **✓ Closed 2026-05-14.** User accepted at Gate 2; `/done` ran cleanly. Q23 cleanup **perfect** — `.claude/` post-`/done` contains only `settings.local.json` (no `mcp-audit.jsonl` stub → **Q14 confirmed subsumed by Q23 in production**). Q22 metrics row **fully populated**: `tests_mode:"regression-only"`, `impl_iters:1`, `plan_iters:1`, `acceptance_first_pass:true`, `gate1_revisions:0`, `verdict:"accepted"`, 5 `reviewer_verdicts` with `phase` field (Q20). **Post-`/done` issues:** Q36 (Stop hook scary message after Gate 2 accept — **already fixed on this branch** in commit `d6f7438`) + Q37 NEW (`stack: null` in metrics row despite state populated — Q22 family extension, ~30min, filed for v2.2d).
 
 - **Project:** `~/Work/AI-FACTORY/s3-panel`
 - **Complexity (auto):** medium ✓

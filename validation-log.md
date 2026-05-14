@@ -270,3 +270,59 @@ Pick option matches your data-collection intent. The first 3-5 validation runs p
 - Add Q7-Q11 to roadmap `v2.1 code-polish round` (doing now in same commit).
 - Close this task: recover via `pipeline_unlock_writes` + manual `task_id` fix, then `/done`. Or `pipeline_abandon` if not worth saving the state. Decide based on whether you want this run's metrics row in `pipeline.jsonl` (yes for analysis later, no if the metrics row is itself corrupt-shaped).
 - Run 2-4 more real tasks in next 1-2 weeks before deciding on v2.1 fix priorities.
+
+### `/done` execution observations (added retrospectively after running /done)
+
+Recovery path was actually taken: `pipeline_finish` failed on task_id as predicted (Q7 confirmed). Agent applied Recovery B (force-close after manual fix). Worked end-to-end, but surfaced **3 new UX bugs** in the `/done` flow itself:
+
+- **Final task_id:** `t-2026-05-13-gwarchspec` (manually written via Python edit; 10-char alphanumeric slug, schema-valid). Metrics row appended successfully.
+- **Final verdict:** `accepted`.
+
+#### Q7+ (extension of existing Q7) — Manual task_id fix has no clean recovery primitive
+
+The recovery required this 4-step dance:
+1. `mcp__claude-pipeline__pipeline_unlock_writes({ttl_seconds: 300, reason: "fix corrupt task_id"})`
+2. `python3 -c "..."` to load JSON, mutate `task_id`, write back
+3. `mcp__claude-pipeline__pipeline_relock_writes`
+4. Re-call `pipeline_finish`
+
+This works but is hostile UX. Q7's main fix (proper slugifier in `pipeline_init`) prevents the bug. The **additional** recommendation: provide `pipeline_fix_task_id({project_dir, new_task_id, reason})` as a clean recovery MCP tool. Auto-validates new id against schema, audits the change, no python hack needed.
+
+#### Q12 🟡 MEDIUM — `/done` cleanup blocked by guard hook (chicken-and-egg)
+
+`/done` skill ran `rm -f .claude/pipeline-state.json .claude/findings.jsonl ...` — **the guard hook correctly blocked it** because those paths are MCP-managed. Error message says `"/done re-locks automatically"` but the recovery was manual:
+- Agent called `pipeline_unlock_writes` first
+- Then ran `rm` (succeeded)
+- `pipeline_relock_writes` did NOT auto-delete the `.mcp-bypass-allowed` marker → orphan (see Q13)
+
+**Root cause:** `commands/done.md` skill markdown describes a `rm`-based cleanup. But the guard added in v2 doesn't let `rm` touch protected files. The skill needs updating to call `pipeline_unlock_writes` before the `rm` block, or — cleaner — to use a new `pipeline_done_cleanup({project_dir})` MCP tool that does the deletion server-side without guard interaction.
+
+**Effort:** ~1h. Fix `commands/done.md` skill markdown, OR (preferred) add `pipeline_done_cleanup` MCP tool.
+
+#### Q13 🟢 LOW — `.mcp-bypass-allowed` orphan after /done
+
+Agent ran first `rm` batch → all files gone except `.mcp-bypass-allowed`. Required a separate `rm -f .claude/.mcp-bypass-allowed`. **Root cause:** `/done` cleanup list in `commands/done.md` doesn't include this marker filename. **Or:** the unlock that happened during cleanup re-created it. Easy fix: add `.mcp-bypass-allowed` to the cleanup list. Better fix: `pipeline_relock_writes` should auto-delete the marker (verify it does — Q12 implementation may make this moot).
+
+**Effort:** ~10min. Update `commands/done.md` cleanup file list, or fix `pipeline_relock_writes` to delete the marker.
+
+#### Q14 🟢 LOW — `mcp-audit.jsonl` regenerates during cleanup (267-byte stub orphan)
+
+After `/done` cleanup, `.claude/` contained only `settings.local.json` AND a fresh 267-byte `mcp-audit.jsonl`. This stub got created by the cleanup process itself — every MCP call (unlock, relock, finish) appends to the project-local audit. So cleaning `mcp-audit.jsonl` early in the cleanup just gets it re-created by subsequent cleanup-process MCP calls.
+
+**Root cause:** Loop ordering. Either: (a) delete `mcp-audit.jsonl` LAST after all other MCP calls done, (b) have `/done` route its own audit entries to global stream only (with a `tool: "done:cleanup"` marker), (c) have `pipeline_done_cleanup` (proposed in Q12) do the file deletion inside one MCP call that doesn't re-emit audit until after the deletion.
+
+**Effort:** ~30min. Tied to Q12 — same fix probably resolves both.
+
+### Cumulative bug count from this single task
+
+Initial findings: 5 (Q7-Q11).
+Post-/done findings: +3 (Q12-Q14) plus Q7 extension.
+
+**Total: 8 distinct v2 bugs surfaced from one real task run.**
+
+This is high — but expected for a first real-task validation. The pattern is healthy:
+- Q7 is the only blocker that hurts every task (schema-violation task_id → can't finish without recovery).
+- Q8, Q9 are quality-of-output bugs (gates lost in metrics, review under-spawned).
+- Q10-Q14 are friction / UX bugs that don't break correctness but hurt the experience.
+
+Priority signal: **fix Q7 first** (single point of failure for /done). The rest can wait for bundled v2.1 polish round.

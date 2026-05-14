@@ -21,6 +21,7 @@ import { testsModeDecision } from "../builtin/decisions/tests-mode.js";
 import { pipelineInit } from "../../tools/init.js";
 import { pipelineBeginAgent } from "../../tools/begin-agent.js";
 import { error as shuttleError } from "../core/shuttle.js";
+import { makeTaskId, TASK_ID_PATTERN } from "../../lib/ids.js";
 import type { DriverResponse } from "../types/shuttle.js";
 
 /**
@@ -43,7 +44,7 @@ export const runTaskSchema = {
   task: z.string().min(1),
   task_id: z
     .string()
-    .regex(/^t-\d{4}-\d{2}-\d{2}-[a-z0-9]{4,}$/)
+    .regex(TASK_ID_PATTERN)
     .optional()
     .describe("Optional explicit task_id. If omitted, a slug is derived from `task`."),
   complexity_hint: z.enum(["simple", "medium", "complex"]).optional(),
@@ -60,25 +61,6 @@ export const runTaskSchema = {
     .optional()
     .describe("Optional stack info. If omitted, a minimal placeholder is used."),
 };
-
-function slugify(text: string): string {
-  return (
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 40) || "task"
-  );
-}
-
-function deriveTaskId(input: { task: string; task_id?: string }): string {
-  if (input.task_id) return input.task_id;
-  const d = new Date();
-  const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
-    d.getUTCDate(),
-  ).padStart(2, "0")}`;
-  return `t-${date}-${slugify(input.task)}`;
-}
 
 export async function pipelineRunTask(input: {
   project_dir: string;
@@ -108,7 +90,7 @@ export async function pipelineRunTask(input: {
 
     // Bootstrap pipeline-state if it doesn't exist. This makes /done's
     // pipeline_finish work after a real driver run.
-    const taskId = deriveTaskId(input);
+    const taskId = makeTaskId({ task: input.task, task_id: input.task_id });
     const complexity = input.complexity_hint ?? "medium";
     const testsMode = input.tests_mode_hint ?? "regression-only";
     const stack = input.stack ?? { language: "unknown" };

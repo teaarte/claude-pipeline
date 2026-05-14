@@ -64,21 +64,15 @@ export async function pipelineFinish(input: {
     );
     const phases = state.phases ?? {};
 
-    // Q22/Q31: impl_iters / plan_iters come from reviewer_verdicts[].iteration
-    // filtered by Q20 `phase`. The legacy phases.<x>.iterations counter was
-    // deprecated in v2.2-clear-bundle (Q31). Pre-Q20 state without `phase`
-    // ⇒ 0 (those rows predate the metric entirely).
-    const maxIterInPhase = (phase: string): number => {
-      let max = 0;
-      for (const v of verdicts) {
-        if (v.phase === phase && typeof v.iteration === "number" && v.iteration > max) {
-          max = v.iteration;
-        }
-      }
-      return max;
-    };
-    const implIters = maxIterInPhase("implementation");
-    const planIters = maxIterInPhase("planning");
+    // Q43: impl_iters / plan_iters = count of reviewer_verdicts in phase, NOT
+    // max(iteration). The iteration counter is global-per-agent (logic-reviewer
+    // iter=1 in planning, iter=2 in implementation), so max would inflate.
+    // A "review pass" = one entry in reviewer_verdicts[]; the per-phase count
+    // is the metric the column name promises.
+    const countInPhase = (phase: string): number =>
+      verdicts.filter((v) => v.phase === phase).length;
+    const implIters = countInPhase("implementation");
+    const planIters = countInPhase("planning");
     // acceptance_first_pass = iteration-1 acceptance verdict has verdict=PASS.
     // Q32: the legacy phases.validation.acceptance_first_pass field was
     // deprecated in v2.2-clear-bundle; reviewer_verdicts[] is the only source

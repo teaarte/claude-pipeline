@@ -40,7 +40,7 @@ The driver passes path `.claude/past-misses-style-reviewer.md`. Read once at sta
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["style-reviewer"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json

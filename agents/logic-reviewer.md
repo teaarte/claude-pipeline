@@ -55,7 +55,7 @@ ALWAYS emit output in this exact order:
 1. A single fenced ```json block conforming to `templates/schemas/reviewer-output.schema.json`. This is the machine-parseable surface — the MCP server validates it.
 2. Markdown narrative below the block.
 
-Every `category` value MUST be drawn from `templates/schemas/category-vocab.json` under `vocab["logic-reviewer"]`. Use `"other"` + `proposed_new_category` only when no existing entry fits.
+The driver injects the allowed `category` values for `logic-reviewer` inline in your spawn prompt (under "## Allowed `category` values"). Use one of those values, or `"other"` + `proposed_new_category` when no existing entry fits.
 
 Template:
 

@@ -62,7 +62,7 @@ Adapt to detected language:
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`validator-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["acceptance"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json

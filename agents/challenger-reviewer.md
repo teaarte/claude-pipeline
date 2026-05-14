@@ -38,7 +38,7 @@ If none of these surface a real risk, say so explicitly — don't fabricate conc
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["challenger-reviewer"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json

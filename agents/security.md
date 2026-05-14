@@ -23,7 +23,7 @@ The driver passes path `.claude/past-misses-security.md`. Read once at start. Ea
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["security"]`. WARN is allowed for security.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`. WARN is allowed for security.
 
 ````markdown
 ```json

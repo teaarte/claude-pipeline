@@ -45,7 +45,7 @@ Implementer "small adjustments" outside the plan are the second-largest source o
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`validator-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["plan-conformance"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json

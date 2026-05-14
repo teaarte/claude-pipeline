@@ -27,7 +27,7 @@ Spot-check `.claude/context-doc.md` for hallucinated patterns before the Planner
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`validator-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["context-doc-verifier"]`.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ````markdown
 ```json

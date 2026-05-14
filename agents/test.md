@@ -120,7 +120,7 @@ Use test command from CLAUDE.md. If new test file, run just that file first, the
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`validator-output.schema.json`) → markdown narrative.
-`agent`: `"test"`. `category` from `category-vocab.json` → `vocab["test"]`.
+`agent`: `"test"`. `category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`.
 
 ### Test-First Mode
 

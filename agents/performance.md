@@ -30,7 +30,7 @@ Apply checks from the loaded reference(s) to the changed code. Only flag things 
 ## Output (JSON header + markdown narrative)
 
 Order: ```json block (`reviewer-output.schema.json`) → markdown narrative.
-`category` from `category-vocab.json` → `vocab["performance"]`. WARN allowed.
+`category` values are injected inline by the driver under "## Allowed `category` values". Use one of those, or `"other"` + `proposed_new_category`. WARN allowed.
 
 ````markdown
 ```json

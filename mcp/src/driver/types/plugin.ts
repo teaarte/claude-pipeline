@@ -149,14 +149,27 @@ export interface FlowPlugin extends PluginMeta {
 
 // ----- Gate ---------------------------------------------------------------
 
+/**
+ * Structured user answer to a gate's ask-user prompt (Item 8 of v2.2.5).
+ * Replaces the previous free-text `answer: string` shape — gate decisions
+ * are binary (accept | reject) with an optional human-readable message
+ * carried through to feedback. No multilingual keyword classification at
+ * gates; the harness emits this shape directly.
+ */
+export interface UserAnswer {
+  decision: "accept" | "reject";
+  message?: string;
+}
+
+export interface GateDecision {
+  status: "approved" | "rejected";
+  feedback: string | null;
+}
+
 export interface GatePlugin extends PluginMeta {
   name: string;
   message(state: DriverState): string;
-  validate_response(answer: string): {
-    ok: boolean;
-    decision: "approved" | "rejected" | "changes_requested";
-    feedback?: string;
-  };
+  validate_response(input: UserAnswer): GateDecision;
 }
 
 // ----- Decision -----------------------------------------------------------

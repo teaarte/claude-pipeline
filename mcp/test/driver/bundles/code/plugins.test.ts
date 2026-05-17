@@ -115,11 +115,14 @@ describe("resolveAgentModel", () => {
 });
 
 describe("gates", () => {
-  it("each built-in gate validates approve / reject / changes_requested", () => {
+  it("each built-in gate maps UserAnswer{accept|reject} to approved|rejected", () => {
     for (const g of BUILTIN_GATES) {
-      expect(g.validate_response("yes").decision).toBe("approved");
-      expect(g.validate_response("no").decision).toBe("rejected");
-      expect(g.validate_response("please change the X").decision).toBe("changes_requested");
+      expect(g.validate_response({ decision: "accept" }).status).toBe("approved");
+      expect(g.validate_response({ decision: "reject" }).status).toBe("rejected");
+      expect(g.validate_response({ decision: "accept", message: "lgtm" }).feedback).toBe("lgtm");
+      expect(g.validate_response({ decision: "reject", message: "scope drift" }).feedback).toBe(
+        "scope drift",
+      );
     }
   });
 });

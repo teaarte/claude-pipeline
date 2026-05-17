@@ -31,7 +31,6 @@ For closed items, see [`closed-q-items.md`](closed-q-items.md). For pipeline pha
 | Q | Severity | Where it lands | Notes |
 |---|---|---|---|
 | Q41 / Q44 / Q46 / Q58 / Q61 | 🟡 MEDIUM | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) Item 9 | **LLM-classification cluster.** Promoted from "wait v2.3 daemon" 2026-05-17 after realizing shuttle-classifier path works on existing infra. One classifier-agent + one `pickFromCandidates` primitive activates all five together. ~1-2d. |
-| Q57 | 🟡 MEDIUM | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) Item 8 | **Structured gate-answer protocol.** Filed 2026-05-17 as Category 2 fix (restructure to eliminate classification). ~0.5-1d. |
 
 ## Deferred (no trigger to fix yet)
 

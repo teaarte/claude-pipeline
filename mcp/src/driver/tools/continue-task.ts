@@ -150,7 +150,10 @@ export async function pipelineContinueTask(input: {
         throw new Error("Driver was not waiting for a user answer");
       }
       const gateName = state.pending_user_answer.gate;
-      state.scratch[`${gateName}_decision`] = evt.answer;
+      state.scratch[`${gateName}_decision`] = {
+        decision: evt.decision,
+        message: evt.message,
+      };
       state.pending_user_answer = null;
       // Build a registry just for the gate plugin lookup. We do it again
       // below for runFSM — registries are cheap to construct (no IO) and

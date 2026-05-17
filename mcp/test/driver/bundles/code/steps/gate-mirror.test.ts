@@ -104,7 +104,7 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
         input: {
           driver_state_id: state.driver_state_id,
           type: "user-answer",
-          answer: "approved",
+          decision: "accept",
         },
       });
       const ps = (await pipelineStateGet({ project_dir: project })).state;
@@ -114,7 +114,7 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
     }
   });
 
-  it("rejecting gate-0 with feedback sets gates.gate0 = 'rejected'", async () => {
+  it("rejecting gate-0 with feedback sets gates.gate0 = 'rejected' and records the message", async () => {
     const project = await mkdtemp(join(tmpdir(), "cp-q8-reject-"));
     try {
       const { state } = await driveToGate0(project);
@@ -125,7 +125,8 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
         input: {
           driver_state_id: state.driver_state_id,
           type: "user-answer",
-          answer: "no, classification is wrong",
+          decision: "reject",
+          message: "classification is wrong",
         },
       });
       const ps = (await pipelineStateGet({ project_dir: project })).state;
@@ -135,8 +136,8 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
     }
   });
 
-  it("changes_requested collapses to rejected + records feedback on gates", async () => {
-    const project = await mkdtemp(join(tmpdir(), "cp-q8-changes-"));
+  it("reject with empty message still sets rejected status", async () => {
+    const project = await mkdtemp(join(tmpdir(), "cp-q8-emptyreject-"));
     try {
       const { state } = await driveToGate0(project);
       await writeDriverState(state);
@@ -146,7 +147,7 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
         input: {
           driver_state_id: state.driver_state_id,
           type: "user-answer",
-          answer: "revise: tighten the scope",
+          decision: "reject",
         },
       });
       const ps = (await pipelineStateGet({ project_dir: project })).state;
@@ -160,7 +161,7 @@ describe("Q8 — gate decisions mirrored to pipeline-state.gates", () => {
     const project = await mkdtemp(join(tmpdir(), "cp-q8-idempotent-"));
     try {
       const { state, registry } = await driveToGate0(project);
-      state.scratch["gate-0_decision"] = "approved";
+      state.scratch["gate-0_decision"] = { decision: "accept" };
       await mirrorGateDecision(state, registry, "gate-0");
       expect(state.scratch["gate-0_mirrored"]).toBe(true);
       // Second call: short-circuits without changing anything.

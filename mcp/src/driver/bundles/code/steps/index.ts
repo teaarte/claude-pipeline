@@ -23,6 +23,7 @@ import type {
   StepContext,
   AgentPlugin,
   ClaudeCodeTaskSpec,
+  UserAnswer,
 } from "../../../types/plugin.js";
 import { askUser, complete, spawnAgentsParallel } from "../../../core/shuttle.js";
 import { requireGate, requireDecision, requireSpawnProvider, requireAgent } from "../../../core/registry.js";
@@ -211,25 +212,19 @@ export async function mirrorGateDecision(
   gateName: string,
 ): Promise<void> {
   if (state.scratch[`${gateName}_mirrored`]) return;
-  const answer = state.scratch[`${gateName}_decision`];
-  if (typeof answer !== "string") return;
+  const answer = state.scratch[`${gateName}_decision`] as UserAnswer | undefined;
+  if (!answer || (answer.decision !== "accept" && answer.decision !== "reject")) return;
   const gate = requireGate(registry, gateName);
   const parsed = gate.validate_response(answer);
-  if (!parsed.ok) return; // upstream validation already rejected — nothing to mirror
-  // pipeline-state.gates accepts only {pending, approved, rejected, skipped}.
-  // changes_requested collapses to rejected; the human's free-form feedback
-  // is preserved in gate1_feedback / gate2_feedback so the planner sees it.
-  const status: "approved" | "rejected" =
-    parsed.decision === "approved" ? "approved" : "rejected";
   const gateKey = gateName.replace("-", "") as "gate0" | "gate1" | "gate2";
   try {
     await pipelineSetGate({
       project_dir: state.project_dir,
       gate: gateKey,
-      status,
-      feedback: parsed.feedback ?? null,
+      status: parsed.status,
+      feedback: parsed.feedback,
     });
-    if (parsed.decision !== "approved" && gateName === "gate-1") {
+    if (parsed.status === "rejected" && gateName === "gate-1") {
       // Counter used by the Q22 metrics-row extractor (gate1_revisions).
       const prev = (state.scratch.gate1_revision_count as number | undefined) ?? 0;
       state.scratch.gate1_revision_count = prev + 1;
@@ -237,7 +232,7 @@ export async function mirrorGateDecision(
     state.scratch[`${gateName}_mirrored`] = true;
     await audit({
       tool: "pipeline_gate_mirror",
-      args: { gate: gateKey, decision: parsed.decision, status },
+      args: { gate: gateKey, status: parsed.status },
       projectDir: state.project_dir,
       verdict: "ok",
     }).catch(() => undefined);
@@ -246,7 +241,7 @@ export async function mirrorGateDecision(
     const msg = e instanceof Error ? e.message : String(e);
     await audit({
       tool: "pipeline_gate_mirror",
-      args: { gate: gateKey, decision: parsed.decision, status },
+      args: { gate: gateKey, status: parsed.status },
       projectDir: state.project_dir,
       verdict: "error",
       error: msg,

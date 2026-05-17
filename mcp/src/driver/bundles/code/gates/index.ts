@@ -1,20 +1,10 @@
-import type { GatePlugin } from "../../../types/plugin.js";
+import type { GatePlugin, UserAnswer, GateDecision } from "../../../types/plugin.js";
 
-function parseDecision(answer: string): { ok: boolean; decision: "approved" | "rejected" | "changes_requested"; feedback?: string } {
-  const trimmed = answer.trim();
-  const lower = trimmed.toLowerCase();
-  if (!trimmed) return { ok: false, decision: "rejected" };
-  if (/^(yes|y|approve|approved|ok|lgtm|ship it)/.test(lower)) {
-    return { ok: true, decision: "approved", feedback: trimmed };
-  }
-  if (/^(no|n|reject|rejected)/.test(lower)) {
-    return { ok: true, decision: "rejected", feedback: trimmed };
-  }
-  if (/^(changes?|revise|update|fix)/.test(lower)) {
-    return { ok: true, decision: "changes_requested", feedback: trimmed };
-  }
-  // Default to changes_requested for any free-form feedback.
-  return { ok: true, decision: "changes_requested", feedback: trimmed };
+function parseDecision(input: UserAnswer): GateDecision {
+  return {
+    status: input.decision === "accept" ? "approved" : "rejected",
+    feedback: input.message ?? null,
+  };
 }
 
 const GATE_0: GatePlugin = {
@@ -24,7 +14,7 @@ const GATE_0: GatePlugin = {
     return [
       `Classified as ${String(complexity).toUpperCase()}.`,
       `Task: ${state.task}`,
-      `Does this classification look right? Approve, reject, or describe a change.`,
+      `Reply 1/accept or 2/reject <message>.`,
     ].join("\n");
   },
   validate_response: parseDecision,
@@ -36,7 +26,7 @@ const GATE_1: GatePlugin = {
     return [
       `Plan ready for ${state.task}.`,
       `Review .claude/plan.md.`,
-      `Approve, reject, or request changes.`,
+      `Reply 1/accept or 2/reject <message>.`,
     ].join("\n");
   },
   validate_response: parseDecision,
@@ -44,11 +34,11 @@ const GATE_1: GatePlugin = {
 
 const GATE_2: GatePlugin = {
   name: "gate-2",
-  message(state) {
+  message(_state) {
     return [
       `Implementation complete.`,
       `Reviewers and validators have run.`,
-      `Accept (verdict=accepted) or reject (verdict=rejected) with feedback.`,
+      `Reply 1/accept (verdict=accepted) or 2/reject <message> (verdict=rejected).`,
     ].join("\n");
   },
   validate_response: parseDecision,

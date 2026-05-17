@@ -123,6 +123,13 @@ export interface AgentPlugin extends PluginMeta {
    * Example: ui-consistency only applies when UI files were touched.
    */
   applies_to?(state: DriverState): boolean;
+  /**
+   * Optional whitelist of external MCP tool names this agent is allowed to
+   * call. Each tool must be a member of some active MCPClientPlugin's
+   * `expose_tools`. v2.3 wires this through the agent prompt; v2.2.5 just
+   * carries the slot.
+   */
+  mcp_tools?: string[];
 }
 
 // ----- Flow ---------------------------------------------------------------
@@ -241,6 +248,47 @@ export interface SpawnProviderPlugin extends PluginMeta {
   name: string;
   spawn(req: AgentSpawnRequest): Promise<StepResult>;
   query?(req: SpawnProviderQueryRequest): Promise<string>;
+}
+
+// ----- MCPClientPlugin (Item 6) -------------------------------------------
+
+/**
+ * Declaration of an external MCP server the pipeline should spawn and
+ * connect to as an MCP CLIENT. The pipeline itself is an MCP server; this
+ * contract lets a project plug in additional MCP servers (memory, search,
+ * github, etc.) and route their tools through to agents.
+ *
+ * Declared in `<project>/.claude/pipeline.config.json` under `mcp_clients[]`.
+ * Item 6 of v2.2.5 ships the contract + spawn-lifecycle manager + a mocked
+ * test demonstrating spawn → handshake → tool exposure. Live integration
+ * (claude-mem, etc.) is config-level addition after merge — no further code
+ * change required.
+ */
+export interface MCPClientPlugin extends PluginMeta {
+  /** Stable identifier; surfaces in audit + tool-routing. */
+  name: string;
+  /** argv to spawn (`["npx", "claude-mem", "mcp-server"]`, etc.). */
+  server_command: string[];
+  /** Optional env overrides for the spawned process. */
+  env?: Record<string, string>;
+  /**
+   * Which of the external server's tools to make available to agents.
+   * Tools advertised by the server but not in this list stay hidden.
+   */
+  expose_tools: string[];
+  /**
+   * Lifecycle scope:
+   *  - "task": spawn at task start, kill at pipeline_finish
+   *  - "team": keep alive across tasks (requires daemon mode; v2.3+)
+   *  - "global": keep alive across all projects (daemon-managed; v2.3+)
+   */
+  scope: "task" | "team" | "global";
+  /**
+   * Optional handshake health check. If the named tool isn't advertised
+   * within `timeout_ms`, the manager records the failure in audit and
+   * SKIPS this client — pipeline continues without it (graceful degrade).
+   */
+  health_check?: { tool: string; timeout_ms: number };
 }
 
 // ----- Registry ------------------------------------------------------------

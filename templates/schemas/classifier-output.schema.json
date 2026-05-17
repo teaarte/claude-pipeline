@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "classifier-output.schema.json",
+  "title": "Classifier-agent output (Item 9 of v2.2.5)",
+  "description": "Structured JSON the classifier-agent emits in the context phase. Consumed by the classifier step which writes the fields into state.decisions + state.task_short.",
+  "type": "object",
+  "required": ["schema_version", "agent", "task_short", "refs_to_load", "security_needed", "antipattern_rules_applicable"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "agent": { "type": "string", "const": "classifier" },
+    "task_id": { "type": ["string", "null"] },
+    "task_short": {
+      "type": ["string", "null"],
+      "description": "Short kebab-case slug summarising the task — used for filenames, branch names, commit subjects.",
+      "maxLength": 60
+    },
+    "refs_to_load": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 10,
+      "description": "Senior-pattern references (filenames from agents/references/) to inject into agent prompts."
+    },
+    "security_needed": {
+      "type": "boolean",
+      "description": "Whether the security reviewer agent should run for this task."
+    },
+    "antipattern_rules_applicable": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Anti-pattern rule identifiers from CLAUDE.md that the implementer should respect."
+    }
+  }
+}

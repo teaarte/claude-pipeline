@@ -182,7 +182,7 @@ describe("Q27 anti-pattern-grep hook", () => {
     }
   });
 
-  it("surfaces matches when diff overlaps a documented anti-pattern", async () => {
+  it("surfaces rules that classifier-agent marked applicable (item 9)", async () => {
     const proj = await makeProject();
     try {
       const claudeMd = [
@@ -193,13 +193,12 @@ describe("Q27 anti-pattern-grep hook", () => {
         "- Avoid storing session tokens in localStorage",
       ].join("\n");
       await writeFile(join(proj.dir, "CLAUDE.md"), claudeMd, "utf8");
-      // Stage a diff.txt that hits the second rule.
-      await writeFile(
-        join(proj.dir, ".claude", "diff.txt"),
-        "+ window.localStorage.setItem('session', token);\n",
-        "utf8",
-      );
       const state = makeState(proj.dir);
+      // Item 9: hook reads applicable rules from state.decisions, not from
+      // word overlap. The classifier-agent (or test setup) writes the list.
+      state.decisions["antipattern_rules_applicable"] = [
+        "Avoid storing session tokens in localStorage",
+      ];
       await hooksByName["anti-pattern-grep"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "antipattern-candidates.md"),
@@ -207,6 +206,35 @@ describe("Q27 anti-pattern-grep hook", () => {
       );
       expect(content).toContain("antipattern candidates");
       expect(content).toContain("session tokens in localStorage");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("accepts marker convention `<!-- antipattern -->` (closes Q59)", async () => {
+    const proj = await makeProject();
+    try {
+      const claudeMd = [
+        "# Project",
+        "",
+        "Some prose here.",
+        "",
+        "<!-- antipattern -->",
+        "- Don't shadow variable scope",
+        "- Don't return naked promises from sync code",
+        "<!-- /antipattern -->",
+        "",
+        "More prose.",
+      ].join("\n");
+      await writeFile(join(proj.dir, "CLAUDE.md"), claudeMd, "utf8");
+      const state = makeState(proj.dir);
+      state.decisions["antipattern_rules_applicable"] = ["Don't shadow variable scope"];
+      await hooksByName["anti-pattern-grep"].run(state, await makeCtx(state));
+      const content = await readFile(
+        join(proj.dir, ".claude", "antipattern-candidates.md"),
+        "utf8",
+      );
+      expect(content).toContain("Don't shadow variable scope");
     } finally {
       await proj.cleanup();
     }

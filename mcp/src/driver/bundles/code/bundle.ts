@@ -30,6 +30,7 @@ export const codeBundle: BundleManifest = {
     "api-contract",
     "architect",
     "challenger-reviewer",
+    "classifier",
     "code-analyzer",
     "context-doc-verifier",
     "dependency-auditor",

@@ -122,11 +122,45 @@ const LOAD_PAST_MISSES: HookPlugin = {
   },
 };
 
+const MARKER_OPEN = /<!--\s*antipattern\s*-->/i;
+const MARKER_CLOSE = /<!--\s*\/antipattern\s*-->/i;
 const NOT_TO_DO_HEADER = /^#{1,4}\s+(what\s+not\s+to\s+do|don'?t|anti[\s-]*patterns)/i;
 const SECTION_HEADER = /^#{1,4}\s+/;
 
+/**
+ * Extract anti-pattern rules from CLAUDE.md. Preferred convention (Q59):
+ * an explicit `<!-- antipattern -->` / `<!-- /antipattern -->` marker block.
+ * Falls back to the legacy English-keyword "What NOT to do" header for
+ * unconverted projects.
+ */
 function extractAntiPatternRules(claudeMd: string): string[] {
   const lines = claudeMd.split("\n");
+  if (MARKER_OPEN.test(claudeMd)) {
+    return extractByMarker(lines);
+  }
+  return extractByHeader(lines);
+}
+
+function extractByMarker(lines: string[]): string[] {
+  const rules: string[] = [];
+  let inBlock = false;
+  for (const line of lines) {
+    if (MARKER_OPEN.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (MARKER_CLOSE.test(line)) {
+      inBlock = false;
+      continue;
+    }
+    if (!inBlock) continue;
+    const m = line.match(/^\s*[-*]\s+(.*\S)\s*$/);
+    if (m) rules.push(m[1]);
+  }
+  return rules;
+}
+
+function extractByHeader(lines: string[]): string[] {
   const rules: string[] = [];
   let inSection = false;
   for (const line of lines) {
@@ -146,10 +180,15 @@ function extractAntiPatternRules(claudeMd: string): string[] {
 }
 
 /**
- * Q27 — Global Rule #16: scan CLAUDE.md "What NOT to do" section and
- * surface candidates that the implementation diff appears to violate. Pure
- * substring-overlap heuristic — produces signal, not certainty. Surface
- * stub if CLAUDE.md is absent or has no formalizable rules.
+ * Item 9 (closes Q44): write applicable anti-pattern rules to
+ * `antipattern-candidates.md` based on `state.decisions.antipattern_rules_applicable`
+ * (populated by the classifier-agent in the context phase). When the
+ * classifier didn't run or returned no rules, emit a clean stub — never
+ * fall back to keyword overlap (the old false-positive source).
+ *
+ * The classifier-agent decides applicability in any language. Rule
+ * extraction from CLAUDE.md still happens here so we can surface the
+ * FULL rule text alongside its identifier.
  */
 const ANTI_PATTERN_GREP: HookPlugin = {
   name: "anti-pattern-grep",
@@ -171,29 +210,28 @@ const ANTI_PATTERN_GREP: HookPlugin = {
       await writeFile(out, "(no formalizable rules)\n", "utf8");
       return;
     }
-    const diff = await readDiffText(state);
-    if (!diff) {
-      await writeFile(out, "(no diff content available to compare against)\n", "utf8");
-      return;
-    }
-    const diffLower = diff.toLowerCase();
+    const applicable = state.decisions["antipattern_rules_applicable"];
+    const applicableSet = new Set(
+      Array.isArray(applicable)
+        ? applicable.filter((r): r is string => typeof r === "string")
+        : [],
+    );
     const lines: string[] = ["# antipattern candidates", ""];
     let hits = 0;
     for (const rule of rules) {
-      // Hit when ≥2 alphanumeric tokens of the rule (length ≥ 4) appear in
-      // the diff. Cheap, language-agnostic, surfaces the obvious matches
-      // without false-positives on every common word.
-      const tokens = rule
-        .toLowerCase()
-        .match(/[a-z0-9_]{4,}/g) ?? [];
-      const present = tokens.filter((t) => diffLower.includes(t));
-      if (present.length >= 2) {
+      // Match by rule text OR by index. The classifier may have emitted
+      // rule strings directly OR a stable identifier ("rule-3"); we
+      // accept either form to keep the classifier prompt flexible.
+      const idx = rules.indexOf(rule);
+      const identifier = `rule-${idx}`;
+      if (applicableSet.has(rule) || applicableSet.has(identifier)) {
         hits++;
         lines.push(`- ${rule}`);
-        lines.push(`  matched tokens: ${present.slice(0, 5).join(", ")}`);
       }
     }
-    if (hits === 0) lines.push("(no candidates surfaced from CLAUDE.md rules)");
+    if (hits === 0) {
+      lines.push("(no applicable rules — classifier-agent reported none)");
+    }
     lines.push("");
     await writeFile(out, lines.join("\n"), "utf8");
   },

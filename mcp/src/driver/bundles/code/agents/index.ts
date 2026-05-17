@@ -154,7 +154,15 @@ const PLAYWRIGHT: AgentPlugin = {
   applies_to: (state) => state.decisions["ui_touched"] === true,
 };
 
+const CLASSIFIER: AgentPlugin = {
+  name: "classifier",
+  template_path: "agents/classifier.md",
+  output_schema: "nonreview",
+  default_model: "haiku",
+};
+
 export const BUILTIN_AGENTS: AgentPlugin[] = [
+  CLASSIFIER,
   PLANNER,
   IMPLEMENTER,
   ARCHITECT,

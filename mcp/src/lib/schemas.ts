@@ -20,6 +20,7 @@ async function getAjv(): Promise<Ajv2020> {
     "validator-output.schema.json",
     "pipeline-state.schema.json",
     "agent-feedback.schema.json",
+    "classifier-output.schema.json",
   ]) {
     const raw = await readFile(join(schemasDir, name), "utf8");
     ajv.addSchema(JSON.parse(raw));

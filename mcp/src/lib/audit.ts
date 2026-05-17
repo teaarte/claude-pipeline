@@ -23,6 +23,7 @@ export type ErrorClass =
   | "git-unavailable"          // Q33: git CLI absent or project_dir isn't a repo
   | "team-knowledge-missing"   // Item 7: a team_knowledge_refs file failed to read
   | "team-knowledge-truncated" // Item 7: combined team-knowledge content hit the 50KB cap
+  | "llm-classification-needed" // Item 9: classifier-agent failed/malformed — defaults applied
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

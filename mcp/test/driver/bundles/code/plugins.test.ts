@@ -54,21 +54,30 @@ describe("decisions", () => {
     }
   });
 
-  it("refs-to-load triggers on keywords and caps at 5", async () => {
-    const f = await freshState("refactor auth + cache + redis + perf + query schema + observability");
+  it("refs-to-load returns whatever the classifier wrote to state.decisions", async () => {
+    const f = await freshState("any task");
     try {
+      f.state.decisions["refs_to_load"] = [
+        "agents/references/security-backend.md",
+        "agents/references/caching.md",
+      ];
       const refs = await Promise.resolve(refsToLoadDecision.decide(f.state));
-      expect(refs.length).toBeLessThanOrEqual(5);
-      expect(refs.length).toBeGreaterThan(0);
+      expect(refs).toEqual([
+        "agents/references/security-backend.md",
+        "agents/references/caching.md",
+      ]);
     } finally {
       await f.cleanup();
     }
   });
 
-  it("security_needed triggers on auth keywords", async () => {
-    const f = await freshState("add jwt auth to login");
+  it("security_needed reflects what the classifier wrote to state.decisions", async () => {
+    const f = await freshState("any task");
     try {
+      f.state.decisions["security_needed"] = true;
       expect(securityNeededDecision.decide(f.state)).toBe(true);
+      f.state.decisions["security_needed"] = false;
+      expect(securityNeededDecision.decide(f.state)).toBe(false);
     } finally {
       await f.cleanup();
     }

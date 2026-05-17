@@ -84,7 +84,7 @@ describe("Q9: pre-review wires missing decisions", () => {
     }
   });
 
-  it("security_needed=true when task text mentions auth/jwt/oauth tokens", async () => {
+  it("security_needed=true when the classifier-agent has populated state.decisions.security_needed (item 9)", async () => {
     const proj = await tempProject();
     try {
       const state = makeInitialDriverState({
@@ -93,6 +93,7 @@ describe("Q9: pre-review wires missing decisions", () => {
         flow_name: "medium",
       });
       state.decisions["complexity"] = "medium";
+      state.decisions["security_needed"] = true; // classifier-agent set this
       const ctx = await makeCtx();
       await PRE_REVIEW.run(state, ctx);
       expect(state.decisions["security_needed"]).toBe(true);

@@ -191,6 +191,7 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
       registry.flows.set("simple-broken", {
         name: "simple-broken",
         complexity: "simple",
+        phases: ["context", "final"],
         steps: ["initialize", "classify"],
       });
       registry.spawn_provider = {

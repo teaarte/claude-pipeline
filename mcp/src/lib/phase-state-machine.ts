@@ -1,8 +1,14 @@
 // Shared state-machine helpers used by set-phase-status, record-agent-run,
 // and record-nonreview-agent. Single source of truth for phase ordering
 // and allowed status transitions.
+//
+// v2.2.5 bundle-foundation: Phase is now a runtime-validated string, not a
+// hard-coded enum. The code bundle still owns the canonical 6-phase
+// progression (exported as CODE_PHASES); future bundles ship their own
+// ordered phases via FlowPlugin.phases[]. The driver core and shared tools
+// treat Phase opaquely as `string`.
 
-export const PHASES = [
+export const CODE_PHASES = [
   "context",
   "planning",
   "test_first",
@@ -10,15 +16,25 @@ export const PHASES = [
   "validation",
   "final",
 ] as const;
-export type Phase = (typeof PHASES)[number];
+
+/**
+ * Backward-compat alias for callers that depended on the original `PHASES`
+ * tuple (set-phase-status zod input, fsm step ordering, summary builder, etc.).
+ * Code-bundle only — non-code bundles should consult `flow.phases[]` instead.
+ */
+export const PHASES = CODE_PHASES;
+
+export type Phase = string;
 
 export const STATUSES = ["pending", "in_progress", "completed", "skipped"] as const;
 export type Status = (typeof STATUSES)[number];
 
-// Each phase requires its prereq to be completed OR skipped before it can
-// move beyond `pending`. `context` and `final` are roots/exit and have no
-// prereq.
-export const PHASE_PREREQ: Record<Phase, Phase | null> = {
+// Code-bundle phase prerequisite chain. Phases not present in this map are
+// treated as having no enforced prereq — the flow's declared `phases[]`
+// ordering is the ordering authority for non-code bundles.
+//
+// `context` and `final` are roots/exit and have no prereq.
+export const PHASE_PREREQ: Record<string, string | null> = {
   context: null,
   planning: "context",
   test_first: "planning",
@@ -43,7 +59,7 @@ export const ALLOWED_TRANSITIONS: Record<Status, readonly Status[]> = {
 };
 
 export function assertTransitionAllowed(
-  phase: Phase,
+  phase: string,
   from: Status,
   to: Status,
 ): void {
@@ -60,11 +76,14 @@ export function assertTransitionAllowed(
 
 export function assertPrereqSatisfied(
   state: any,
-  phase: Phase,
+  phase: string,
   targetStatus: Status,
 ): void {
   // Only meaningful when moving beyond `pending`.
   if (targetStatus === "pending") return;
+  // Phases not in the code-bundle chain have no prereq to enforce here —
+  // their ordering is governed by FlowPlugin.phases[]. Skip cleanly.
+  if (!(phase in PHASE_PREREQ)) return;
   const prereqName = PHASE_PREREQ[phase];
   if (!prereqName) return;
   const prereqStatus: Status =
@@ -76,4 +95,16 @@ export function assertPrereqSatisfied(
         `Complete or skip the prereq first. Pass force=true to override (records pipeline_violation).`,
     );
   }
+}
+
+/**
+ * Runtime guard: returns true if `phase` is one of the flow's declared
+ * phases. Used by pipeline_validate / FSM-runtime callers that want to
+ * catch typos the string-typed Phase no longer rejects at compile time.
+ */
+export function isValidPhase(
+  phase: string,
+  flowPhases: readonly string[],
+): boolean {
+  return flowPhases.includes(phase);
 }

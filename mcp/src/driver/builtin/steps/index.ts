@@ -49,7 +49,7 @@ async function closePriorPhases(state: DriverState, currentPhase: Phase): Promis
   const ps = await readStateSafe(file).catch(() => null);
   if (!ps) return;
   const testsMode = (state.decisions["tests_mode"] as string | undefined) ?? "regression-only";
-  const idxOf = (p: Phase) => PHASES.indexOf(p);
+  const idxOf = (p: string) => (PHASES as readonly string[]).indexOf(p);
   const currentIdx = idxOf(currentPhase);
   for (const phase of PHASES) {
     if (idxOf(phase) >= currentIdx) break;

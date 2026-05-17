@@ -1,8 +1,12 @@
 import type { FlowPlugin } from "../../types/plugin.js";
+import { CODE_PHASES } from "../../../lib/phase-state-machine.js";
+
+const CODE_FLOW_PHASES: string[] = [...CODE_PHASES];
 
 const SIMPLE_FLOW: FlowPlugin = {
   name: "simple",
   complexity: "simple",
+  phases: CODE_FLOW_PHASES,
   steps: [
     "initialize",
     "classify",
@@ -24,6 +28,7 @@ const SIMPLE_FLOW: FlowPlugin = {
 const MEDIUM_FLOW: FlowPlugin = {
   name: "medium",
   complexity: "medium",
+  phases: CODE_FLOW_PHASES,
   steps: [
     "initialize",
     "classify",
@@ -53,6 +58,7 @@ const MEDIUM_FLOW: FlowPlugin = {
 const COMPLEX_FLOW: FlowPlugin = {
   name: "complex",
   complexity: "complex",
+  phases: CODE_FLOW_PHASES,
   steps: [
     "initialize",
     "classify",

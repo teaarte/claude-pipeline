@@ -52,7 +52,7 @@
     },
     "phases": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "context": { "$ref": "#/$defs/phase_status" },
         "planning": {
@@ -139,8 +139,7 @@
           "agent": { "type": "string" },
           "phase": {
             "type": "string",
-            "enum": ["context", "planning", "test_first", "implementation", "validation", "final"],
-            "description": "Pipeline phase this verdict came from (Q20). Lets the same agent appear in multiple phases without verdicts collapsing into an indistinguishable bag."
+            "description": "Pipeline phase this verdict came from (Q20). String-typed at the schema layer — runtime validates against the active flow's declared phases[]. Lets the same agent appear in multiple phases without verdicts collapsing into an indistinguishable bag."
           },
           "iteration": { "type": "integer", "minimum": 1 },
           "verdict": { "type": "string" },

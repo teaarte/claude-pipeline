@@ -130,6 +130,13 @@ export interface AgentPlugin extends PluginMeta {
 export interface FlowPlugin extends PluginMeta {
   name: string;
   complexity: string; // "simple" | "medium" | "complex" | custom
+  /**
+   * Ordered phase names this flow declares. Code-bundle flows use the
+   * canonical CODE_PHASES; future bundles can declare custom orderings.
+   * The driver core treats this opaquely — it is the authoritative
+   * ordering for the active flow (FSM-runtime, pipeline_validate).
+   */
+  phases: string[];
   steps: string[]; // ordered StepPlugin names
 }
 

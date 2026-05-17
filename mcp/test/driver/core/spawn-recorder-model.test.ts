@@ -62,7 +62,7 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
 
       expect(response.status).toBe("spawn-agent");
       expect(captured.length).toBe(1);
-      // planner's default_model is "opus" (mcp/src/driver/builtin/agents/index.ts).
+      // planner's default_model is "opus" (mcp/src/driver/bundles/code/agents/index.ts).
       expect(captured[0]).toEqual({ agent: "planner", model: "opus" });
     } finally {
       await rm(project, { recursive: true, force: true });

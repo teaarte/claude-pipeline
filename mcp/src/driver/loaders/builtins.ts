@@ -23,18 +23,18 @@
  */
 
 import type { PluginRegistry } from "../types/plugin.js";
-import { complexityDecision } from "../builtin/decisions/complexity.js";
-import { testsModeDecision } from "../builtin/decisions/tests-mode.js";
-import { refsToLoadDecision } from "../builtin/decisions/refs-to-load.js";
-import { securityNeededDecision } from "../builtin/decisions/security-needed.js";
-import { uiTouchedDecision } from "../builtin/decisions/ui-touched.js";
-import { apiTouchedDecision } from "../builtin/decisions/api-touched.js";
-import { BUILTIN_AGENTS } from "../builtin/agents/index.js";
-import { BUILTIN_STEPS } from "../builtin/steps/index.js";
-import { BUILTIN_GATES } from "../builtin/gates/index.js";
-import { BUILTIN_HOOKS } from "../builtin/hooks/index.js";
-import { BUILTIN_FLOWS } from "../builtin/flows/index.js";
-import { shuttleSpawnProvider } from "../builtin/spawn/shuttle-provider.js";
+import { complexityDecision } from "../bundles/code/decisions/complexity.js";
+import { testsModeDecision } from "../bundles/code/decisions/tests-mode.js";
+import { refsToLoadDecision } from "../bundles/code/decisions/refs-to-load.js";
+import { securityNeededDecision } from "../bundles/code/decisions/security-needed.js";
+import { uiTouchedDecision } from "../bundles/code/decisions/ui-touched.js";
+import { apiTouchedDecision } from "../bundles/code/decisions/api-touched.js";
+import { BUILTIN_AGENTS } from "../bundles/code/agents/index.js";
+import { BUILTIN_STEPS } from "../bundles/code/steps/index.js";
+import { BUILTIN_GATES } from "../bundles/code/gates/index.js";
+import { BUILTIN_HOOKS } from "../bundles/code/hooks/index.js";
+import { BUILTIN_FLOWS } from "../bundles/code/flows/index.js";
+import { shuttleSpawnProvider } from "../bundles/code/spawn/shuttle-provider.js";
 
 export function loadBuiltinPlugins(registry: PluginRegistry): void {
   for (const a of BUILTIN_AGENTS) registry.agents.set(a.name, a);

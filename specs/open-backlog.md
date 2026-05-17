@@ -30,7 +30,6 @@ For closed items, see [`closed-q-items.md`](closed-q-items.md). For pipeline pha
 
 | Q | Severity | Where it lands | Notes |
 |---|---|---|---|
-| Q40 | architectural | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) | **Promoted from deferred 2026-05-14.** End-goal is virtual teams for any niche (code / content / marketing / research / VFX) per [`ui-vision.md`](ui-vision.md). Bundle abstraction becomes prerequisite for v2.3 daemon + Web UI rather than a post-hoc retrofit. Phase v2.2.5 (~5-7d) ships: `Bundle` first-class concept, directory move `builtin/` → `bundles/code/`, `loaders/bundles.ts`, `state.bundle` field, Phase enum → flow-declared, `pipeline.config.json` per project, skills bundle-parameterized, `MCPClientPlugin` contract (external MCP consumer), `state.team_knowledge_refs` slot. |
 | Q41 / Q44 / Q46 / Q58 / Q61 | 🟡 MEDIUM | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) Item 9 | **LLM-classification cluster.** Promoted from "wait v2.3 daemon" 2026-05-17 after realizing shuttle-classifier path works on existing infra. One classifier-agent + one `pickFromCandidates` primitive activates all five together. ~1-2d. |
 | Q57 | 🟡 MEDIUM | [`phases/v2.2.5-bundle-foundation.md`](phases/v2.2.5-bundle-foundation.md) Item 8 | **Structured gate-answer protocol.** Filed 2026-05-17 as Category 2 fix (restructure to eliminate classification). ~0.5-1d. |
 

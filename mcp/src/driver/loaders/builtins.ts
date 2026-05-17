@@ -1,25 +1,15 @@
 /**
- * The ONE place where built-in plugins are bound to the registry. No other
- * file in core/ touches the registry directly — extensibility hinges on
- * this being the single seam.
+ * Backward-compat wrapper. The bundle-aware loader (`loaders/bundles.ts`)
+ * is the canonical seam; this file exists so existing call sites can
+ * continue to use `loadBuiltinPlugins(registry)` synchronously.
  *
- * Bundle-awareness (future direction, Q40):
+ * Q40 closed in v2.2.5: bundles are first-class; this thin wrapper exists
+ * only to avoid a sweeping rename across the driver/tools call sites.
  *
- * Every plugin currently registered here targets the CODE domain. The
- * `PluginMeta.domain` field (optional, defaults to "code") exists on the
- * type but isn't read for control flow yet.
- *
- * When a second domain becomes a concrete need (photo / video / research /
- * vfx — see specs/product-vision.md "Domain Boundary" section), this
- * loader should grow:
- *   1. Accept a `bundle: string` parameter (default "code")
- *   2. Filter plugins by `plugin.meta.domain === bundle`
- *   3. Project's bundle choice comes from `<project>/.claude/pipeline.config.json`
- *   4. The `builtin/` directory reorganizes into `builtin/<domain>/` subdirs
- *
- * Until then this stays flat. Premature generalization would lock in an
- * abstraction we haven't validated against a real second domain. See Q40
- * in specs/v3-productization-roadmap.md for the trigger condition.
+ * Synchronous wrapper around the async `loadBundle("code", registry)`.
+ * Implemented by eagerly importing the code-bundle assets at module load
+ * time — same behavior as before. New code should prefer the async
+ * `loadBundle(name, registry)` API directly.
  */
 
 import type { PluginRegistry } from "../types/plugin.js";

@@ -63,6 +63,12 @@ For pipeline phase plans, see [`phases/`](phases/).
 | Q42 | 🟡 MEDIUM | `39ff1a9` | `task_id` slug collision fix: hash-suffix `-[a-f0-9]{4}` when generated id matches recent metric row |
 | Q43 | 🟢 LOW | `cda5046` | `impl_iters` / `plan_iters` derive by `count(verdicts WHERE phase=X)` instead of `max(iteration)` |
 
+## v2.2.5-bundle-foundation (PR pending, branch `v2.2.5-bundle-foundation`)
+
+| Q | Severity | Commit | What |
+|---|---|---|---|
+| Q40 | architectural | (item 4 of v2.2.5) | **Bundle abstraction is first-class.** `BundleManifest` contract in `mcp/src/driver/types/bundle.ts`; `loadBundle(name, registry)` / `loadBundles([...], registry)` in `mcp/src/driver/loaders/bundles.ts`. Code-bundle manifest at `bundles/code/bundle.ts` enumerates all 20 agents / 23 steps / 3 flows / 3 gates / 4 hooks / 6 decisions / 1 spawn-provider. Manifest/index drift surfaces at load time. `loaders/builtins.ts` retained as thin sync wrapper for backward compat. Closes the "stays deferred until trigger" status from v2.1 — virtual-teams-for-any-niche is no longer post-hoc retrofit. |
+
 ## Patterns / lessons
 
 **Recurrence value:** Q9 recurred 5× before root cause was concrete enough to fix. Validation discipline (capture every observation, even repeats) was load-bearing — without it the wiring bug would have stayed "hypothesis space" longer.

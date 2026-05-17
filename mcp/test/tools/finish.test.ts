@@ -292,4 +292,20 @@ describe("pipeline_finish", () => {
       await proj.cleanup();
     }
   });
+
+  it("Q55: pipeline_finish rewrites pipeline-state-summary.md with the final verdict", async () => {
+    const proj = await tempProject();
+    try {
+      await runFullPipeline(proj.dir);
+      await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      const { readFile } = await import("node:fs/promises");
+      const summaryPath = join(proj.dir, ".claude", "pipeline-state-summary.md");
+      const summary = await readFile(summaryPath, "utf8");
+      // The summary builder includes the verdict — assert it reflects the
+      // freshly-set "accepted" rather than the pre-finish snapshot.
+      expect(summary).toContain("accepted");
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

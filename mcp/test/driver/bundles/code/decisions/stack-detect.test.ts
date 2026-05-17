@@ -252,4 +252,56 @@ describe("Q17 — detectStack", () => {
       await cleanup();
     }
   });
+
+  it("Q50: strips trailing `# comment` from CLAUDE.md validation commands", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }), "utf8");
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "# Project",
+          "",
+          "## Validation Commands",
+          "- **Test:** `pnpm -r test                      # vitest run`",
+          "- **Lint:** pnpm lint  # via eslint",
+          "- **Build:** `pnpm build`",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("pnpm -r test");
+      expect(stack.lint_command).toBe("pnpm lint");
+      expect(stack.build_command).toBe("pnpm build");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q51: pnpm-workspace.yaml without lockfile still detects pnpm", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }), "utf8");
+      await writeFile(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.package_manager).toBe("pnpm");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Q51: package.json packageManager field is honoured when no lockfile present", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "x", packageManager: "pnpm@9.4.0" }),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.package_manager).toBe("pnpm");
+    } finally {
+      await cleanup();
+    }
+  });
 });

@@ -136,6 +136,19 @@ describe("gates", () => {
   });
 });
 
+describe("hooks ordering (Q60)", () => {
+  it("BUILTIN_HOOKS lists git-diff-snapshot first (invariant)", async () => {
+    const { BUILTIN_HOOKS } = await import(
+      "../../../../src/driver/bundles/code/hooks/index.js"
+    );
+    expect(BUILTIN_HOOKS[0].name).toBe("git-diff-snapshot");
+    // Consumers of diff.txt come after.
+    const names = BUILTIN_HOOKS.map((h) => h.name);
+    expect(names.indexOf("anti-pattern-grep")).toBeGreaterThan(0);
+    expect(names.indexOf("caller-context-expand")).toBeGreaterThan(0);
+  });
+});
+
 describe("flows", () => {
   it("every flow's steps all exist in the registry", async () => {
     const r = createRegistry();

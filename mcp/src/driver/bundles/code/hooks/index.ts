@@ -375,11 +375,18 @@ const CALLER_CONTEXT_EXPAND: HookPlugin = {
   },
 };
 
+// INVARIANT (Q60): GIT_DIFF_SNAPSHOT must run first. ANTI_PATTERN_GREP and
+// CALLER_CONTEXT_EXPAND read `.claude/diff.txt` that GIT_DIFF_SNAPSHOT writes.
+// Reordering this array silently breaks downstream consumers (empty diff →
+// "no candidates" stub instead of real matches). If you need to add a hook
+// that reads diff.txt, place it AFTER GIT_DIFF_SNAPSHOT. If you need to add
+// a hook that writes a different shared file, document the dependency in the
+// invariant block above its addition.
 export const BUILTIN_HOOKS: HookPlugin[] = [
-  GIT_DIFF_SNAPSHOT,
+  GIT_DIFF_SNAPSHOT,    // ← MUST be first
   LOAD_PAST_MISSES,
-  ANTI_PATTERN_GREP,
-  CALLER_CONTEXT_EXPAND,
+  ANTI_PATTERN_GREP,    // reads diff.txt
+  CALLER_CONTEXT_EXPAND, // reads diff.txt
 ];
 
 // Exported for tests so they can stub git invocation without running it.

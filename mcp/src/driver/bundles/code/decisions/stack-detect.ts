@@ -76,8 +76,14 @@ function parseClaudeMd(content: string): Partial<DetectedStack> | null {
       if (out[key]) continue;
       const m = line.match(new RegExp(`^${label}\\s*:\\s*(.+?)\\s*$`, "i"));
       if (m && m[1]) {
-        // Strip one surrounding pair of backticks or quotes if present.
-        const value = m[1].trim().replace(/^[`"'](.*)[`"']$/, "$1").trim();
+        // Strip one surrounding pair of backticks or quotes, then strip any
+        // trailing `# comment` (Q50: CLAUDE.md authors sometimes append a
+        // human-readable annotation after the command).
+        const value = m[1]
+          .trim()
+          .replace(/^[`"'](.*)[`"']$/, "$1")
+          .replace(/\s*#.*$/, "")
+          .trim();
         if (value) out[key] = value;
         break;
       }
@@ -116,9 +122,25 @@ function parsePackageJson(content: string): Partial<DetectedStack> {
 }
 
 async function detectNodePackageManager(projectDir: string): Promise<string> {
+  // Q51: multi-signal pnpm detection. Lockfile + workspace marker +
+  // package.json `packageManager` field all valid signals — even if the
+  // lockfile is absent at pipeline_init time (fresh clone, etc.).
   if (await fileExists(join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
+  if (await fileExists(join(projectDir, "pnpm-workspace.yaml"))) return "pnpm";
   if (await fileExists(join(projectDir, "yarn.lock"))) return "yarn";
   if (await fileExists(join(projectDir, "bun.lockb"))) return "bun";
+  const pkg = await readOptional(join(projectDir, "package.json"));
+  if (pkg) {
+    try {
+      const parsed = JSON.parse(pkg);
+      if (typeof parsed.packageManager === "string") {
+        const m = parsed.packageManager.match(/^(pnpm|yarn|bun|npm)\b/);
+        if (m) return m[1];
+      }
+    } catch {
+      // fall through to default
+    }
+  }
   return "npm";
 }
 

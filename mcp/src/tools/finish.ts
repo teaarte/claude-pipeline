@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { stateFile, findingsFile, pipelineJsonl } from "../lib/paths.js";
-import { withStateLock, appendJsonl } from "../lib/state-io.js";
+import { stateFile, findingsFile, summaryFile, pipelineJsonl } from "../lib/paths.js";
+import { withStateLock, appendJsonl, writeText } from "../lib/state-io.js";
 import { runInvariants } from "../lib/invariants.js";
+import { buildSummary } from "../lib/summary.js";
 
 export const finishSchema = {
   project_dir: z.string(),
@@ -118,6 +119,11 @@ export async function pipelineFinish(input: {
     };
 
     await appendJsonl(pipelineJsonl, row);
+
+    // Q55: rewrite pipeline-state-summary.md with the final verdict so
+    // post-run inspection isn't stuck reading a stale snapshot from the
+    // last set-phase-status call.
+    await writeText(summaryFile(input.project_dir), await buildSummary(state));
 
     return {
       state,

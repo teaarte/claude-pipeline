@@ -293,6 +293,75 @@ describe("pipeline_finish", () => {
     }
   });
 
+  it("Q48 (item 11): metric row includes force_used, pipeline_violation, started_at, ended_at, reviewer_count, gate2_revisions", async () => {
+    const proj = await tempProject();
+    try {
+      await runFullPipeline(proj.dir);
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row).toHaveProperty("force_used");
+      expect(fin.metrics_row.force_used).toBe(false);
+      expect(fin.metrics_row.pipeline_violation).toBeNull();
+      expect(typeof fin.metrics_row.started_at).toBe("string");
+      expect(typeof fin.metrics_row.ended_at).toBe("string");
+      expect(fin.metrics_row.gate2_revisions).toBe(0);
+      expect(fin.metrics_row.reviewer_count).toBeGreaterThanOrEqual(1);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q48 (item 11): force_used + pipeline_violation propagate to the metric row", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
+      // Force the final phase — records pipeline_violation per set-phase-status logic.
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "final",
+        status: "completed",
+        force: true,
+      });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.pipeline_violation).toMatch(/phase-force-final/);
+      // force_used is true because pipeline_violation != null (any forced step counts).
+      expect(fin.metrics_row.force_used).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q47/Q48 (item 11): gate2_revisions counter increments on rejected gate2", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "rejected", feedback: "first pass" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "rejected", feedback: "second pass" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.implementation?.gate2_revisions).toBe(2);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("Q55: pipeline_finish rewrites pipeline-state-summary.md with the final verdict", async () => {
     const proj = await tempProject();
     try {

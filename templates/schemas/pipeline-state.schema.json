@@ -44,6 +44,11 @@
       "additionalProperties": true
     },
     "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Item 11: set by pipeline_finish so the metrics row + post-hoc analysis can compute wall-clock duration."
+    },
     "refs_loaded": {
       "type": "array",
       "items": { "type": "string" },
@@ -105,6 +110,7 @@
               "properties": {
                 "antipattern_candidates_count": { "type": "integer", "minimum": 0 },
                 "caller_context_sites_count": { "type": "integer", "minimum": 0 },
+                "gate2_revisions": { "type": "integer", "minimum": 0 },
                 "logic_vs_challenger_disagreement": { "type": "boolean", "default": false },
                 "plan_conformance": {
                   "type": ["string", "null"],

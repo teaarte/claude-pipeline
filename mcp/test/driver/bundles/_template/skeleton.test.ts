@@ -27,4 +27,15 @@ describe("bundles/_template skeleton (item 3)", () => {
     const codeAgents = join(templateDir, "..", "code", "agents", "index.ts");
     await access(codeAgents, constants.F_OK);
   });
+
+  it("code bundle ships task-prompt.md + done-prompt.md (item 5)", async () => {
+    const taskPrompt = join(templateDir, "..", "code", "task-prompt.md");
+    const donePrompt = join(templateDir, "..", "code", "done-prompt.md");
+    await access(taskPrompt, constants.F_OK);
+    await access(donePrompt, constants.F_OK);
+    const taskMd = await readFile(taskPrompt, "utf8");
+    const doneMd = await readFile(donePrompt, "utf8");
+    expect(taskMd).toContain("Code bundle");
+    expect(doneMd).toContain("pipeline_finish");
+  });
 });

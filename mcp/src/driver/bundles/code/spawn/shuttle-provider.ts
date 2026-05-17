@@ -113,6 +113,16 @@ function buildPrompt(
     lines.push(vs);
     lines.push("");
   }
+  if (req.team_knowledge && req.team_knowledge.length > 0) {
+    lines.push("## Team knowledge");
+    lines.push("");
+    lines.push(
+      "Project-scoped shared conventions and patterns the team has accumulated. Apply when relevant.",
+    );
+    lines.push("");
+    lines.push(req.team_knowledge.trim());
+    lines.push("");
+  }
   lines.push("## Spawn context");
   lines.push("");
   lines.push(req.prompt);

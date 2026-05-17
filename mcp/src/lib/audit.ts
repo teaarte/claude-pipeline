@@ -16,12 +16,14 @@ export type AuditVerdict = "ok" | "error" | "force_bypass";
  * failures from the documented-and-handled noise.
  */
 export type ErrorClass =
-  | "swallowed-inv"        // closePriorPhases swallowing INV_002/010/011
-  | "retry-recovered"      // JSON-header lenient parse repaired the payload
-  | "schema-validation"    // reviewer-output / validator-output / finding schema fail
-  | "vocab-rejected"       // category not in vocab for agent
-  | "git-unavailable"      // Q33: git CLI absent or project_dir isn't a repo
-  | "genuine-failure";     // anything we don't recognise — investigate
+  | "swallowed-inv"            // closePriorPhases swallowing INV_002/010/011
+  | "retry-recovered"          // JSON-header lenient parse repaired the payload
+  | "schema-validation"        // reviewer-output / validator-output / finding schema fail
+  | "vocab-rejected"           // category not in vocab for agent
+  | "git-unavailable"          // Q33: git CLI absent or project_dir isn't a repo
+  | "team-knowledge-missing"   // Item 7: a team_knowledge_refs file failed to read
+  | "team-knowledge-truncated" // Item 7: combined team-knowledge content hit the 50KB cap
+  | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {
   schema_version: "1.0";

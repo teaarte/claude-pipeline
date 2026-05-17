@@ -35,6 +35,7 @@ import { readStateSafe } from "../../../../lib/state-io.js";
 import { stateFile } from "../../../../lib/paths.js";
 import { audit } from "../../../../lib/audit.js";
 import type { PluginRegistry } from "../../../types/plugin.js";
+import { loadTeamKnowledge, type TeamKnowledgeRef } from "../../../../lib/team-knowledge.js";
 
 /**
  * Mark every phase strictly before `currentPhase` as closed in pipeline-state.
@@ -116,6 +117,12 @@ async function spawnOne(
   const model = resolveAgentModel(agent, phase, config);
   const agent_run_id = await ctx.beginSpawn(agentName, phase, model);
   state.scratch[SPAWN_ISSUED_KEY(stepName)] = agent_run_id;
+
+  // Item 7: resolve team-knowledge refs from pipeline-state (populated by
+  // pipeline_init from pipeline.config.json) + bundle baseline dir. Best
+  // effort — if the state file is unreachable, skip injection silently.
+  const teamKnowledge = await loadTeamKnowledgeForSpawn(state);
+
   return provider.spawn({
     agent: agentName,
     agent_run_id,
@@ -124,7 +131,32 @@ async function spawnOne(
     model,
     template_path: agent.template_path,
     prompt: `Spawn agent: ${agentName}. Project: ${state.project_dir}. Task: ${state.task}.`,
+    team_knowledge: teamKnowledge,
   });
+}
+
+async function loadTeamKnowledgeForSpawn(state: DriverState): Promise<string> {
+  const file = stateFile(state.project_dir);
+  const ps = await readStateSafe(file).catch(() => null);
+  const refsFromState = Array.isArray(ps?.team_knowledge_refs)
+    ? (ps.team_knowledge_refs as string[]).filter((r): r is string => typeof r === "string")
+    : [];
+  if (refsFromState.length === 0) return "";
+  const refs: TeamKnowledgeRef[] = refsFromState.map((r) => ({
+    path: r.startsWith("/") ? r : `${state.project_dir}/${r}`,
+    source: "project-config",
+  }));
+  const result = await loadTeamKnowledge(refs);
+  if (result.truncated || result.missing.length > 0) {
+    await audit({
+      tool: "pipeline_spawn",
+      args: { agent_count: refs.length },
+      projectDir: state.project_dir,
+      verdict: "ok",
+      error_class: result.missing.length > 0 ? "team-knowledge-missing" : "team-knowledge-truncated",
+    }).catch(() => undefined);
+  }
+  return result.content;
 }
 
 const INITIALIZE: StepPlugin = {

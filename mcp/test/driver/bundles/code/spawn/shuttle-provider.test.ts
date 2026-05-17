@@ -19,6 +19,7 @@ function makeReq(overrides: Partial<AgentSpawnRequest> = {}): AgentSpawnRequest 
       overrides.prompt ??
       "Spawn agent: code-analyzer. Project: /tmp/x. Task: investigate Q16.",
     template_path: overrides.template_path,
+    team_knowledge: overrides.team_knowledge,
   };
 }
 
@@ -122,6 +123,33 @@ describe("shuttleSpawnProvider", () => {
       throw new Error("expected spawn-agent shuttle");
     }
     expect(r.response.claude_code_task.prompt).not.toContain("## Allowed `category` values");
+  });
+
+  it("item 7: injects team_knowledge into prompt under '## Team knowledge' section", async () => {
+    const r = await shuttleSpawnProvider.spawn(
+      makeReq({
+        agent: "planner",
+        team_knowledge:
+          "<!-- team-knowledge: kb/conventions.md (project-config) -->\nUse semicolons.\n",
+      }),
+    );
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    const prompt = r.response.claude_code_task.prompt;
+    expect(prompt).toContain("## Team knowledge");
+    expect(prompt).toContain("Use semicolons");
+    expect(prompt).toContain("kb/conventions.md");
+  });
+
+  it("item 7: omits team knowledge section when team_knowledge is empty/undefined", async () => {
+    const r = await shuttleSpawnProvider.spawn(
+      makeReq({ agent: "planner", team_knowledge: "" }),
+    );
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    expect(r.response.claude_code_task.prompt).not.toContain("## Team knowledge");
   });
 
   it("Q18: security agent prompt carries security-specific vocab", async () => {

@@ -53,6 +53,11 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "team_knowledge_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Project-scoped shared knowledge files injected into every agent prompt (item 7 of v2.2.5). Populated by pipeline_init from <project>/.claude/pipeline.config.json.team_knowledge_refs[]."
+    },
     "phases": {
       "type": "object",
       "additionalProperties": true,

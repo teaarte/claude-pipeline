@@ -16,6 +16,7 @@
   "started_at": "<ISO 8601>",
   "refs_loaded": [],
   "refs_dropped_due_to_cap": [],
+  "team_knowledge_refs": [],
   "phases": {
     "context": { "status": "pending", "agents": [], "open_spawns": [] },
     "planning": {

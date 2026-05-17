@@ -225,6 +225,13 @@ export interface AgentSpawnRequest {
    * without a template on disk.
    */
   template_path?: string;
+  /**
+   * Pre-resolved team-knowledge content (Item 7 of v2.2.5). Concatenated
+   * markdown from the project's `team_knowledge_refs[]` plus the bundle's
+   * baseline knowledge dir. Empty string when no refs configured. Spawn
+   * providers SHOULD inject this as its own section in the agent prompt.
+   */
+  team_knowledge?: string;
 }
 
 /**

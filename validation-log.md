@@ -198,6 +198,7 @@ Per-task entries live in `validation/closed-tasks/`. Each file is a self-contain
 
 | Date | task_id | Project / scope | Verdict | File |
 |---|---|---|---|---|
+| 2026-05-17 | `t-2026-05-17-c797` | **frontend-core** — doc drift fix + module-contract test wiring (3rd project full fan-out; surfaced 8 new Q-items + classifier-agent shuttle-path insight) | accepted (force) | [closed-tasks/2026-05-17-frontend-core-doc-drift.md](validation/closed-tasks/2026-05-17-frontend-core-doc-drift.md) |
 | 2026-05-14 | `t-2026-05-14-31fb` | **wandr-be** — tech-debt cleanup sweep (first non-frontend, first non-English, first full-fan-out) | accepted | [closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md](validation/closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md) |
 | 2026-05-14 | `t-2026-05-14-addauthtokendecodert` | s3-panel — auth-token decoder in core bootstrap | accepted | [closed-tasks/2026-05-14-addauthtokendecodert.md](validation/closed-tasks/2026-05-14-addauthtokendecodert.md) |
 | 2026-05-14 | `t-2026-05-14-contextreadfirstinth` | s3-panel — Phase 0.5 Step 4 `_demo-contract` | accepted | [closed-tasks/2026-05-14-contextreadfirstinth-step4.md](validation/closed-tasks/2026-05-14-contextreadfirstinth-step4.md) |
@@ -211,6 +212,25 @@ When adding a new entry: create `validation/closed-tasks/<date>-<short-slug>.md`
 ## Cross-cutting observations (not tied to a single task)
 
 Behavioral patterns surfaced across multiple real-task runs that don't fit into one task entry. Each observation has a corresponding Q-item in `specs/v3-productization-roadmap.md`.
+
+### 2026-05-17 — full fan-out stable across 3 projects + classifier-agent unlocked LLM cluster (frontend-core run)
+
+**Observed:** Third real-task run with v2.2a delivered the same 4-reviewer implementation-phase fan-out shape as wandr-be. s3-panel × 5 (pre-v2.2a, 2 reviewers) → wandr-be × 1 (4 reviewers, full vocab) → frontend-core × 1 (4 reviewers, `acceptance_first_pass: true`). The "5× review depth" v2.2a target is now validated on 3 different TypeScript-monorepo project shapes (backend / Mantine-frontend / Rsbuild-frontend).
+
+**Strategic insight surfaced during session:** classifier-agent for LLM-classification cluster (Q41 refs / Q44 antipattern / Q46 task_short / Q58 security_needed) **does not require v2.3 daemon's direct-API SpawnProvider**. It works as a regular agent spawn via existing shuttle infrastructure — Claude Code's Task tool already does the LLM work. The "wait for v2.3 daemon" assumption was inertia from the Q41 author's original design intent, not an architectural requirement. Tracing the spawn lifecycle proved this concretely.
+
+**Effect on roadmap:** Q41 / Q44 / Q45 / Q46 / Q58 / Q61 promoted from "LLM-blocked / wait v2.3" to "scheduled v2.2.5 Item 9". The shuttle-classifier path is canonical; direct-API `query?()` remains an optional accelerator for non-CLI channels (Web UI, Telegram, headless) in v2.3+.
+
+**Architectural principle refined into 3 categories** (per [`specs/product-vision.md`](specs/product-vision.md)):
+1. Deterministic code
+2. **Restructure input to eliminate classification** (NEW — gate-answer V1 / antipattern marker convention)
+3. Code + LLM picking from candidates
+
+User crystallized this during session push-back on multilingual gate-answer regex: "Pure code for deterministic. Restructure where possible. LLM picking when input is irreducibly free-form." Filed Q57 (gate-answer structural fix) + Q59 (antipattern marker) as Category 2 examples; Q41/Q44/Q46/Q58/Q61 as Category 3 cluster via `pickFromCandidates` primitive.
+
+**8 new Q-items filed** (Q48 / Q50 / Q51 / Q52 / Q53 / Q54 / Q55 + Q57 / Q58 / Q59 / Q60 / Q61). Bundled into v2.2.5 items 8-11 — original 7 substrate commits extend to 11 total. **Q49 reserved-then-superseded** by Q57 (don't recycle).
+
+**Q48 (metric observability dropdown)** is the most strategically valuable filing — `pipeline.jsonl` doesn't carry `force_used` / `pipeline_violation` / `started_at` / `ended_at` / `gate2_revisions` / `reviewer_count`. Long-term cross-project analysis blind to force-bypass rate. Pure deterministic fix in `finish.ts`.
 
 ### 2026-05-14 — v2.2a "review-completeness" bundle landed (resolution block)
 

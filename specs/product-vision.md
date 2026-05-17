@@ -202,38 +202,50 @@ Code remains the **first and primary bundle** through Phase 2. Other bundles (co
 
 ## Architectural principle: code + LLM hybrid for classification
 
-Surfaced as a coherent principle during wandr-be validation run 2026-05-14 (filing of Q44/Q45/Q46). Worth stating explicitly because it shapes how every future decision/predicate/hook is built.
+Surfaced as a coherent principle during wandr-be validation run 2026-05-14 (filing of Q44/Q45/Q46) and refined during frontend-core run 2026-05-17 (filing of Q48-Q61 + Q57 gate-answer restructure).
 
-### The principle
+### The principle — three categories in priority order
 
-> **Pure code for deterministic problems. Code + LLM for classification / picking / matching / interpretation.**
->
-> When a problem requires understanding semantic content (which references are relevant to this task? does this diff really violate this rule? what's a good slug for this Cyrillic text?), patches like multilingual regex / transliteration libraries / pattern extractors are the wrong tool. They appear to solve the problem in test cases but leak edge cases endlessly.
->
-> The right tool is a small LLM classification call. Code provides:
-> - **Input parameters** (the task description, the diff, the state)
-> - **List of available options / candidates** (refs in registry, anti-pattern rules in CLAUDE.md, agents in flow)
-> - **Output constraints** (return JSON array, max N items, must be from the candidate list)
->
-> LLM provides:
-> - **The actual classification decision** (which subset, which match, which slug, which agent)
->
-> Result: bounded LLM cost (~$0.0005-0.005 per call on haiku tier), bounded LLM scope (it only picks; it doesn't invent), correctness scales with content quality (descriptive frontmatter / clear rule text) instead of regex maintenance.
+> 1. **Deterministic code** — schema validation, FSM transitions, file parsing, audit log, structured-data extraction. Free, fast, correct.
+> 2. **Restructure input to eliminate classification** — when the protocol can be made **discrete** (gate answer as `{decision: "accept"|"reject", message?: string}`) or **annotated with structural markers** (`<!-- antipattern -->` block in CLAUDE.md instead of prose-parsing English headers), the classification problem disappears entirely. No LLM call, no language sensitivity, no edge cases. Always prefer when feasible.
+> 3. **Code + LLM picking from a candidate list** — only when input is irreducibly free-form text and candidate set cannot be made canonical (which refs match this task? which CLAUDE.md rules apply to this diff? does this task need security review?). LLM picks; code enforces the candidate set + output schema + cap + audit.
+
+**Rule of thumb when adding a new classification site:**
+- Can you change the upstream protocol to emit structured input? → Category 2. Restructure.
+- Is the candidate set knowable and small (~5-50 items)? → Category 3. LLM-pick.
+- Is the input fully deterministic structured data (filenames, paths, schema)? → Category 1. Code.
+
+**Anti-patterns that violate the principle:**
+- Adding multilingual regex / keyword lists to fix a Category 3 problem (the bug isn't language coverage — it's the wrong tool).
+- Adding transliteration libraries (Cyrillic→Latin) to fix non-Latin slugs (same — wrong tool).
+- Adding prose-parsers to detect English section headers in i18n docs (use a structured marker — Category 2).
+- Adding heuristic keyword overlap to find rule violations in a diff (use LLM picking — Category 3).
+
+**For Category 3 LLM calls, code provides:**
+- **Input parameters** (the task description, the diff, the state)
+- **List of available candidates** (refs in registry, anti-pattern rules in CLAUDE.md, possible enum values)
+- **Output constraints** (return JSON array, max N items, must be from the candidate list)
+- **Defensive parse** — filter LLM output against known candidate set so hallucinations cannot leak through
+
+**LLM provides:** the actual picking decision over the candidate set.
+
+Bounded cost (~$0.0005-0.005 per call on haiku tier), bounded scope (it only picks; it doesn't invent), correctness scales with **content quality** (descriptive frontmatter / clear rule text) instead of regex maintenance.
 
 ### Sites where this applies
 
-Already designed this way:
-- **Q41 — `refs-to-load`** decision. Refs are self-describing (YAML frontmatter); LLM picks top-N relevant. Inactive in prod (shuttle leaves `query?()` undefined; activates with v2.3 daemon's direct-API SpawnProvider).
+**Category 2 — restructure (no LLM needed):**
+- **Q57 — gate user-answer.** Free-text `"approve"/"reject with feedback: ..."/"да"` becomes structured `{decision: "accept"|"reject", message?: string}`. Mirror logic collapses to a one-line ternary. Multi-channel ready (CLI/Web UI/Telegram/API all use the same enum). Ships in v2.2.5 Item 8.
+- **Q59 — anti-pattern rule extraction from CLAUDE.md.** English section-header regex (`/what not to do|don't|antipatterns/i`) replaced by structured marker `<!-- antipattern -->` block convention. Parser becomes language-agnostic and deterministic.
+- **Convention over heuristic** generally: when the upstream document author can be asked to add a marker, prefer that over inferring meaning from prose.
 
-Future sites (will be retrofitted as the LLM-classification infra matures):
-- **Q44 — anti-pattern detection.** Rule text + diff → LLM extracts real violations with `file:line`. Replaces word-overlap noise.
-- **Q46 — slug synthesis.** Arbitrary task text → LLM generates 8-15 char English semantic slug. Replaces transliteration libraries.
-- **Q45** — same as Q41; not a separate bug, just the visible manifestation of Q41 partial state on non-English tasks.
-- **`applies_to` predicates** (currently boolean code in Q9 family). Some predicates (e.g. "should challenger spawn?") have legitimate fuzzy classification logic that boolean code can't capture cleanly.
-- **`complexity` decision** (currently heuristic code: file count, new patterns, etc.). Edge cases like "wide but shallow" require interpretation.
-- **Past-misses ranking** (currently chronological top-10). Diff-aware re-ranking by relevance is classification.
-- **Curator dispatch** (v2.6) — entire job is "given task + team + history, pick specialist". Pure LLM by design.
-- **Anti-pattern rule extraction** (Q44 sibling) — turning prose "Don't do X" rules into machine-checkable form is itself a classification task.
+**Category 3 — LLM picking (one shared primitive `pickFromCandidates`):**
+- **Q41 — `refs-to-load`.** Refs self-describe via YAML frontmatter; LLM picks top-N relevant from the catalog. Already designed; activates as soon as a classifier-agent step is wired (see "Infrastructure" below).
+- **Q44 — anti-pattern detection.** Rule text + diff → LLM picks rules with real violations. Replaces word-overlap noise.
+- **Q46 — task_short synthesis.** Task text → LLM generates semantic short identifier. Output goes into `state.task_short` (task_id stays hex-stable for DB referential integrity).
+- **Q58 — security_needed / ui_touched / api_touched (intent half).** Boolean classification of task intent. The *surface* half (does diff touch UI files?) stays deterministic regex on filenames — Category 1.
+- **Future:** `applies_to` predicates with legitimate fuzzy classification, `complexity` edge cases ("wide but shallow"), past-misses re-ranking by relevance, v2.6 curator dispatch.
+
+**Shared mechanism** for all Category 3 sites: a single classifier-agent in the `context` phase that emits structured JSON consumed by all downstream decisions (refs picks, security_needed bool, task_short, etc.). One LLM call per task, cached in `state.decisions`. See "Infrastructure" below.
 
 ### When NOT to use LLM (deterministic problems)
 
@@ -249,15 +261,29 @@ The rule of thumb: **if you find yourself writing regex / keyword lists / tokeni
 
 ### Infrastructure requirements
 
-For the LLM-classification pattern to be usable across the codebase:
+The LLM-classification pattern has two equivalent implementations. The pipeline supports both; UI/config picks per-step which one runs.
 
-1. **`SpawnProviderPlugin.query?()`** — lightweight one-shot classification call. Defined in v2.2a Q41 work. Shuttle provider intentionally leaves it `undefined` (no synchronous out-of-band LLM calls available via shuttle pattern). Activated when v2.3 daemon adds a direct-API SpawnProvider (Anthropic SDK / Ollama / OpenAI / etc.).
-2. **Cost ceiling per call** — haiku tier preferred for classification ($0.0005-0.005). Opus / sonnet only when judgement depth matters (e.g. curator decisions).
-3. **Caching** — same input → same output → cache. Avoid redundant LLM calls for stable decisions (refs-to-load already caches via `state.decisions.refs_to_load`).
-4. **Fallback on failure** — LLM call fails or returns malformed → graceful degrade (empty list, pre-LLM heuristic, audit entry). Pipeline never crashes on LLM unavailability.
-5. **Observability** — when fallback fires, emit audit `error_class: "llm-classification-needed"`. Lets us count how much value LLM-activation actually delivers post-v2.3.
+**Implementation A — classifier-agent via existing shuttle (works today, ships v2.2.5):**
+- A new agent `classifier` runs in the `context` phase. Its spawn is identical to planner/code-analyzer: shuttle → Claude Code Task tool → haiku model → structured JSON output → back via `pipeline_continue_task`.
+- One spawn per task. Output populates `state.decisions.{refs_to_load, security_needed, task_short, antipattern_rules_applicable, ...}` in a single shot.
+- All downstream decisions (`security_needed`, `refs_to_load`, etc.) become **pure getters** from `state.decisions`. Zero LLM calls in decision code.
+- No new infrastructure: uses existing `ShuttleSpawnProvider`, existing agent-spawn lifecycle, existing audit trail.
+- This is the canonical implementation for CLI mode.
 
-This isn't a separate phase — the principle is **applied incrementally** as decisions/hooks/predicates are added or revisited. v2.3 daemon makes it usable everywhere; v2.6 curator is its biggest single application.
+**Implementation B — direct-API `SpawnProviderPlugin.query?()` (v2.3+, optional accelerator):**
+- The optional `query?()` side-channel on `SpawnProviderPlugin` lets a daemon-mode provider make synchronous one-shot LLM calls without round-tripping through Claude Code.
+- Used by Web UI / Telegram / API / headless cron contexts where Claude Code session isn't available.
+- When wired, the classifier-agent can also be reduced to inline `query()` calls inside decisions — slightly lower latency, same output shape.
+- Direct API requires API key on the pipeline host. Multi-provider routing (v2.5) adds OpenAI/Ollama/etc. as alternate providers selectable per-step in the UI.
+
+**Cross-cutting requirements** for both implementations:
+- **Single primitive `pickFromCandidates`** in `mcp/src/lib/` — prompt assembly, JSON-array parse, defensive filter against `known` Set, cap enforcement. ~55 lines. One file, used by classifier-agent (Impl A) and `query()` callers (Impl B).
+- **Cost ceiling per call** — haiku tier for classification ($0.0005-0.005). Opus only when judgement depth matters (curator).
+- **Caching** — same input → cached output. `state.decisions.<name>` is the cache.
+- **Fallback on unavailability** — classifier-agent fails or `query()` undefined → return empty / null / boolean default. Emit audit `error_class: "llm-classification-needed"`. Pipeline never crashes on LLM unavailability.
+- **Modular & extensible** — each Category 3 site is a 3-5 line getter from state. Adding a new site = extend classifier-agent JSON schema + add getter. No new infrastructure per site.
+
+This isn't a separate phase — Impl A ships in v2.2.5, Impl B grows in v2.3-2.5 as multi-channel/multi-provider demand appears. v2.6 curator is its biggest single application.
 
 ## Trigger sources & autonomous mode
 

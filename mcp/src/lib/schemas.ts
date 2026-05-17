@@ -24,6 +24,16 @@ async function getAjv(): Promise<Ajv2020> {
     const raw = await readFile(join(schemasDir, name), "utf8");
     ajv.addSchema(JSON.parse(raw));
   }
+  // Bundle extensions: per-bundle conditional constraints layered on top of
+  // the base pipeline-state schema. Registered under id
+  // "bundle-extensions/<bundle>.schema.json".
+  for (const name of ["code.schema.json"]) {
+    const raw = await readFile(
+      join(schemasDir, "bundle-extensions", name),
+      "utf8",
+    );
+    ajv.addSchema(JSON.parse(raw));
+  }
   ajvInstance = ajv;
   return ajv;
 }
@@ -53,6 +63,38 @@ export async function validate(schemaId: string, data: unknown): Promise<Validat
     }`,
   }));
   return { ok: false, errors };
+}
+
+/**
+ * Validates pipeline-state.json against the base schema AND the appropriate
+ * bundle extension. Old `1.0` state files without a `bundle` field default
+ * to the code bundle (the code extension's `if` clause matches both
+ * `bundle === "code"` and absent-bundle for backward-compat).
+ *
+ * Bundles without an extension file (synthetic test bundles, future bundles
+ * that don't restrict additional shape) pass extension validation cleanly.
+ */
+export async function validatePipelineState(state: any): Promise<ValidationResult> {
+  const base = await validate("pipeline-state.schema.json", state);
+  if (!base.ok) return base;
+
+  const bundle = typeof state?.bundle === "string" ? state.bundle : "code";
+  const extId = `bundle-extensions/${bundle}.schema.json`;
+  try {
+    const v = await getValidator(extId);
+    const ok = v(state);
+    if (ok) return { ok: true };
+    const errors = (v.errors ?? []).map((e) => ({
+      path: e.instancePath || "/",
+      message: `[${bundle}-extension] ${e.message ?? "invalid"}${
+        e.params && Object.keys(e.params).length ? ` (${JSON.stringify(e.params)})` : ""
+      }`,
+    }));
+    return { ok: false, errors };
+  } catch {
+    // No registered extension for this bundle — base validation suffices.
+    return { ok: true };
+  }
 }
 
 export async function getCategoryVocab(): Promise<any> {

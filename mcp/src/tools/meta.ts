@@ -39,7 +39,7 @@ export async function pipelineMeta(_input: Record<string, never>): Promise<{
     protocol_version: PROTOCOL_VERSION,
     plugin_api_version: PLUGIN_API_VERSION,
     schema_versions: {
-      "pipeline-state": "1.0",
+      "pipeline-state": "1.1",
       "finding": "1.0",
       "reviewer-output": "1.0",
       "validator-output": "1.0",

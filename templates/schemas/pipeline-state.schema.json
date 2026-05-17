@@ -9,8 +9,6 @@
     "task_id",
     "task",
     "complexity",
-    "tests_mode",
-    "stack",
     "started_at",
     "phases",
     "gates",
@@ -18,7 +16,12 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0" },
+    "schema_version": { "type": "string", "enum": ["1.0", "1.1"] },
+    "bundle": {
+      "type": "string",
+      "default": "code",
+      "description": "Which bundle this state belongs to. Default 'code' for backward-compat with v2.2.x state files. Bundle-specific required fields live in templates/schemas/bundle-extensions/<bundle>.schema.json."
+    },
     "task_id": {
       "type": "string",
       "pattern": "^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}(?:-[a-f0-9]{4})?$",

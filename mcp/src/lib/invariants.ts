@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readJsonl } from "./state-io.js";
-import { validate } from "./schemas.js";
+import { validate, validatePipelineState } from "./schemas.js";
 
 export type Violation = {
   code: string;
@@ -31,8 +31,11 @@ async function readStaleSpawnTimeout(): Promise<number> {
 export async function runInvariants(state: any, findingsFile: string): Promise<Violation[]> {
   const violations: Violation[] = [];
 
-  // INV-pipeline-state-schema: state itself must validate
-  const stateCheck = await validate("pipeline-state.schema.json", state);
+  // INV-pipeline-state-schema: state must validate against base schema AND
+  // the bundle-specific extension (e.g. code bundle requires tests_mode +
+  // stack). Old `1.0` state files without `bundle` default to code via the
+  // extension's conditional `if` clause.
+  const stateCheck = await validatePipelineState(state);
   if (!stateCheck.ok) {
     violations.push({
       code: "INV_SCHEMA_STATE",

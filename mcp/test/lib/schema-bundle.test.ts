@@ -27,10 +27,18 @@ describe("schema split (item 2)", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("backward-compat: state without bundle field validates (defaults to code via extension)", async () => {
-    const { bundle: _b, ...legacy } = baseRequiredState;
-    const r = await validatePipelineState({ ...legacy, schema_version: "1.0" });
-    expect(r.ok).toBe(true);
+  it("base schema rejects schema_version other than 1.1 (strict const)", async () => {
+    const r = await validate("pipeline-state.schema.json", {
+      ...baseRequiredState,
+      schema_version: "1.0",
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("bundle field is required (base schema rejects state missing it)", async () => {
+    const { bundle: _b, ...partial } = baseRequiredState;
+    const r = await validate("pipeline-state.schema.json", partial);
+    expect(r.ok).toBe(false);
   });
 
   it("code bundle: missing tests_mode → extension reports failure", async () => {

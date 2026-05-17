@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { BUILTIN_STEPS } from "../../../../../src/driver/bundles/code/steps/index.js";
 import { createRegistry } from "../../../../../src/driver/core/registry.js";
-import { loadBuiltinPlugins } from "../../../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../../../src/driver/loaders/bundles.js";
 import { makeInitialDriverState } from "../../../../../src/driver/core/state.js";
 import { tempProject } from "../../../../helpers/setup.js";
 import type {
@@ -43,7 +43,7 @@ function mockProvider(): SpawnProviderPlugin {
 
 async function makeCtx(stateForBeginSpawn?: DriverState): Promise<StepContext> {
   const registry = createRegistry();
-  loadBuiltinPlugins(registry);
+  await loadBundle("code", registry);
   registry.spawn_provider = mockProvider();
   let counter = 0;
   return {

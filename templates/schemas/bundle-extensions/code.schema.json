@@ -5,10 +5,8 @@
   "description": "Additional required fields when state.bundle === 'code'. Applied on top of pipeline-state.schema.json by validatePipelineState.",
   "type": "object",
   "if": {
-    "anyOf": [
-      { "properties": { "bundle": { "const": "code" } } },
-      { "not": { "required": ["bundle"] } }
-    ]
+    "properties": { "bundle": { "const": "code" } },
+    "required": ["bundle"]
   },
   "then": {
     "required": ["tests_mode", "stack"]

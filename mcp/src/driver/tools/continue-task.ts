@@ -18,7 +18,7 @@ import { z } from "zod";
 import { createRegistry } from "../core/registry.js";
 import { runFSM } from "../core/fsm.js";
 import { readDriverState, withDriverStateLock } from "../core/state.js";
-import { loadBuiltinPlugins } from "../loaders/builtins.js";
+import { loadBundle } from "../loaders/bundles.js";
 import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
 import { requireAgent } from "../core/registry.js";
 import { pipelineRecordAgentRun } from "../../tools/record-agent-run.js";
@@ -157,7 +157,7 @@ export async function pipelineContinueTask(input: {
       // doing it here keeps the mirror call self-contained.
       {
         const r = createRegistry();
-        loadBuiltinPlugins(r);
+        await loadBundle("code", r);
         await loadProjectConfigIfPresent(r, input.project_dir);
         await mirrorGateDecision(state, r, gateName);
       }
@@ -190,7 +190,7 @@ export async function pipelineContinueTask(input: {
     }
 
     const registry = createRegistry();
-    loadBuiltinPlugins(registry);
+    await loadBundle("code", registry);
     await loadProjectConfigIfPresent(registry, input.project_dir);
 
     const { response } = await runFSM(state, registry, {

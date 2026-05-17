@@ -19,7 +19,7 @@ import {
 } from "../../../../../src/driver/bundles/code/hooks/index.js";
 import { makeInitialDriverState } from "../../../../../src/driver/core/state.js";
 import { createRegistry } from "../../../../../src/driver/core/registry.js";
-import { loadBuiltinPlugins } from "../../../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../../../src/driver/loaders/bundles.js";
 import { agentFeedbackJsonl } from "../../../../../src/lib/paths.js";
 import { clearMetrics } from "../../../../helpers/setup.js";
 import type { DriverState, HookContext } from "../../../../../src/driver/types/plugin.js";
@@ -50,9 +50,9 @@ function makeState(projectDir: string, overrides: Partial<DriverState> = {}): Dr
   return state;
 }
 
-function makeCtx(state: DriverState): HookContext {
+async function makeCtx(_state: DriverState): Promise<HookContext> {
   const registry = createRegistry();
-  loadBuiltinPlugins(registry);
+  await loadBundle("code", registry);
   return { registry, step: "review" };
 }
 
@@ -72,7 +72,7 @@ describe("Q27 git-diff-snapshot hook", () => {
       await makeGitRepo(proj.dir);
       await writeFile(join(proj.dir, "README.md"), "# baseline\n\n+new line\n", "utf8");
       const state = makeState(proj.dir);
-      await hooksByName["git-diff-snapshot"].run(state, makeCtx(state));
+      await hooksByName["git-diff-snapshot"].run(state, await makeCtx(state));
       const content = await readFile(join(proj.dir, ".claude", "diff.txt"), "utf8");
       expect(content).toContain("README.md");
       expect(content).toContain("+new line");
@@ -86,7 +86,7 @@ describe("Q27 git-diff-snapshot hook", () => {
     try {
       // No git repo initialized — git diff will fail.
       const state = makeState(proj.dir);
-      await hooksByName["git-diff-snapshot"].run(state, makeCtx(state));
+      await hooksByName["git-diff-snapshot"].run(state, await makeCtx(state));
       const content = await readFile(join(proj.dir, ".claude", "diff.txt"), "utf8");
       expect(content).toContain("git diff failed");
     } finally {
@@ -107,7 +107,7 @@ describe("Q27 load-past-misses hook", () => {
     const proj = await makeProject();
     try {
       const state = makeState(proj.dir);
-      await hooksByName["load-past-misses"].run(state, makeCtx(state));
+      await hooksByName["load-past-misses"].run(state, await makeCtx(state));
       for (const agent of ["logic-reviewer", "challenger-reviewer", "style-reviewer", "security", "performance"]) {
         const content = await readFile(join(proj.dir, ".claude", `past-misses-${agent}.md`), "utf8");
         expect(content).toContain(`past misses — ${agent}`);
@@ -137,7 +137,7 @@ describe("Q27 load-past-misses hook", () => {
         "utf8",
       );
       const state = makeState(proj.dir);
-      await hooksByName["load-past-misses"].run(state, makeCtx(state));
+      await hooksByName["load-past-misses"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "past-misses-logic-reviewer.md"),
         "utf8",
@@ -155,7 +155,7 @@ describe("Q27 anti-pattern-grep hook", () => {
     const proj = await makeProject();
     try {
       const state = makeState(proj.dir);
-      await hooksByName["anti-pattern-grep"].run(state, makeCtx(state));
+      await hooksByName["anti-pattern-grep"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "antipattern-candidates.md"),
         "utf8",
@@ -171,7 +171,7 @@ describe("Q27 anti-pattern-grep hook", () => {
     try {
       await writeFile(join(proj.dir, "CLAUDE.md"), "# Project\n\nJust prose, no rules.\n", "utf8");
       const state = makeState(proj.dir);
-      await hooksByName["anti-pattern-grep"].run(state, makeCtx(state));
+      await hooksByName["anti-pattern-grep"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "antipattern-candidates.md"),
         "utf8",
@@ -200,7 +200,7 @@ describe("Q27 anti-pattern-grep hook", () => {
         "utf8",
       );
       const state = makeState(proj.dir);
-      await hooksByName["anti-pattern-grep"].run(state, makeCtx(state));
+      await hooksByName["anti-pattern-grep"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "antipattern-candidates.md"),
         "utf8",
@@ -219,7 +219,7 @@ describe("Q27 caller-context-expand hook", () => {
     try {
       await writeFile(join(proj.dir, ".claude", "diff.txt"), "+ some prose-only change\n", "utf8");
       const state = makeState(proj.dir);
-      await hooksByName["caller-context-expand"].run(state, makeCtx(state));
+      await hooksByName["caller-context-expand"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "caller-context.md"),
         "utf8",
@@ -234,7 +234,7 @@ describe("Q27 caller-context-expand hook", () => {
     const proj = await makeProject();
     try {
       const state = makeState(proj.dir, { decisions: { complexity: "simple" } });
-      await hooksByName["caller-context-expand"].run(state, makeCtx(state));
+      await hooksByName["caller-context-expand"].run(state, await makeCtx(state));
       // No file should be written.
       await expect(
         stat(join(proj.dir, ".claude", "caller-context.md")),
@@ -270,7 +270,7 @@ describe("Q27 caller-context-expand hook", () => {
         "utf8",
       );
       const state = makeState(proj.dir);
-      await hooksByName["caller-context-expand"].run(state, makeCtx(state));
+      await hooksByName["caller-context-expand"].run(state, await makeCtx(state));
       const content = await readFile(
         join(proj.dir, ".claude", "caller-context.md"),
         "utf8",

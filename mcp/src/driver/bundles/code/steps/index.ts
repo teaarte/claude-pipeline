@@ -28,7 +28,7 @@ import { askUser, complete, spawnAgentsParallel } from "../../../core/shuttle.js
 import { requireGate, requireDecision, requireSpawnProvider, requireAgent } from "../../../core/registry.js";
 import { resolveAgentModel } from "../agents/resolve-model.js";
 import { defaultConfig } from "../../../types/config.js";
-import { PHASES, type Phase } from "../../../../lib/phase-state-machine.js";
+import { CODE_PHASES, type Phase } from "../../../../lib/phase-state-machine.js";
 import { pipelineSetPhaseStatus } from "../../../../tools/set-phase-status.js";
 import { pipelineSetGate } from "../../../../tools/set-gate.js";
 import { readStateSafe } from "../../../../lib/state-io.js";
@@ -49,9 +49,9 @@ async function closePriorPhases(state: DriverState, currentPhase: Phase): Promis
   const ps = await readStateSafe(file).catch(() => null);
   if (!ps) return;
   const testsMode = (state.decisions["tests_mode"] as string | undefined) ?? "regression-only";
-  const idxOf = (p: string) => (PHASES as readonly string[]).indexOf(p);
+  const idxOf = (p: string) => (CODE_PHASES as readonly string[]).indexOf(p);
   const currentIdx = idxOf(currentPhase);
-  for (const phase of PHASES) {
+  for (const phase of CODE_PHASES) {
     if (idxOf(phase) >= currentIdx) break;
     const phStatus = ps.phases?.[phase]?.status;
     if (phStatus === "completed" || phStatus === "skipped") continue;

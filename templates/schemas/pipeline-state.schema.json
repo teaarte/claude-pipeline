@@ -6,6 +6,7 @@
   "type": "object",
   "required": [
     "schema_version",
+    "bundle",
     "task_id",
     "task",
     "complexity",
@@ -16,11 +17,10 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "enum": ["1.0", "1.1"] },
+    "schema_version": { "type": "string", "const": "1.1" },
     "bundle": {
       "type": "string",
-      "default": "code",
-      "description": "Which bundle this state belongs to. Default 'code' for backward-compat with v2.2.x state files. Bundle-specific required fields live in templates/schemas/bundle-extensions/<bundle>.schema.json."
+      "description": "Which bundle this state belongs to. Selects the matching bundle-extension schema in templates/schemas/bundle-extensions/<bundle>.schema.json."
     },
     "task_id": {
       "type": "string",

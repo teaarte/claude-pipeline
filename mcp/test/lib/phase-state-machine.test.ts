@@ -3,7 +3,6 @@ import fc from "fast-check";
 import {
   ALLOWED_TRANSITIONS,
   STATUSES,
-  PHASES,
   CODE_PHASES,
   assertTransitionAllowed,
   assertPrereqSatisfied,
@@ -15,7 +14,7 @@ describe("phase-state-machine", () => {
   it("rejects every transition not in the allow table", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom(...PHASES),
+        fc.constantFrom(...CODE_PHASES),
         fc.constantFrom(...STATUSES),
         fc.constantFrom(...STATUSES),
         (phase, from, to) => {
@@ -64,8 +63,15 @@ describe("phase-state-machine", () => {
     expect(() => assertPrereqSatisfied(empty, "final", "completed")).not.toThrow();
   });
 
-  it("PHASES is an alias for CODE_PHASES (backward-compat)", () => {
-    expect([...PHASES]).toEqual([...CODE_PHASES]);
+  it("CODE_PHASES exposes the canonical 6-phase code-bundle ordering", () => {
+    expect([...CODE_PHASES]).toEqual([
+      "context",
+      "planning",
+      "test_first",
+      "implementation",
+      "validation",
+      "final",
+    ]);
   });
 
   it("isValidPhase: phase in flow.phases → true; otherwise → false", () => {
@@ -86,7 +92,8 @@ describe("phase-state-machine", () => {
 
   it("schema accepts custom phase keys + reviewer_verdicts phase strings (additionalProperties: true)", async () => {
     const baseState = {
-      schema_version: "1.0",
+      schema_version: "1.1",
+      bundle: "code",
       task_id: "t-2026-05-18-bundletest",
       task: "synthetic test",
       complexity: "simple",

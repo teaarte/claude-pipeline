@@ -17,13 +17,6 @@ export const CODE_PHASES = [
   "final",
 ] as const;
 
-/**
- * Backward-compat alias for callers that depended on the original `PHASES`
- * tuple (set-phase-status zod input, fsm step ordering, summary builder, etc.).
- * Code-bundle only — non-code bundles should consult `flow.phases[]` instead.
- */
-export const PHASES = CODE_PHASES;
-
 export type Phase = string;
 
 export const STATUSES = ["pending", "in_progress", "completed", "skipped"] as const;

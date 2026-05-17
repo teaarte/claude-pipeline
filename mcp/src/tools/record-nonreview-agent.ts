@@ -2,7 +2,7 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { CODE_PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
@@ -18,7 +18,7 @@ const NONREVIEW_AGENTS = [
 
 export const recordNonreviewSchema = {
   project_dir: z.string(),
-  phase: z.enum(PHASES),
+  phase: z.enum(CODE_PHASES),
   agent: z.enum(NONREVIEW_AGENTS),
   agent_run_id: z
     .string()

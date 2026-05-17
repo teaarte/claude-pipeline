@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRegistry } from "../../../../src/driver/core/registry.js";
-import { loadBuiltinPlugins } from "../../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../../src/driver/loaders/bundles.js";
 import { complexityDecision } from "../../../../src/driver/bundles/code/decisions/complexity.js";
 import { testsModeDecision } from "../../../../src/driver/bundles/code/decisions/tests-mode.js";
 import { refsToLoadDecision } from "../../../../src/driver/bundles/code/decisions/refs-to-load.js";
@@ -125,9 +125,9 @@ describe("gates", () => {
 });
 
 describe("flows", () => {
-  it("every flow's steps all exist in the registry", () => {
+  it("every flow's steps all exist in the registry", async () => {
     const r = createRegistry();
-    loadBuiltinPlugins(r);
+    await loadBundle("code", r);
     for (const flow of BUILTIN_FLOWS) {
       for (const step of flow.steps) {
         expect(r.steps.has(step), `step '${step}' referenced by flow '${flow.name}' is not registered`).toBe(true);

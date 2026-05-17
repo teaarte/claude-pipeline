@@ -2,12 +2,12 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { CODE_PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { makeAgentRunId } from "../lib/ids.js";
 
 export const beginAgentSchema = {
   project_dir: z.string(),
-  phase: z.enum(PHASES),
+  phase: z.enum(CODE_PHASES),
   agent: z.string().min(1),
   model: z.enum(["haiku", "sonnet", "opus"]).nullable().optional(),
 };

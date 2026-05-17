@@ -67,18 +67,16 @@ export async function validate(schemaId: string, data: unknown): Promise<Validat
 
 /**
  * Validates pipeline-state.json against the base schema AND the appropriate
- * bundle extension. Old `1.0` state files without a `bundle` field default
- * to the code bundle (the code extension's `if` clause matches both
- * `bundle === "code"` and absent-bundle for backward-compat).
- *
- * Bundles without an extension file (synthetic test bundles, future bundles
- * that don't restrict additional shape) pass extension validation cleanly.
+ * bundle extension. The base schema requires `bundle` — state without it
+ * fails at the base layer. Bundles without a registered extension file
+ * (synthetic test bundles, future bundles that don't restrict additional
+ * shape) pass extension validation cleanly.
  */
 export async function validatePipelineState(state: any): Promise<ValidationResult> {
   const base = await validate("pipeline-state.schema.json", state);
   if (!base.ok) return base;
 
-  const bundle = typeof state?.bundle === "string" ? state.bundle : "code";
+  const bundle = state.bundle as string;
   const extId = `bundle-extensions/${bundle}.schema.json`;
   try {
     const v = await getValidator(extId);

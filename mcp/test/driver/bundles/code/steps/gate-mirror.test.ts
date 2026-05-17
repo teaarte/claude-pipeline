@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { createRegistry } from "../../../../../src/driver/core/registry.js";
 import { runFSM } from "../../../../../src/driver/core/fsm.js";
 import { makeInitialDriverState, writeDriverState } from "../../../../../src/driver/core/state.js";
-import { loadBuiltinPlugins } from "../../../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../../../src/driver/loaders/bundles.js";
 import { spawnAgent } from "../../../../../src/driver/core/shuttle.js";
 import { pipelineInit } from "../../../../../src/tools/init.js";
 import { pipelineStateGet } from "../../../../../src/tools/state-get.js";
@@ -76,7 +76,7 @@ async function setupMediumState(projectDir: string) {
 
 async function driveToGate0(projectDir: string) {
   const registry = createRegistry();
-  loadBuiltinPlugins(registry);
+  await loadBundle("code", registry);
   registry.spawn_provider = makeMockProvider();
   let state = await setupMediumState(projectDir);
   for (let i = 0; i < 5; i++) {

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { createRegistry } from "../core/registry.js";
 import { runFSM, type SpawnRecorder } from "../core/fsm.js";
 import { makeInitialDriverState, withDriverStateLock } from "../core/state.js";
-import { loadBuiltinPlugins } from "../loaders/builtins.js";
+import { loadBundle } from "../loaders/bundles.js";
 import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
 import { complexityDecision } from "../bundles/code/decisions/complexity.js";
 import { testsModeDecision } from "../bundles/code/decisions/tests-mode.js";
@@ -87,7 +87,7 @@ export async function pipelineRunTask(input: {
     }
 
     const registry = createRegistry();
-    loadBuiltinPlugins(registry);
+    await loadBundle("code", registry);
     const config = await loadProjectConfigIfPresent(registry, input.project_dir);
 
     // Bootstrap pipeline-state if it doesn't exist. This makes /done's

@@ -24,7 +24,24 @@ import { assertProjectDirAllowed } from "../lib/project-dir.js";
 
 export const doneCleanupSchema = {
   project_dir: z.string(),
+  force: z
+    .boolean()
+    .optional()
+    .describe(
+      "Bypass the .mcp-managed marker / unexpected-subdir safety checks (M13). Use only when intentionally cleaning a malformed .claude/.",
+    ),
 };
+
+// Subdirectories that should never appear in a per-project .claude/. Their
+// presence usually means we're pointed at the wrong .claude/ (the global
+// agents/commands dir, e.g.) — refuse to delete in that case.
+const UNEXPECTED_PROJECT_SUBDIRS = new Set([
+  "agents",
+  "commands",
+  "plugins",
+  "skills",
+  "projects",
+]);
 
 /**
  * Static file list (in the order they're removed). `mcp-audit.jsonl` is
@@ -75,6 +92,7 @@ const AUDIT_LAST = "mcp-audit.jsonl";
 
 export async function pipelineDoneCleanup(input: {
   project_dir: string;
+  force?: boolean;
 }): Promise<{ removed: string[]; kept: string[] }> {
   await assertProjectDirAllowed(input.project_dir);
   const dir = claudeDir(input.project_dir);
@@ -88,6 +106,42 @@ export async function pipelineDoneCleanup(input: {
   }
 
   const present = new Set(entries);
+
+  // M13: pipeline-managed safety check. Refuse on absent marker if we WOULD
+  // delete anything; refuse on suspicious subdir presence (global .claude/
+  // structure leaking into a per-project scope). `force:true` proceeds
+  // anyway — only valid when intentionally repairing a malformed directory.
+  // The check is skipped when nothing matches our static/glob/dir patterns,
+  // so a second cleanup pass on an already-clean directory is still a no-op.
+  const wouldRemove =
+    STATIC_FILES.some((n) => present.has(n)) ||
+    entries.some((n) =>
+      !PRESERVED.has(n) && n !== AUDIT_LAST && GLOB_PATTERNS.some((p) => p.test(n)),
+    ) ||
+    DIRECTORIES.some((n) => present.has(n)) ||
+    present.has(AUDIT_LAST);
+  if (!input.force && wouldRemove) {
+    if (!present.has(".mcp-managed")) {
+      throw new Error(
+        `pipeline_done_cleanup: .mcp-managed marker missing at ${dir}. ` +
+          `Refusing to delete — this directory may not be pipeline-managed. ` +
+          `Pass force:true to override.`,
+      );
+    }
+    for (const name of entries) {
+      if (UNEXPECTED_PROJECT_SUBDIRS.has(name)) {
+        const full = join(dir, name);
+        const st = await stat(full).catch(() => null);
+        if (st?.isDirectory()) {
+          throw new Error(
+            `pipeline_done_cleanup: unexpected subdirectory '${name}' under ${dir}. ` +
+              `That layout belongs to a global ~/.claude/, not a per-project one — refusing to delete. ` +
+              `Pass force:true to override.`,
+          );
+        }
+      }
+    }
+  }
   const removed: string[] = [];
   const kept: string[] = [];
 

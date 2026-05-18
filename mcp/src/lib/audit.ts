@@ -45,7 +45,10 @@ export type AuditEntry = {
  * fall through to `genuine-failure` so the operator can grep for them.
  */
 export function classifyErrorMessage(msg: string): ErrorClass {
-  if (/INV_(002|010|011|012)/.test(msg)) return "swallowed-inv";
+  // M5: widen to all INV_NNN codes; the prior list missed
+  // INV_001/003-009/SCHEMA_STATE/stale-spawn and silently classified
+  // everything else as "genuine-failure".
+  if (/INV_\d{3}|SCHEMA_STATE|stale-spawn/i.test(msg)) return "swallowed-inv";
   if (/Finding category .+ is not in vocab/.test(msg)) return "vocab-rejected";
   if (/(reviewer-output|validator-output|finding)\.schema\.json validation/i.test(msg)) return "schema-validation";
   if (/Finding failed schema validation/i.test(msg)) return "schema-validation";

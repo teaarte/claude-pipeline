@@ -144,8 +144,9 @@ function buildPrompt(
  *    call — we don't have an LLM transport in this process; the LLM lives
  *    behind Claude Code. The optional `?` on `SpawnProviderPlugin.query?()`
  *    encodes this: DecisionPlugins must handle `ctx.spawn_provider?.query`
- *    being undefined and fall back gracefully (refs-to-load uses regex
- *    fallback when query is absent).
+ *    being undefined and return empty/default values (item 9 removed the
+ *    regex fallback — decisions read `state.decisions` populated by the
+ *    classifier-agent run, and emit defaults when that hasn't run yet).
  *
  *    `query?()` will be implemented by the v2.3 daemon's direct-API
  *    SpawnProvider (Anthropic SDK or OpenAI SDK running in the daemon

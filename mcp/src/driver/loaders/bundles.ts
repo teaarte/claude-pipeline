@@ -9,9 +9,9 @@
  * the manifest and what each index actually exports surfaces here as a
  * clear load-time error, keeping the manifest trustworthy.
  *
- * Used today by `loaders/builtins.ts` (now a thin wrapper around
- * `loadBundle("code", registry)`). Future bundles drop in alongside `code/`
- * without touching this file.
+ * KNOWN_BUNDLE_DIRS is an explicit allowlist (not a filesystem scan) — this
+ * is intentional for static-import tree-shaking and to keep the trust boundary
+ * around bundle code obvious. New bundles register here at compile time.
  */
 
 import type { PluginRegistry } from "../types/plugin.js";
@@ -104,9 +104,17 @@ export function _registerSyntheticBundle(
   name: string,
   factory: () => Promise<{ default: BundleAssets }>,
 ): () => void {
+  // M1: snapshot the previous factory so teardown restores it instead of
+  // deleting outright — otherwise tearing down after replacing `code` would
+  // wipe the production registration.
+  const previous = KNOWN_BUNDLE_DIRS[name];
   KNOWN_BUNDLE_DIRS[name] = factory;
   return () => {
-    delete KNOWN_BUNDLE_DIRS[name];
+    if (previous) {
+      KNOWN_BUNDLE_DIRS[name] = previous;
+    } else {
+      delete KNOWN_BUNDLE_DIRS[name];
+    }
   };
 }
 

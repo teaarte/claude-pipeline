@@ -255,7 +255,10 @@ export interface AgentSpawnRequest {
  *
  * Optional on the SpawnProviderPlugin contract — shuttle-based providers
  * that can't make synchronous out-of-band LLM calls leave it undefined;
- * decisions then fall back to their regex-only behaviour.
+ * decisions then return empty/default values (item 9 removed the regex
+ * fallback). The classifier-agent populates `state.decisions` upstream;
+ * decision plugins are pure getters until the v2.3 daemon ships a real
+ * query path.
  */
 export interface SpawnProviderQueryRequest {
   prompt: string;

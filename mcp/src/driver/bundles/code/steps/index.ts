@@ -336,8 +336,7 @@ const TEST_FIRST: StepPlugin = {
 const GIT_STASH: StepPlugin = {
   name: "git-stash",
   phase: "implementation",
-  async run(state) {
-    state.scratch.git_stash_done = true;
+  async run() {
     return { type: "advance" };
   },
 };
@@ -353,8 +352,7 @@ const IMPLEMENT: StepPlugin = {
 const GIT_DIFF: StepPlugin = {
   name: "git-diff",
   phase: "implementation",
-  async run(state) {
-    state.scratch.git_diff_captured = true;
+  async run() {
     return { type: "advance" };
   },
 };
@@ -363,7 +361,6 @@ const PRE_REVIEW: StepPlugin = {
   name: "pre-review",
   phase: "implementation",
   async run(state, ctx) {
-    state.scratch.pre_review_done = true;
     // Q9: invoke security_needed / ui_touched / api_touched BEFORE the review
     // step decides which reviewers to fan out to. Their DecisionPlugins were
     // registered but never called, so applies_to predicates on the gated
@@ -477,8 +474,7 @@ const REVIEW: StepPlugin = {
 const RECONCILE: StepPlugin = {
   name: "reconcile",
   phase: "implementation",
-  async run(state) {
-    state.scratch.reconcile_done = true;
+  async run() {
     return { type: "advance" };
   },
 };
@@ -486,8 +482,7 @@ const RECONCILE: StepPlugin = {
 const ITERATE: StepPlugin = {
   name: "iterate",
   phase: "implementation",
-  async run(state) {
-    state.scratch.iterate_decided = true;
+  async run() {
     return { type: "advance" };
   },
 };
@@ -497,7 +492,6 @@ const SACRED_TESTS: StepPlugin = {
   phase: "implementation",
   async run(state) {
     if (state.decisions["tests_mode"] !== "tdd") return { type: "advance" };
-    state.scratch.sacred_tests_rehashed = true;
     return { type: "advance" };
   },
 };
@@ -513,8 +507,7 @@ const FINAL_CHECKS: StepPlugin = {
 const TEST_VERIFY: StepPlugin = {
   name: "test-verify",
   phase: "validation",
-  async run(state) {
-    state.scratch.test_verify_done = true;
+  async run() {
     return { type: "advance" };
   },
 };

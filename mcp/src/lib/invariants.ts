@@ -72,17 +72,19 @@ export async function runInvariants(state: any, findingsFile: string): Promise<V
         });
       }
     }
-    if (p.status === "skipped" && !p.skipped_reason && name !== "final") {
-      // 'final' phase doesn't carry skipped_reason in schema
-      if (name === "test_first" || name === "context") {
-        if (!p.skipped_reason && name === "test_first") {
-          violations.push({
-            code: "INV_003",
-            message: `phase '${name}' is skipped without skipped_reason`,
-          });
-        }
-        // context phase: skipped_reason is optional in current schema but recommended
-      }
+    // INV_003: test_first must carry a skipped_reason when status=skipped.
+    // Other phases tolerate missing reason (context: optional in schema;
+    // final: doesn't carry the field). M6 collapsed the nested conditionals
+    // that made the outer scope misleading.
+    if (
+      name === "test_first" &&
+      p.status === "skipped" &&
+      !p.skipped_reason
+    ) {
+      violations.push({
+        code: "INV_003",
+        message: `phase '${name}' is skipped without skipped_reason`,
+      });
     }
   }
 

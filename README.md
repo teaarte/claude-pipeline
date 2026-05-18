@@ -132,7 +132,7 @@ Key tools:
 └────────────────────────────────────────────────────────┘
                        ↓
 ┌────────────────────────────────────────────────────────┐
-│  Built-in plugins (mcp/src/driver/builtin/)            │
+│  Code bundle plugins (mcp/src/driver/bundles/code/)    │
 │  agents (23) · steps (~17) · flows (3) · gates (3)    │
 │  decisions (6) · hooks (4) · spawn provider (shuttle)  │
 └────────────────────────────────────────────────────────┘

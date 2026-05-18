@@ -18,7 +18,7 @@ import { z } from "zod";
 import { createRegistry } from "../core/registry.js";
 import { runFSM } from "../core/fsm.js";
 import { readDriverState, withDriverStateLock } from "../core/state.js";
-import { loadBuiltinPlugins } from "../loaders/builtins.js";
+import { loadBundle } from "../loaders/bundles.js";
 import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
 import { requireAgent } from "../core/registry.js";
 import { pipelineRecordAgentRun } from "../../tools/record-agent-run.js";
@@ -26,7 +26,7 @@ import { pipelineRecordNonreviewAgent } from "../../tools/record-nonreview-agent
 import { pipelineCancelSpawn } from "../../tools/cancel-spawn.js";
 import { pipelineAbandon } from "../../tools/abandon.js";
 import { mcpSpawnRecorder } from "./run-task.js";
-import { mirrorGateDecision } from "../builtin/steps/index.js";
+import { mirrorGateDecision } from "../bundles/code/steps/index.js";
 import type { ContinueTaskInput, DriverResponse } from "../types/shuttle.js";
 
 export const continueTaskSchema = {
@@ -47,7 +47,8 @@ export const continueTaskSchema = {
     z.object({
       driver_state_id: z.string(),
       type: z.literal("user-answer"),
-      answer: z.string(),
+      decision: z.enum(["accept", "reject"]),
+      message: z.string().optional(),
     }),
     z.object({
       driver_state_id: z.string(),
@@ -129,12 +130,20 @@ export async function pipelineContinueTask(input: {
       delete state.pending_spawns[evt.agent_run_id];
       state.step_index++;
     } else if (evt.type === "agents-results") {
+      // M9: validate every spawn exists FIRST, then persist each result.
+      // Only mutate driver-state (scratch + pending_spawns) after every
+      // persistAgentResult has returned. Without this staging, a mid-loop
+      // throw left half-applied scratch entries and dangling pending_spawns,
+      // and on retry the caller hit "Unknown agent_run_id" for entries the
+      // first pass had already cleared. Pipeline-state-side atomicity is
+      // tracked separately in Q52.
       for (const r of evt.results) {
-        const spawn = state.pending_spawns[r.agent_run_id];
-        if (!spawn) {
+        if (!state.pending_spawns[r.agent_run_id]) {
           throw new Error(`Unknown agent_run_id '${r.agent_run_id}' — not in pending_spawns`);
         }
-        state.scratch[`agent_output_${r.agent_run_id}`] = r.agent_output;
+      }
+      for (const r of evt.results) {
+        const spawn = state.pending_spawns[r.agent_run_id]!;
         await persistAgentResult(
           input.project_dir,
           spawn.agent,
@@ -142,6 +151,9 @@ export async function pipelineContinueTask(input: {
           r.agent_run_id,
           r.agent_output,
         );
+      }
+      for (const r of evt.results) {
+        state.scratch[`agent_output_${r.agent_run_id}`] = r.agent_output;
         delete state.pending_spawns[r.agent_run_id];
       }
       state.step_index++;
@@ -150,14 +162,17 @@ export async function pipelineContinueTask(input: {
         throw new Error("Driver was not waiting for a user answer");
       }
       const gateName = state.pending_user_answer.gate;
-      state.scratch[`${gateName}_decision`] = evt.answer;
+      state.scratch[`${gateName}_decision`] = {
+        decision: evt.decision,
+        message: evt.message,
+      };
       state.pending_user_answer = null;
       // Build a registry just for the gate plugin lookup. We do it again
       // below for runFSM — registries are cheap to construct (no IO) and
       // doing it here keeps the mirror call self-contained.
       {
         const r = createRegistry();
-        loadBuiltinPlugins(r);
+        await loadBundle("code", r);
         await loadProjectConfigIfPresent(r, input.project_dir);
         await mirrorGateDecision(state, r, gateName);
       }
@@ -185,12 +200,22 @@ export async function pipelineContinueTask(input: {
         state.complete = true;
         state.verdict = state.verdict ?? "accepted";
       } else if (evt.choice === "retry") {
-        // No state mutation — caller should re-execute the same step.
+        // M10: retry is only meaningful for ask-user pauses. Spawn-pause
+        // recovery must go through agent-result / agents-results (or
+        // cancel + retry via abandon → init). Reject early so the caller
+        // can't accidentally retry a step whose pending_spawns still hold
+        // the prior ar-id.
+        if (Object.keys(state.pending_spawns).length > 0) {
+          throw new Error(
+            "recovery:retry is invalid while pending_spawns is non-empty. " +
+              "Send the spawn's agent-result via continue-task, or use recovery:abandon.",
+          );
+        }
       }
     }
 
     const registry = createRegistry();
-    loadBuiltinPlugins(registry);
+    await loadBundle("code", registry);
     await loadProjectConfigIfPresent(registry, input.project_dir);
 
     const { response } = await runFSM(state, registry, {

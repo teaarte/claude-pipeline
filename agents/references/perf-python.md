@@ -10,7 +10,7 @@ when_to_load: |
   Task touches Python backend code (FastAPI, Django, Flask) with perf
   concerns, scale targets, or async/await + DB interaction. Diff in
   *.py with route handlers, async functions, or DB query construction.
-agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+agent_hints: [performance, logic-reviewer, challenger-reviewer]
 ---
 
 # Performance: Python / FastAPI / asyncio

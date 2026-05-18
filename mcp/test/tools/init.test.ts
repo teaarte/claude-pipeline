@@ -57,6 +57,18 @@ describe("pipeline_init", () => {
     }
   });
 
+  it("item 2: writes schema_version=1.1 and bundle='code' (default)", async () => {
+    const proj = await tempProject();
+    try {
+      const result = await pipelineInit(initArgs(proj.dir));
+      const state = JSON.parse(await readFile(result.state_file, "utf8"));
+      expect(state.schema_version).toBe("1.1");
+      expect(state.bundle).toBe("code");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("refuses to overwrite a finished state", async () => {
     const proj = await tempProject();
     try {

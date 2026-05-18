@@ -13,8 +13,9 @@
  */
 
 import { z } from "zod";
-import { stateFile, summaryFile } from "../lib/paths.js";
-import { withStateLock, writeText } from "../lib/state-io.js";
+import { readFile, writeFile, rename } from "node:fs/promises";
+import { stateFile, summaryFile, findingsFile } from "../lib/paths.js";
+import { withStateLock, writeText, fileExists } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import { TASK_ID_PATTERN } from "../lib/ids.js";
 import { assertProjectDirAllowed } from "../lib/project-dir.js";
@@ -48,12 +49,22 @@ export async function pipelineFixTaskId(input: {
 
   const file = stateFile(input.project_dir);
   const summary = summaryFile(input.project_dir);
+  const fjsonl = findingsFile(input.project_dir);
 
   return withStateLock(file, async (state) => {
     if (!state) {
       throw new Error(`pipeline-state.json not found at ${file}. Run pipeline_init first.`);
     }
     const old = (state.task_id as string | undefined) ?? null;
+
+    // H13: rewrite findings.jsonl BEFORE mutating state.task_id. If the
+    // rewrite fails (read error, write error, parse error), we throw and
+    // the state is left untouched — caller can retry. Other writers are
+    // already serialised through pipeline-state's withStateLock.
+    if (old && (await fileExists(fjsonl))) {
+      await rewriteFindingsTaskId(fjsonl, old, input.new_task_id);
+    }
+
     state.task_id = input.new_task_id;
     await writeText(summary, await buildSummary(state));
     return {
@@ -61,4 +72,34 @@ export async function pipelineFixTaskId(input: {
       result: { old_task_id: old, new_task_id: input.new_task_id },
     };
   });
+}
+
+async function rewriteFindingsTaskId(
+  file: string,
+  oldId: string,
+  newId: string,
+): Promise<void> {
+  const raw = await readFile(file, "utf8");
+  const lines = raw.split("\n");
+  const rewritten: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      rewritten.push(line);
+      continue;
+    }
+    try {
+      const obj = JSON.parse(trimmed);
+      if (obj.task_id === oldId) {
+        obj.task_id = newId;
+      }
+      rewritten.push(JSON.stringify(obj));
+    } catch {
+      // Preserve malformed lines verbatim — pipeline_validate will flag them.
+      rewritten.push(line);
+    }
+  }
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  await writeFile(tmp, rewritten.join("\n"), "utf8");
+  await rename(tmp, file);
 }

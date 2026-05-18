@@ -10,7 +10,7 @@ import { makeFindingId, AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
 import { audit } from "../lib/audit.js";
 import { buildSummary } from "../lib/summary.js";
-import { PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
+import { CODE_PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
@@ -35,7 +35,7 @@ const VALIDATOR_AGENTS = new Set([
 
 export const recordAgentRunSchema = {
   project_dir: z.string(),
-  phase: z.enum(PHASES).describe("Which pipeline phase this agent belongs to"),
+  phase: z.enum(CODE_PHASES).describe("Which pipeline phase this agent belongs to"),
   agent_run_id: z
     .string()
     .regex(AGENT_RUN_ID_PATTERN)

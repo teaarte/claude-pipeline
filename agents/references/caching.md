@@ -11,7 +11,7 @@ when_to_load: |
   Next.js Data/Route/Full-Route cache, server-side render cache, or
   materialized views. Diff with cache TTLs, invalidation logic, revalidate,
   cacheTag, cacheLife, staleTime, Cache-Control, ETag, or mutate() qualifies.
-agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+agent_hints: [logic-reviewer, performance, challenger-reviewer]
 ---
 
 # Caching — Senior Stance

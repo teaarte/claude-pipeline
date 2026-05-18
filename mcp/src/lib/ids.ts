@@ -14,8 +14,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pipelineJsonl } from "./paths.js";
 
-const SLUG_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
-
 /**
  * task_id pattern shared with the JSON schema and the zod schemas in
  * `tools/init.ts` and `driver/tools/run-task.ts`. Slug part is
@@ -35,10 +33,10 @@ function datedSlug(prefix: string, date: Date): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
   const d = String(date.getUTCDate()).padStart(2, "0");
-  let suffix = "";
-  for (let i = 0; i < 6; i++) {
-    suffix += SLUG_CHARS[Math.floor(Math.random() * SLUG_CHARS.length)];
-  }
+  // L1: crypto-random for consistency with sanitizeTaskIdSlug. 3 bytes →
+  // 6 hex chars, all in the lowercase a-f0-9 range that matches the
+  // schema's [a-z0-9]{6} expectation.
+  const suffix = randomBytes(3).toString("hex").slice(0, 6);
   return `${prefix}-${y}-${m}-${d}-${suffix}`;
 }
 

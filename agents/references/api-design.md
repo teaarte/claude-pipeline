@@ -12,7 +12,7 @@ when_to_load: |
   frontend and backend / between teams. Diff under routes/, controllers/,
   *.proto, openapi.yaml, GraphQL *.graphql / resolvers, or new public-facing
   functions also qualifies.
-agent_hints: [logic-reviewer, challenger-reviewer, security-reviewer, api-contract]
+agent_hints: [logic-reviewer, challenger-reviewer, security, api-contract]
 ---
 
 # API Design — Senior Stance

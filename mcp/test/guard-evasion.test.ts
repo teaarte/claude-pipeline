@@ -205,4 +205,64 @@ describe("pipeline-guard.sh — scoping & bypass", () => {
       await proj.cleanup();
     }
   });
+
+  it("H7: bash -c \"cat ...\" reads pass through (body has no mutator)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      const target = join(proj.dir, ".claude", "pipeline-state.json");
+      const result = await runGuard({
+        tool_name: "Bash",
+        tool_input: { command: `bash -c "cat ${target}"` },
+      });
+      expect(result).toBeNull();
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("H7: bash -c 'jq . ...' reads pass through (single-quoted body)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      const target = join(proj.dir, ".claude", "pipeline-state.json");
+      const result = await runGuard({
+        tool_name: "Bash",
+        tool_input: { command: `bash -c 'jq . ${target}'` },
+      });
+      expect(result).toBeNull();
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("H7: bash -c \"rm ...\" still denied (body has inner mutator)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      const target = join(proj.dir, ".claude", "pipeline-state.json");
+      const result = await runGuard({
+        tool_name: "Bash",
+        tool_input: { command: `bash -c "rm ${target}"` },
+      });
+      expect(result?.permissionDecision).toBe("deny");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("H7: bash -c \"echo hi > ...\" still denied (redirect inside body)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      const target = join(proj.dir, ".claude", "pipeline-state.json");
+      const result = await runGuard({
+        tool_name: "Bash",
+        tool_input: { command: `bash -c "echo {} > ${target}"` },
+      });
+      expect(result?.permissionDecision).toBe("deny");
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

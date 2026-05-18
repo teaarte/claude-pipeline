@@ -101,6 +101,36 @@ claude mcp list
 # claude-pipeline: node .../mcp/dist/server.js - ✓ Connected
 ```
 
+## Project bundle config (v2.2.5+)
+
+Each project may declare its bundle via
+`<project>/.claude/pipeline.config.json`. The file is optional; if absent
+the code bundle is used.
+
+```json
+{
+  "bundle": "code",
+  "mcp_clients": [],
+  "team_knowledge_refs": []
+}
+```
+
+- **`bundle`** — bundle identifier. Currently the only built-in bundle is
+  `code` (lives at `mcp/src/driver/bundles/code/`). Future bundles
+  (marketing, content, research, …) drop in as sibling directories and
+  ship their own manifest, agents, decisions, and `task-prompt.md` /
+  `done-prompt.md`.
+- **`mcp_clients`** — external MCP servers to spawn for this project
+  (Item 6 of v2.2.5). Each entry is an `MCPClientPlugin` declaration with
+  `name`, `server_command`, `expose_tools`, `scope`. Empty by default.
+- **`team_knowledge_refs`** — paths to markdown files this team has
+  accumulated as shared knowledge across tasks (Item 7 of v2.2.5).
+  Injected into agent prompts at spawn time. Empty by default.
+
+The skills (`commands/task.md`, `commands/done.md`) read this file at
+start-of-session and load the matching bundle's `task-prompt.md` /
+`done-prompt.md` for domain-specific instructions.
+
 ## First-time project setup
 
 The pipeline writes ~10 working artifacts into `<project>/.claude/` per

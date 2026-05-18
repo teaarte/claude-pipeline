@@ -59,7 +59,7 @@ Order: ```json block (`validator-output.schema.json`) → markdown narrative.
   "findings": [
     {
       "schema_version": "1.0",
-      "id": "f-2026-05-10-22zz",
+      "id": "f-2026-05-10-22zz44",
       "agent": "plan-conformance",
       "iteration": 1,
       "task_id": "<same>",

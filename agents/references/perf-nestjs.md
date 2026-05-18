@@ -10,7 +10,7 @@ when_to_load: |
   Task touches NestJS controllers / services / providers, TypeORM or Prisma
   queries, request-pipeline middleware on a Node.js backend with perf
   concerns or scale targets.
-agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+agent_hints: [performance, logic-reviewer, challenger-reviewer]
 ---
 
 # Performance: NestJS / Node.js

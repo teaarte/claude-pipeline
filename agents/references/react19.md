@@ -12,7 +12,7 @@ when_to_load: |
   19). Diff includes Server/Client component boundary changes, Server Actions,
   use() hook, useOptimistic, useFormStatus, useActionState, useTransition,
   Suspense boundaries, or React Compiler annotations.
-agent_hints: [logic-reviewer, performance-reviewer, ui-consistency, challenger-reviewer]
+agent_hints: [logic-reviewer, performance, ui-consistency, challenger-reviewer]
 ---
 
 # React 19 — Senior Stance

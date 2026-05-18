@@ -1,5 +1,6 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "bundle": "code",
   "task_id": "t-YYYY-MM-DD-slug",
   "task": "<task description>",
   "complexity": "simple",
@@ -15,6 +16,7 @@
   "started_at": "<ISO 8601>",
   "refs_loaded": [],
   "refs_dropped_due_to_cap": [],
+  "team_knowledge_refs": [],
   "phases": {
     "context": { "status": "pending", "agents": [], "open_spawns": [] },
     "planning": {
@@ -43,6 +45,7 @@
       "drift_files_count": 0,
       "test_files_modified_by_implementer": [],
       "checkpoint_results": [],
+      "gate2_revisions": 0,
       "agents": [],
       "open_spawns": []
     },

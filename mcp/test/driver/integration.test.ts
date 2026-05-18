@@ -153,7 +153,7 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
             input: {
               driver_state_id: res.driver_state_id,
               type: "user-answer",
-              answer: "approved",
+              decision: "accept",
             },
           });
         }

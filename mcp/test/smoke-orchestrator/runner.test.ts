@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { createRegistry } from "../../src/driver/core/registry.js";
 import { runFSM } from "../../src/driver/core/fsm.js";
 import { makeInitialDriverState } from "../../src/driver/core/state.js";
-import { loadBuiltinPlugins } from "../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../src/driver/loaders/bundles.js";
 import { spawnAgent } from "../../src/driver/core/shuttle.js";
 import { pipelineInit } from "../../src/tools/init.js";
 import { audit, globalAuditFile } from "../../src/lib/audit.js";
@@ -101,7 +101,7 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
       };
 
       const registry = createRegistry();
-      loadBuiltinPlugins(registry);
+      await loadBundle("code", registry);
       registry.agents.set(customAgent.name, customAgent);
       registry.steps.set(customStep.name, customStep);
       const simple = registry.flows.get("simple")!;
@@ -185,12 +185,13 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
         stack: { language: "TypeScript" },
       });
       const registry = createRegistry();
-      loadBuiltinPlugins(registry);
+      await loadBundle("code", registry);
       // Truncated flow — neither gate-2 nor finalize, so the FSM walks off
       // the end and emits FLOW_OVERFLOW.
       registry.flows.set("simple-broken", {
         name: "simple-broken",
         complexity: "simple",
+        phases: ["context", "final"],
         steps: ["initialize", "classify"],
       });
       registry.spawn_provider = {

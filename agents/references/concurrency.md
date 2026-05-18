@@ -11,7 +11,7 @@ when_to_load: |
   jobs, or race-condition-prone state mutations. Diff including Promise.all,
   asyncio.gather, parallel HTTP calls, mutex/lock usage, or read-modify-write
   patterns on shared state also qualifies.
-agent_hints: [challenger-reviewer, logic-reviewer, security-reviewer]
+agent_hints: [challenger-reviewer, logic-reviewer, security]
 ---
 
 # Concurrency — Senior Stance

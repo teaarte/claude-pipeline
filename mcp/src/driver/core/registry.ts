@@ -1,8 +1,8 @@
 /**
  * PluginRegistry — in-memory map of all registered plugins. Built once per
- * driver invocation by loaders/builtins.ts (+ optional project-config.ts).
- * Driver core consults this registry by type/name; it has no awareness of
- * which specific plugins are present.
+ * driver invocation by `loaders/bundles.ts` via `loadBundle()` (+ optional
+ * project-config.ts overlays). Driver core consults this registry by
+ * type/name; it has no awareness of which specific plugins are present.
  */
 
 import type {

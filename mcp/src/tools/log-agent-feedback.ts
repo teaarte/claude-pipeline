@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { agentFeedbackJsonl } from "../lib/paths.js";
-import { appendJsonl } from "../lib/state-io.js";
+import { appendJsonl, withFeedbackLock } from "../lib/state-io.js";
 import { validate } from "../lib/schemas.js";
 import { makeFeedbackId } from "../lib/ids.js";
 
@@ -60,6 +60,6 @@ export async function pipelineLogAgentFeedback(input: any): Promise<any> {
       `agent-feedback entry failed schema validation:\n${check.errors.map((e) => `  ${e.path}: ${e.message}`).join("\n")}`,
     );
   }
-  await appendJsonl(agentFeedbackJsonl, entry);
+  await withFeedbackLock(agentFeedbackJsonl, () => appendJsonl(agentFeedbackJsonl, entry));
   return { written: true, file: agentFeedbackJsonl, entry };
 }

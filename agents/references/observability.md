@@ -11,7 +11,7 @@ when_to_load: |
   error reporting. Diff including new endpoints, new background jobs, new
   external integrations, or any change that ships behavior-the-team-needs-to-watch
   also qualifies.
-agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+agent_hints: [logic-reviewer, performance, challenger-reviewer]
 ---
 
 # Observability — Senior Stance

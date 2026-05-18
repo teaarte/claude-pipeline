@@ -2,12 +2,12 @@ import { z } from "zod";
 import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
-import { PHASES, type Phase } from "../lib/phase-state-machine.js";
+import { CODE_PHASES, type Phase } from "../lib/phase-state-machine.js";
 import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 
 export const cancelSpawnSchema = {
   project_dir: z.string(),
-  phase: z.enum(PHASES),
+  phase: z.enum(CODE_PHASES),
   agent_run_id: z.string().regex(AGENT_RUN_ID_PATTERN),
   reason: z.string().min(1).describe("Why the spawn is being cancelled (logged for audit)."),
 };

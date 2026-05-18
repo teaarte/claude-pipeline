@@ -66,4 +66,3 @@ export async function captureGitDiff(projectDir: string): Promise<DiffSummary | 
   }
 }
 
-export { EMPTY as EMPTY_DIFF };

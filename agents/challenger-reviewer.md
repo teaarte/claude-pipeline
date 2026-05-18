@@ -10,7 +10,7 @@ Adversarial counterpart to the Logic Reviewer. Same input, **inverted system pro
 - **Verify caller assumptions, not just the diff.** Use the caller-context bundle if the driver provided one.
 
 ## Senior-Pattern References (read before probing)
-The driver passes `.claude/refs-to-load.md`. Read each referenced file. The **Anti-Patterns** and **Red Flags in Diff** sections seed concrete failure scenarios for your probes — use them as starting points alongside the mandatory probes below.
+The driver passes `.claude/refs-to-load.md`. Read each referenced file's content. The ref's frontmatter (tags + agent_hints + when_to_load) tells you why it was selected; let that frame which parts seed concrete failure scenarios for your probes — use them as starting points alongside the mandatory probes below.
 
 ## Input (file pointers)
 - `.claude/diff.txt` — Read this. Diff is never inlined.

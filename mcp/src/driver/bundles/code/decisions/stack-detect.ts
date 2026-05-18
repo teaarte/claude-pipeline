@@ -74,12 +74,71 @@ async function listRootFiles(projectDir: string): Promise<string[]> {
   }
 }
 
+const VALIDATION_MARKER_OPEN = /<!--\s*validation-commands\s*-->/i;
+const VALIDATION_MARKER_CLOSE = /<!--\s*\/validation-commands\s*-->/i;
+
 /**
- * Q26 / parseClaudeMd: parse "Validation Commands" labels from CLAUDE.md.
- * The marker-block form (`<!-- validation-commands -->`) lands in C5; this
- * commit keeps the English-header path identical to v2.2.5.
+ * v2.2.6 (C5): preferred marker-block convention. Parallel shape to the
+ * `<!-- antipattern -->` block from v2.2.5. Language-agnostic: works on
+ * CLAUDE.md authored in any language because parsing keys on the bullet
+ * prefix, not English headers.
+ *
+ *   <!-- validation-commands -->
+ *   - test: pnpm -r test
+ *   - lint: pnpm lint
+ *   - build: pnpm build
+ *   <!-- /validation-commands -->
+ *
+ * Accepts the same value-shape tolerance as the English-header parser:
+ * surrounding backticks/quotes stripped, trailing `# comment` trimmed.
+ */
+function parseValidationMarkerBlock(content: string): ClaudeMdCommands | null {
+  if (!VALIDATION_MARKER_OPEN.test(content)) return null;
+  const out: ClaudeMdCommands = {};
+  const lines = content.split("\n");
+  let inBlock = false;
+  for (const raw of lines) {
+    if (VALIDATION_MARKER_OPEN.test(raw)) {
+      inBlock = true;
+      continue;
+    }
+    if (VALIDATION_MARKER_CLOSE.test(raw)) {
+      inBlock = false;
+      continue;
+    }
+    if (!inBlock) continue;
+    const m = raw.match(/^\s*[-*]?\s*([A-Za-z_-]+)\s*:\s*(.+?)\s*$/);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const cmdKey: keyof ClaudeMdCommands | null =
+      key === "test"
+        ? "test_command"
+        : key === "lint"
+          ? "lint_command"
+          : key === "build"
+            ? "build_command"
+            : null;
+    if (!cmdKey || out[cmdKey]) continue;
+    const value = m[2]
+      .trim()
+      .replace(/^[`"'](.*)[`"']$/, "$1")
+      .replace(/\s*#.*$/, "")
+      .trim();
+    if (value) out[cmdKey] = value;
+  }
+  if (!out.test_command && !out.lint_command && !out.build_command) return null;
+  return out;
+}
+
+/**
+ * Q26 / parseClaudeMd: extract validation commands. Tries the
+ * `<!-- validation-commands -->` marker block first (v2.2.6 preferred form,
+ * language-agnostic); falls back to the English "Validation Commands"
+ * header parser for unconverted projects.
  */
 function parseClaudeMd(content: string): ClaudeMdCommands | null {
+  const markerHit = parseValidationMarkerBlock(content);
+  if (markerHit) return markerHit;
   const out: ClaudeMdCommands = {};
   const labels: Array<[string, keyof ClaudeMdCommands]> = [
     ["Test", "test_command"],

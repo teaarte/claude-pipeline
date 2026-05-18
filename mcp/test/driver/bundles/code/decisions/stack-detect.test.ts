@@ -470,6 +470,127 @@ describe("Q17 — detectStack", () => {
       await cleanup();
     }
   });
+
+  // v2.2.6 (C5): `<!-- validation-commands -->` marker convention.
+  // Language-agnostic — works for CLAUDE.md authored in any language.
+
+  it("C5: marker block `<!-- validation-commands -->` wins over English header", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "vitest" } }),
+        "utf8",
+      );
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "# Project",
+          "",
+          "## Validation Commands",
+          "- Test: pnpm wrong-test",
+          "- Lint: pnpm wrong-lint",
+          "",
+          "<!-- validation-commands -->",
+          "- test: pnpm -r test",
+          "- lint: pnpm -r lint",
+          "- build: pnpm -r build",
+          "<!-- /validation-commands -->",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("pnpm -r test");
+      expect(stack.lint_command).toBe("pnpm -r lint");
+      expect(stack.build_command).toBe("pnpm -r build");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C5: marker block strips backticks + trailing # comments", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }), "utf8");
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "<!-- validation-commands -->",
+          "- test: `pnpm -r test                # vitest`",
+          "- lint: pnpm lint  # via eslint",
+          "- build: \"pnpm build\"",
+          "<!-- /validation-commands -->",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("pnpm -r test");
+      expect(stack.lint_command).toBe("pnpm lint");
+      expect(stack.build_command).toBe("pnpm build");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C5: marker block works when CLAUDE.md prose is non-English", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }), "utf8");
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "# Проект",
+          "",
+          "## Команды для проверки",
+          "Запусти эти команды:",
+          "",
+          "<!-- validation-commands -->",
+          "- test: pnpm -r test",
+          "- lint: pnpm lint",
+          "<!-- /validation-commands -->",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("pnpm -r test");
+      expect(stack.lint_command).toBe("pnpm lint");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C5: missing close marker still parses bullets after the open marker (defensive)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }), "utf8");
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        [
+          "<!-- validation-commands -->",
+          "- test: pnpm test",
+          "",
+          "(forgot closing marker)",
+        ].join("\n"),
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.test_command).toBe("pnpm test");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C5: project WITHOUT CLAUDE.md still gets a sensible stack via candidates", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "Cargo.toml"), `[package]\nname = "x"\n`, "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("rust");
+      expect(stack.test_command).toBe("cargo test");
+    } finally {
+      await cleanup();
+    }
+  });
 });
 
 /**

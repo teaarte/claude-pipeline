@@ -7,11 +7,14 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { BUILTIN_STEPS } from "../../../../../src/driver/bundles/code/steps/index.js";
 import { createRegistry } from "../../../../../src/driver/core/registry.js";
 import { loadBundle } from "../../../../../src/driver/loaders/bundles.js";
 import { makeInitialDriverState } from "../../../../../src/driver/core/state.js";
 import { tempProject } from "../../../../helpers/setup.js";
+import { pipelineInit } from "../../../../../src/tools/init.js";
 import type {
   DriverState,
   StepContext,
@@ -221,6 +224,83 @@ describe("Q9: review step fan-out", () => {
       expect(issued.length).toBeGreaterThan(1);
       for (const id of issued) {
         expect(state.pending_spawns[id]).toBeTruthy();
+      }
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("H2: team_knowledge propagates to EVERY agent in the REVIEW fan-out", async () => {
+    const proj = await tempProject();
+    try {
+      // Project config wires a team-knowledge ref; init writes it into
+      // pipeline-state.team_knowledge_refs so loadTeamKnowledgeForSpawn finds it.
+      const kbPath = "kb/conventions.md";
+      const kbBody = "Use semicolons. Never use console.log in production.";
+      await mkdir(join(proj.dir, "kb"), { recursive: true });
+      await writeFile(join(proj.dir, kbPath), kbBody, "utf8");
+      await mkdir(join(proj.dir, ".claude"), { recursive: true });
+      await writeFile(
+        join(proj.dir, ".claude", "pipeline.config.json"),
+        JSON.stringify({ bundle: "code", team_knowledge_refs: [kbPath] }),
+        "utf8",
+      );
+      await pipelineInit({
+        project_dir: proj.dir,
+        task: "fan-out team_knowledge probe",
+        task_id: "t-2026-05-19-h2tkfo",
+        complexity: "medium",
+        tests_mode: "regression-only",
+        stack: { language: "TypeScript" },
+      });
+
+      const state = makeInitialDriverState({
+        project_dir: proj.dir,
+        task: "fan-out team_knowledge probe",
+        flow_name: "medium",
+      });
+      state.decisions["complexity"] = "medium";
+      state.decisions["security_needed"] = true;
+      state.decisions["ui_touched"] = false;
+      state.decisions["api_touched"] = false;
+
+      // Capturing provider — records every AgentSpawnRequest it receives.
+      const captured: AgentSpawnRequest[] = [];
+      const ctx: StepContext = {
+        registry: createRegistry(),
+        async beginSpawn(a, p) {
+          const id = `ar-tk-${String(captured.length + 1).padStart(11, "0")}`;
+          state.pending_spawns[id] = {
+            agent: a,
+            phase: p,
+            started_at: new Date().toISOString(),
+          };
+          return id;
+        },
+      };
+      await loadBundle("code", ctx.registry);
+      ctx.registry.spawn_provider = {
+        name: "capture",
+        async spawn(req) {
+          captured.push(req);
+          return {
+            type: "shuttle",
+            response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
+              subagent_type: "general-purpose",
+              description: `capture ${req.agent}`,
+              prompt: "capture",
+              model: req.model,
+            }),
+          };
+        },
+      };
+
+      const result = await REVIEW.run(state, ctx);
+      expect(result.type).toBe("shuttle");
+      expect(captured.length).toBeGreaterThan(1);
+      for (const req of captured) {
+        expect(req.team_knowledge ?? "").toContain("Use semicolons");
+        expect(req.team_knowledge ?? "").toContain(kbPath);
       }
     } finally {
       await proj.cleanup();

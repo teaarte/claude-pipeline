@@ -434,6 +434,7 @@ const REVIEW: StepPlugin = {
     await closePriorPhases(state, "implementation");
     const provider = requireSpawnProvider(ctx.registry);
     const config = (state.scratch.config as any) ?? defaultConfig;
+    const teamKnowledge = await loadTeamKnowledgeForSpawn(state);
     const newIssuedIds: string[] = [];
     const spawns: Array<{
       agent_run_id: string;
@@ -452,6 +453,7 @@ const REVIEW: StepPlugin = {
         model,
         template_path: agent.template_path,
         prompt: `Spawn agent: ${agent.name}. Project: ${state.project_dir}. Task: ${state.task}.`,
+        team_knowledge: teamKnowledge,
       });
       if (result.type !== "shuttle" || result.response.status !== "spawn-agent") {
         throw new Error(

@@ -46,7 +46,7 @@ export const myBundle: BundleManifest = {
   supported_steps: ["initialize", "finalize"],
   supported_hooks: [],
   supported_gates: [],
-  task_prompt_template_path: "bundles/my-bundle/task-prompt.md",
+  task_prompt_template_path: "mcp/src/driver/bundles/my-bundle/task-prompt.md",
 };
 ```
 

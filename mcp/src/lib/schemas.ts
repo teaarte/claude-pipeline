@@ -11,7 +11,11 @@ let vocab: any = null;
 
 async function getAjv(): Promise<Ajv2020> {
   if (ajvInstance) return ajvInstance;
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  // L5: `strict: "log"` surfaces schema-authoring bugs (unknown keywords,
+  // type collisions) on stderr instead of swallowing them. Behaviour at
+  // validation time is unchanged. Revert to `false` only if log noise
+  // becomes a problem in practice.
+  const ajv = new Ajv2020({ allErrors: true, strict: "log" });
   addFormats(ajv);
   // Pre-load all schemas so $ref between them resolves.
   for (const name of [

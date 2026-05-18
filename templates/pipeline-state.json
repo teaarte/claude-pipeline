@@ -45,6 +45,7 @@
       "drift_files_count": 0,
       "test_files_modified_by_implementer": [],
       "checkpoint_results": [],
+      "gate2_revisions": 0,
       "agents": [],
       "open_spawns": []
     },

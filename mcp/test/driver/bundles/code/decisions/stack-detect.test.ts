@@ -358,4 +358,158 @@ describe("Q17 — detectStack", () => {
       await cleanup();
     }
   });
+
+  // v2.2.6 (C3): candidate-driven path enables ecosystems the old detector
+  // didn't recognize. Adding any of these to the pipeline = edit YAML, no TS.
+
+  it("C# (csproj) → csharp + dotnet + dotnet test", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "MyApp.csproj"), "<Project></Project>", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("csharp");
+      expect(stack.package_manager).toBe("dotnet");
+      expect(stack.test_command).toBe("dotnet test");
+      expect(stack.lint_command).toBe("dotnet format --verify-no-changes");
+      expect(stack.build_command).toBe("dotnet build");
+      expect(stack.project_type).toBe("backend");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C# (.sln only) → csharp + dotnet detected via glob signal *.sln", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "MySolution.sln"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("csharp");
+      expect(stack.package_manager).toBe("dotnet");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Svelte (svelte.config.js) → svelte language, frontend-app (signal-file path)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "x",
+          dependencies: { "@sveltejs/kit": "^2" },
+          scripts: { test: "vitest", lint: "eslint .", build: "vite build" },
+        }),
+        "utf8",
+      );
+      await writeFile(join(dir, "pnpm-lock.yaml"), "", "utf8");
+      await writeFile(join(dir, "svelte.config.js"), "export default {};", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("svelte");
+      expect(stack.project_type).toBe("frontend-app");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Elixir (mix.exs) → elixir + mix + mix test", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "mix.exs"), `defmodule X.MixProject do\nend\n`, "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("elixir");
+      expect(stack.package_manager).toBe("mix");
+      expect(stack.test_command).toBe("mix test");
+      expect(stack.lint_command).toBe("mix credo");
+      expect(stack.build_command).toBe("mix compile");
+      expect(stack.project_type).toBe("backend");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Dart (pubspec.yaml) → dart + pub + flutter test + frontend-app", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "pubspec.yaml"), "name: my_app\n", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("dart");
+      expect(stack.package_manager).toBe("pub");
+      expect(stack.test_command).toBe("flutter test");
+      expect(stack.lint_command).toBe("dart analyze");
+      expect(stack.project_type).toBe("frontend-app");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Python with poetry.lock → poetry-prefixed commands (PM-aware behavior)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "pyproject.toml"), `[tool.poetry]\nname = "x"\n`, "utf8");
+      await writeFile(join(dir, "poetry.lock"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("python");
+      expect(stack.package_manager).toBe("poetry");
+      expect(stack.test_command).toBe("poetry run pytest");
+      expect(stack.lint_command).toBe("poetry run ruff check");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("Python with uv.lock → uv-prefixed commands", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "pyproject.toml"), `[project]\nname = "x"\n`, "utf8");
+      await writeFile(join(dir, "uv.lock"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.package_manager).toBe("uv");
+      expect(stack.test_command).toBe("uv run pytest");
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+/**
+ * Extensibility test: prove the YAML-only path works end-to-end by
+ * injecting a synthetic Crystal language candidate via the resolveStack
+ * pure function. If the resolver picks the new language without any TS
+ * edit, the architecture goal of v2.2.6 is met.
+ */
+describe("C3: resolveStack accepts in-test YAML extensions (Crystal)", () => {
+  it("a fixture project with shard.yml resolves to the synthetic 'crystal' language", async () => {
+    const { resolveStack } = await import("../../../../../src/driver/bundles/code/decisions/stack-detect.js");
+    const { parseStackCandidatesString } = await import("../../../../../src/lib/stack-candidates.js");
+    const candidates = parseStackCandidatesString(`
+languages:
+  - name: crystal
+    signal_files: ["shard.yml"]
+    extensions: [".cr"]
+package_managers:
+  - name: shards
+    languages: [crystal]
+    signal_files: ["shard.lock"]
+default_commands:
+  - language: crystal
+    package_manager: shards
+    test: "crystal spec"
+    lint: "ameba"
+    build: "shards build"
+project_type_signals:
+  - type: library
+    languages: [crystal]
+`);
+    const signals = {
+      files_present: ["shard.yml", "shard.lock"],
+      package_json: null,
+      claude_md_commands: null,
+    };
+    const stack = resolveStack(signals, candidates);
+    expect(stack.language).toBe("crystal");
+    expect(stack.package_manager).toBe("shards");
+    expect(stack.test_command).toBe("crystal spec");
+    expect(stack.project_type).toBe("library");
+  });
 });

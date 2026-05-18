@@ -7,8 +7,9 @@ For pipeline phase plans, see [`phases/`](phases/).
 
 ## Summary
 
-- **30 validation-driven Q-items closed** across 4 bundles (v2.1-hotfix, v2.1-polish-bundle, v2.2-clear-bundle, v2.2a-review-completeness)
-- **5 real-task validation runs** on s3-panel surfaced these items — see [`../validation-log.md`](../validation-log.md) and per-task files in [`../validation/closed-tasks/`](../validation/closed-tasks/)
+- **46 validation-driven Q-items closed** across 6 bundles (v2.1-hotfix, v2.1-polish-bundle, v2.2-clear-bundle, v2.2a-review-completeness, v2.2.5-bundle-foundation + followups, v2.2.6-stack-classifier).
+- **10 real-task validation runs** across s3-panel + wandr-be + frontend-core — see [`../validation-log.md`](../validation-log.md) and per-task files in [`../validation/closed-tasks/`](../validation/closed-tasks/).
+- v2.2.6 (Q63 + Q64) is shipped on the branch but **awaiting merge to `main`** at the time of this writing — see status note in `phases/v2.2.6-stack-classifier.md`.
 
 ## v2.1-hotfix bundle (2026-05-14, pre-bundle hot-fixes)
 

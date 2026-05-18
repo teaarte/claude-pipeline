@@ -26,13 +26,23 @@ export interface MCPHandshakeResult {
   advertised_tools: string[];
 }
 
+export interface MCPSpawnOptions {
+  /**
+   * Manager-owned abort signal. The manager fires this on health-check
+   * timeout so a late-resolving spawn can kill its child instead of
+   * leaving an orphan (H9). Default transport listens; synthetic
+   * transports may ignore.
+   */
+  signal?: AbortSignal;
+}
+
 export interface MCPClientTransport {
   /**
    * Spawn the server process. Implementations choose how to do the
    * handshake (real MCP JSON-RPC, mocked, etc.) and return what the
    * server advertised.
    */
-  spawn(plugin: MCPClientPlugin): Promise<{
+  spawn(plugin: MCPClientPlugin, options?: MCPSpawnOptions): Promise<{
     process: ChildProcess | null;
     handshake: MCPHandshakeResult;
   }>;
@@ -64,10 +74,12 @@ export class MCPClientManager {
   ) {}
 
   async addClient(plugin: MCPClientPlugin): Promise<void> {
+    const controller = new AbortController();
     try {
       const { process, handshake } = await withTimeout(
-        this.transport.spawn(plugin),
+        this.transport.spawn(plugin, { signal: controller.signal }),
         plugin.health_check?.timeout_ms,
+        () => controller.abort(),
       );
       if (plugin.health_check) {
         if (!handshake.advertised_tools.includes(plugin.health_check.tool)) {
@@ -91,6 +103,9 @@ export class MCPClientManager {
       });
       await this.audit({ event: "mcp-client-spawned", client: plugin.name });
     } catch (e) {
+      // Ensure cleanup whether the failure came from withTimeout or from
+      // inside transport.spawn — late-resolving children must be killed.
+      controller.abort();
       await this.audit({
         event: "mcp-client-spawn-failed",
         client: plugin.name,
@@ -129,7 +144,7 @@ export class MCPClientManager {
 
 function defaultTransport(): MCPClientTransport {
   return {
-    async spawn(plugin) {
+    async spawn(plugin, options) {
       // v2.2.5 stub: spawn the process but do NOT perform a real MCP
       // handshake yet. The handshake JSON-RPC implementation lands in v2.3
       // when the daemon ships. Until then, we trust plugin.expose_tools as
@@ -143,6 +158,53 @@ function defaultTransport(): MCPClientTransport {
         env: { ...process.env, ...(plugin.env ?? {}) },
         stdio: ["pipe", "pipe", "pipe"],
       });
+      // H8: nodeSpawn emits the 'error' event asynchronously for ENOENT
+      // (invalid cmd). Without a listener that crashes the host process.
+      // Race the 'spawn' vs 'error' events so the manager's existing
+      // try/catch can convert it into an mcp-client-spawn-failed audit.
+      // H9: respect the manager's abort signal — if withTimeout aborts
+      // before the child reports either event, kill the late arrival.
+      await new Promise<void>((resolve, reject) => {
+        const onSpawn = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = (err: Error) => {
+          cleanup();
+          reject(err);
+        };
+        const onAbort = () => {
+          cleanup();
+          if (!proc.killed) proc.kill("SIGKILL");
+          reject(new Error("mcp client spawn aborted"));
+        };
+        const cleanup = () => {
+          proc.off("spawn", onSpawn);
+          proc.off("error", onError);
+          options?.signal?.removeEventListener("abort", onAbort);
+        };
+        proc.once("spawn", onSpawn);
+        proc.once("error", onError);
+        if (options?.signal) {
+          if (options.signal.aborted) {
+            onAbort();
+            return;
+          }
+          options.signal.addEventListener("abort", onAbort);
+        }
+      });
+      // Once we've handed off the process, the manager owns it. But any
+      // late abort (e.g. health-check timeout downstream) must still kill
+      // the child rather than leave an orphan.
+      if (options?.signal && !options.signal.aborted) {
+        options.signal.addEventListener(
+          "abort",
+          () => {
+            if (!proc.killed) proc.kill("SIGKILL");
+          },
+          { once: true },
+        );
+      }
       return {
         process: proc,
         handshake: { advertised_tools: [...plugin.expose_tools] },
@@ -156,10 +218,17 @@ function defaultTransport(): MCPClientTransport {
   };
 }
 
-async function withTimeout<T>(p: Promise<T>, ms: number | undefined): Promise<T> {
+async function withTimeout<T>(
+  p: Promise<T>,
+  ms: number | undefined,
+  onTimeout?: () => void,
+): Promise<T> {
   if (!ms || ms <= 0) return p;
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`mcp client spawn timed out after ${ms}ms`)), ms);
+    const t = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`mcp client spawn timed out after ${ms}ms`));
+    }, ms);
     p.then(
       (v) => {
         clearTimeout(t);

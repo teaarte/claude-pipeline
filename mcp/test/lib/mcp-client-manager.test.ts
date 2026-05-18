@@ -117,4 +117,55 @@ describe("MCPClientManager (item 6)", () => {
     const manager = new MCPClientManager(makeSuccessTransport([]));
     expect(manager.getExposedTools()).toEqual([]);
   });
+
+  it("H8: ENOENT on default transport doesn't crash the manager", async () => {
+    const { audits, emit } = captureAudit();
+    // Use the default (real) transport — server_command resolves via PATH.
+    const manager = new MCPClientManager(undefined, emit);
+    await manager.addClient(
+      makePlugin({
+        name: "broken-mcp",
+        server_command: ["nonexistent-binary-mcp-h8-probe"],
+      }),
+    );
+    expect(manager.getExposedTools()).toEqual([]);
+    const failed = audits.find((a) => a.event === "mcp-client-spawn-failed");
+    expect(failed?.client).toBe("broken-mcp");
+    // Detail should reflect the ENOENT origin, not a vague "unknown" message.
+    expect(failed?.detail).toBeTruthy();
+  });
+
+  it("H9: timeout aborts the signal so a late-resolving spawn can clean up", async () => {
+    const { audits, emit } = captureAudit();
+    let abortObserved = false;
+    const slowTransport: MCPClientTransport = {
+      async spawn(_plugin, options) {
+        // Resolve well after the timeout has fired.
+        return new Promise((resolve) => {
+          options?.signal?.addEventListener("abort", () => {
+            abortObserved = true;
+          });
+          setTimeout(() => {
+            resolve({
+              process: null,
+              handshake: { advertised_tools: ["search"] },
+            });
+          }, 100);
+        });
+      },
+      async kill() {
+        /* synthetic */
+      },
+    };
+    const manager = new MCPClientManager(slowTransport, emit);
+    await manager.addClient(
+      makePlugin({
+        health_check: { tool: "search", timeout_ms: 10 },
+      }),
+    );
+    expect(manager.getExposedTools()).toEqual([]);
+    const failed = audits.find((a) => a.event === "mcp-client-spawn-failed");
+    expect(failed?.detail).toContain("timed out");
+    expect(abortObserved).toBe(true);
+  });
 });

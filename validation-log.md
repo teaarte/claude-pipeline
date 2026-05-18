@@ -198,6 +198,8 @@ Per-task entries live in `validation/closed-tasks/`. Each file is a self-contain
 
 | Date | task_id | Project / scope | Verdict | File |
 |---|---|---|---|---|
+| 2026-05-19 | (bundle) | **v2.2.5-followups** — code-review fix bundle (13 HIGH + 16 MEDIUM + 6 LOW; H1+H2 closed regressions in v2.2.5 Items 7 + 8) | accepted | [closed-tasks/2026-05-19-v2.2.5-followups.md](validation/closed-tasks/2026-05-19-v2.2.5-followups.md) |
+| 2026-05-18 | `t-2026-05-18-implementphase07step` | **frontend-core** — Phase 0.7 Step 1 module-contract overlay primitives (1st run on v2.2.5+followups branch; 8 blockers caught at gate-1; surfaced 5 observations now Items 6-10 of v2.2.6 + Q63) | accepted (force-final) | [closed-tasks/2026-05-18-frontend-core-phase07-step1.md](validation/closed-tasks/2026-05-18-frontend-core-phase07-step1.md) |
 | 2026-05-17 | `t-2026-05-17-c797` | **frontend-core** — doc drift fix + module-contract test wiring (3rd project full fan-out; surfaced 8 new Q-items + classifier-agent shuttle-path insight) | accepted (force) | [closed-tasks/2026-05-17-frontend-core-doc-drift.md](validation/closed-tasks/2026-05-17-frontend-core-doc-drift.md) |
 | 2026-05-14 | `t-2026-05-14-31fb` | **wandr-be** — tech-debt cleanup sweep (first non-frontend, first non-English, first full-fan-out) | accepted | [closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md](validation/closed-tasks/2026-05-14-wandr-be-techdebt-sweep.md) |
 | 2026-05-14 | `t-2026-05-14-addauthtokendecodert` | s3-panel — auth-token decoder in core bootstrap | accepted | [closed-tasks/2026-05-14-addauthtokendecodert.md](validation/closed-tasks/2026-05-14-addauthtokendecodert.md) |

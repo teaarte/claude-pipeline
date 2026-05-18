@@ -2,7 +2,7 @@
 
 > Daily-usage patterns + command-choice flowchart. For overview + install, see [`README.md`](README.md). For positioning + UX vision, see [`specs/product-vision.md`](specs/product-vision.md) and [`specs/ui-vision.md`](specs/ui-vision.md). For the planned phases, see [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md).
 >
-> **Current state (v2.2a):** review surface unlocked — non-simple flows fan out to 5 reviewers in implementation (logic + challenger + style + security + performance) gated by `applies_to` predicates. Pre-review infrastructure files (`diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`) emit on implementation entry. Real-task runs verify Q22 metrics row, Q23 server-side cleanup, Q24/Q36 Stop hook tri-state, Q29 vocab expansion in production.
+> **Current state (v2.2.6):** review surface stable — non-simple flows fan out to 5 reviewers in implementation (logic + challenger + style + security + performance) gated by `applies_to` predicates. Pre-review infrastructure files (`diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`) emit on implementation entry. Bundle abstraction first-class (v2.2.5); stack-classifier candidate registry — adding new languages is a YAML edit (v2.2.6). Q63 auto-close validation/final on clean success; Q64 cross-session ownership safety. Canonical task_id propagation with defensive runtime rewrite. 10 real-task runs across s3-panel + wandr-be + frontend-core.
 
 ## Choosing the Right Command
 
@@ -98,32 +98,61 @@ The pipeline auto-detects `tests_mode` at STEP 1 based on project type:
 
 ## How the Pipeline Detects Your Stack
 
-`classify` step (in `mcp/src/driver/builtin/steps/`) reads CLAUDE.md "Validation Commands" section and project files. Decision logic lives in `mcp/src/driver/builtin/decisions/`:
+As of **v2.2.6**, stack detection is **table-driven** via `templates/stack-candidates.yaml`. The YAML enumerates languages, package managers, default test/lint/build commands, and project-type heuristics. `mcp/src/driver/bundles/code/decisions/stack-detect.ts` is two pure-ish functions — `gatherStackSignals()` reads the project root + `CLAUDE.md` + `package.json`; `resolveStack()` walks the YAML to pick `{language, package_manager, test_command, lint_command, build_command, project_type}`. Zero per-language conditional branches in TypeScript.
 
+Out of the box, 9 ecosystems work: TypeScript, JavaScript, Python, Rust, Go, C#, Svelte, Elixir, Dart.
+
+CLAUDE.md can override the deterministic defaults via the preferred marker convention (language-agnostic):
+
+```markdown
+<!-- validation-commands -->
+- test: pnpm -r test
+- lint: pnpm -r lint
+- build: pnpm build
+<!-- /validation-commands -->
 ```
-pubspec.yaml      → Flutter/Dart    → loads references/perf-flutter.md, ui-flutter.md, etc.
-package.json      → React/Next.js   → loads references/perf-react.md, ui-web.md, etc.
-@nestjs imports   → NestJS          → loads references/perf-nestjs.md, test-nestjs.md
-pyproject.toml    → Python/FastAPI  → loads references/perf-python.md, test-python.md
-```
 
-All agents receive `project_stack` and load the correct platform reference files. You never need to tell agents what language you're using.
+The deprecated `## Validation Commands` English-header form still works as a fallback. The classifier-agent (v2.2.7) will eventually override the deterministic baseline with LLM picks when its output is available; until then the YAML resolver is authoritative.
 
-**Senior-pattern references** (Tier 1/2/3) are conditionally loaded by the `refs-to-load` decision plugin based on stack + diff content + task keywords. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. Capped at 5 senior-pattern files per agent per task to avoid prompt bloat. The list lands in `.claude/refs-to-load.md`.
+**Senior-pattern references** in `agents/references/` self-describe via YAML frontmatter (`tags`, `agent_hints`, `summary`, `when_to_load`). The classifier-agent picks up to 5 relevant ones from the catalog; today they're populated via `state.decisions.refs_to_load`. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. The list lands in `.claude/refs-to-load.md`.
 
 ## Adding a New Platform
 
-Create reference files in `agents/references/`:
+Two complementary paths:
+
+**1. New language/ecosystem** — edit `templates/stack-candidates.yaml`:
+
+```yaml
+languages:
+  - name: kotlin
+    signal_files: ["build.gradle.kts", "settings.gradle.kts"]
+    extensions: [".kt", ".kts"]
+
+package_managers:
+  - name: gradle
+    languages: [kotlin]
+    signal_files: ["gradlew", "build.gradle.kts"]
+
+default_commands:
+  - language: kotlin
+    package_manager: gradle
+    test: "./gradlew test"
+    lint: "./gradlew ktlintCheck"
+    build: "./gradlew assemble"
+```
+
+No TypeScript change. The Zod loader cross-references your entry and fails fast at process start on typos.
+
+**2. New senior-pattern references** — drop new markdown files into `agents/references/`:
 
 ```bash
-# Example: adding Kotlin/Android support
 agents/references/perf-kotlin.md      # Performance checks
 agents/references/test-kotlin.md      # Test framework detection + patterns
 agents/references/ui-android.md       # Material Design compliance
 agents/references/e2e-android.md      # Espresso / UI Automator rules
 ```
 
-No agent files need changing — they auto-detect and load references by stack.
+Each ref has YAML frontmatter (tags + agent_hints + summary + when_to_load) so the classifier-agent picks them automatically when the task signal matches.
 
 ## Token-Saving Tips
 
@@ -168,21 +197,22 @@ Not just cleanup — it saves metrics and persists issues found by agents. Witho
 ### 6. Keep CLAUDE.md under 150 lines
 Every line loads on every message. Move reference tables to `docs/`.
 
-## Under the Hood (v2 plugin framework)
+## Under the Hood (v2 plugin framework + bundles)
 
-`/task` is a ≤30-line shuttle in `commands/task.md`. It hands off to `mcp__claude-pipeline__pipeline_run_task` which runs a TypeScript FSM driver in `mcp/src/driver/`. The driver consumes plugins from `mcp/src/driver/builtin/` — there are 7 plugin contracts in `types/plugin.ts`:
+`/task` is a ≤30-line shuttle in `commands/task.md`. It hands off to `mcp__claude-pipeline__pipeline_run_task` which runs a TypeScript FSM driver in `mcp/src/driver/`. As of v2.2.5, the driver loads plugins through **bundles** — `mcp/src/driver/bundles/code/` is the only bundle today; the `_template/` skeleton shows the shape for future bundles (content, research, VFX, …). There are 7 plugin contracts in `types/plugin.ts` + a `BundleManifest` contract in `types/bundle.ts`:
 
-| Contract | What it controls | Where built-ins live |
+| Contract | What it controls | Where code-bundle plugins live |
 |----------|------------------|----------------------|
-| `StepPlugin` | One FSM step (classify, plan, review, finalize, …) | `builtin/steps/` |
-| `AgentPlugin` | One LLM role wrapping an `agents/*.md` template | `builtin/agents/` |
-| `FlowPlugin` | Ordered list of steps per complexity | `builtin/flows/` |
-| `GatePlugin` | A human gate (gate-0/1/2 or custom) | `builtin/gates/` |
-| `DecisionPlugin<T>` | Pure decision (complexity, tests_mode, …) | `builtin/decisions/` |
-| `HookPlugin` | Cross-cutting side effect (past-misses load, anti-pattern grep, …) | `builtin/hooks/` |
-| `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / SubprocessClaude / Ollama later) | `builtin/spawn/` |
+| `StepPlugin` | One FSM step (classify, plan, review, finalize, …) | `bundles/code/steps/` (20) |
+| `AgentPlugin` | One LLM role wrapping an `agents/*.md` template | `bundles/code/agents/` (21) |
+| `FlowPlugin` | Ordered list of steps per complexity | `bundles/code/flows/` (3) |
+| `GatePlugin` | A human gate (gate-0/1/2 or custom) | `bundles/code/gates/` (3) |
+| `DecisionPlugin<T>` | Pure decision (complexity, tests_mode, stack-detect, …) | `bundles/code/decisions/` (8) |
+| `HookPlugin` | Cross-cutting side effect (past-misses load, anti-pattern grep, …) | `bundles/code/hooks/` (4) |
+| `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / Anthropic-SDK / Ollama later) | `bundles/code/spawn/` (1) |
+| `BundleManifest` | Bundle-level catalog of supported plugins + default flow + state-extension schema | `bundles/code/bundle.ts` |
 
-Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in a `FlowPlugin.steps`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. See [`v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) for the planned extension trajectory.
+Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in `bundle.ts` `supported_agents`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. Adding a non-code bundle (content / research / VFX) = new directory under `bundles/`, mirror the `_template/` skeleton, set `state.bundle: <name>`. See [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) for the planned extension trajectory.
 
 ## How Issues Flow
 
@@ -238,6 +268,6 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 - [`specs/ui-vision.md`](specs/ui-vision.md) — UX architecture: agent builder → specialist → team → curator → channels (where we're going)
 - [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) — phase index (v2.3 daemon + Web UI is next)
 - [`specs/open-backlog.md`](specs/open-backlog.md) — currently open Q-items
-- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 30 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a)
+- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 46 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a / v2.2.5 + followups / v2.2.6)
 - [`validation-log.md`](validation-log.md) — validation workflow + cross-cutting observations
-- [`validation/closed-tasks/`](validation/closed-tasks/) — per-task validation entries (5 real-task runs to date)
+- [`validation/closed-tasks/`](validation/closed-tasks/) — per-task validation entries (10 real-task runs across s3-panel + wandr-be + frontend-core)

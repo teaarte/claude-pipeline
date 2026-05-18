@@ -9,7 +9,6 @@ For pipeline phase plans, see [`phases/`](phases/).
 
 - **46 validation-driven Q-items closed** across 6 bundles (v2.1-hotfix, v2.1-polish-bundle, v2.2-clear-bundle, v2.2a-review-completeness, v2.2.5-bundle-foundation + followups, v2.2.6-stack-classifier).
 - **10 real-task validation runs** across s3-panel + wandr-be + frontend-core — see [`../validation-log.md`](../validation-log.md) and per-task files in [`../validation/closed-tasks/`](../validation/closed-tasks/).
-- v2.2.6 (Q63 + Q64) is shipped on the branch but **awaiting merge to `main`** at the time of this writing — see status note in `phases/v2.2.6-stack-classifier.md`.
 
 ## v2.1-hotfix bundle (2026-05-14, pre-bundle hot-fixes)
 
@@ -78,7 +77,7 @@ For pipeline phase plans, see [`phases/`](phases/).
 | Q60 | 🟢 LOW | (item 10 of v2.2.5) | **`BUILTIN_HOOKS` ordering invariant documented.** Comment-block above the export pins `git-diff-snapshot` first; consumers of `diff.txt` (`anti-pattern-grep`, `caller-context-expand`) annotated. Test asserts the ordering. |
 | Q41 / Q44 / Q45 / Q46 / Q58 / Q59 / Q61 | 🟡 MEDIUM | (item 9 of v2.2.5) | **LLM-classification cluster — substrate landed.** New `pickFromCandidates` primitive (`mcp/src/lib/pick-from-candidates.ts`) abstracts the LLM-classification pattern (defensive parse, hallucination filter, cap). Classifier-agent template (`agents/classifier.md`) emits structured JSON validated against `classifier-output.schema.json`. Decisions `refs-to-load` + `security-needed` collapsed to pure getters reading from `state.decisions`. Anti-pattern-grep hook reads from `state.decisions.antipattern_rules_applicable` (no keyword overlap heuristic). New `<!-- antipattern -->` marker convention supported in CLAUDE.md (with English-header fallback). **Auto-spawning of classifier inside CLASSIFY step deferred to v2.2.6** — current shuttle pattern requires test rework on a scale that wasn't worth fitting in this bundle. Pure-getter decisions work today via explicit state setup; daemon `query()` will activate end-to-end when v2.3 lands. Closes Q41/Q44/Q45/Q46/Q58/Q59/Q61 substrate; Q59 marker convention fully shipped. |
 
-## v2.2.6-stack-classifier (branch `v2.2.6-stack-classifier`)
+## v2.2.6-stack-classifier (PR #5, merged `e16f64c`)
 
 | Q | Severity | Commit | What |
 |---|---|---|---|

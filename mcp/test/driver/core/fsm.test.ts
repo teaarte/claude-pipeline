@@ -11,7 +11,7 @@ describe("driver/core/fsm", () => {
     const proj = await tempProject();
     try {
       const reg = createRegistry();
-      const flow: FlowPlugin = { name: "test", complexity: "simple", steps: ["one", "two", "stop"] };
+      const flow: FlowPlugin = { name: "test", complexity: "simple", phases: ["context", "final"], steps: ["one", "two", "stop"] };
       const one: StepPlugin = {
         name: "one",
         phase: "context",
@@ -55,7 +55,7 @@ describe("driver/core/fsm", () => {
     const proj = await tempProject();
     try {
       const reg = createRegistry();
-      const flow: FlowPlugin = { name: "test", complexity: "simple", steps: ["pause"] };
+      const flow: FlowPlugin = { name: "test", complexity: "simple", phases: ["context", "final"], steps: ["pause"] };
       const pause: StepPlugin = {
         name: "pause",
         phase: "context",
@@ -81,7 +81,7 @@ describe("driver/core/fsm", () => {
     const proj = await tempProject();
     try {
       const reg = createRegistry();
-      const flow: FlowPlugin = { name: "test", complexity: "simple", steps: ["bad"] };
+      const flow: FlowPlugin = { name: "test", complexity: "simple", phases: ["context", "final"], steps: ["bad"] };
       const bad: StepPlugin = {
         name: "bad",
         phase: "context",
@@ -108,7 +108,7 @@ describe("driver/core/fsm", () => {
     const proj = await tempProject();
     try {
       const reg = createRegistry();
-      const flow: FlowPlugin = { name: "test", complexity: "simple", steps: ["one"] };
+      const flow: FlowPlugin = { name: "test", complexity: "simple", phases: ["context", "final"], steps: ["one"] };
       const one: StepPlugin = {
         name: "one",
         phase: "context",

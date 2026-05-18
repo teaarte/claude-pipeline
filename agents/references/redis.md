@@ -11,7 +11,7 @@ when_to_load: |
   Sidekiq, RQ), pub/sub, distributed lock, ratelimit, or real-time presence.
   Diff including Redis client calls (redis., ioredis, node-redis, redis-py,
   lettuce, Bull, BullMQ, RedisCacheStore) qualifies.
-agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+agent_hints: [logic-reviewer, performance, challenger-reviewer]
 ---
 
 # Redis — Senior Stance

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRegistry, requireFlow, requireStep, requireAgent, requireGate, requireDecision, requireSpawnProvider } from "../../../src/driver/core/registry.js";
-import { loadBuiltinPlugins } from "../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../src/driver/loaders/bundles.js";
 
 describe("driver/core/registry", () => {
   it("createRegistry returns empty collections", () => {
@@ -14,9 +14,9 @@ describe("driver/core/registry", () => {
     expect(r.spawn_provider).toBeNull();
   });
 
-  it("loadBuiltinPlugins registers ≥17 steps, ≥20 agents, ≥3 flows, ≥3 gates, ≥6 decisions, ≥3 hooks, 1 spawn provider", () => {
+  it("loadBundle('code', r) registers ≥17 steps, ≥20 agents, ≥3 flows, ≥3 gates, ≥6 decisions, ≥3 hooks, 1 spawn provider", async () => {
     const r = createRegistry();
-    loadBuiltinPlugins(r);
+    await loadBundle("code", r);
     expect(r.steps.size).toBeGreaterThanOrEqual(17);
     expect(r.agents.size).toBeGreaterThanOrEqual(20);
     expect(r.flows.size).toBeGreaterThanOrEqual(3);

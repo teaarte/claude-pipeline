@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, appendFile, rename, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, appendFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
 import { homeMetricsDir } from "./paths.js";
@@ -16,12 +16,15 @@ export type AuditVerdict = "ok" | "error" | "force_bypass";
  * failures from the documented-and-handled noise.
  */
 export type ErrorClass =
-  | "swallowed-inv"        // closePriorPhases swallowing INV_002/010/011
-  | "retry-recovered"      // JSON-header lenient parse repaired the payload
-  | "schema-validation"    // reviewer-output / validator-output / finding schema fail
-  | "vocab-rejected"       // category not in vocab for agent
-  | "git-unavailable"      // Q33: git CLI absent or project_dir isn't a repo
-  | "genuine-failure";     // anything we don't recognise — investigate
+  | "swallowed-inv"            // closePriorPhases swallowing INV_002/010/011
+  | "retry-recovered"          // JSON-header lenient parse repaired the payload
+  | "schema-validation"        // reviewer-output / validator-output / finding schema fail
+  | "vocab-rejected"           // category not in vocab for agent
+  | "git-unavailable"          // Q33: git CLI absent or project_dir isn't a repo
+  | "team-knowledge-missing"   // Item 7: a team_knowledge_refs file failed to read
+  | "team-knowledge-truncated" // Item 7: combined team-knowledge content hit the 50KB cap
+  | "llm-classification-needed" // Item 9: classifier-agent failed/malformed — defaults applied
+  | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {
   schema_version: "1.0";
@@ -42,7 +45,10 @@ export type AuditEntry = {
  * fall through to `genuine-failure` so the operator can grep for them.
  */
 export function classifyErrorMessage(msg: string): ErrorClass {
-  if (/INV_(002|010|011|012)/.test(msg)) return "swallowed-inv";
+  // M5: widen to all INV_NNN codes; the prior list missed
+  // INV_001/003-009/SCHEMA_STATE/stale-spawn and silently classified
+  // everything else as "genuine-failure".
+  if (/INV_\d{3}|SCHEMA_STATE|stale-spawn/i.test(msg)) return "swallowed-inv";
   if (/Finding category .+ is not in vocab/.test(msg)) return "vocab-rejected";
   if (/(reviewer-output|validator-output|finding)\.schema\.json validation/i.test(msg)) return "schema-validation";
   if (/Finding failed schema validation/i.test(msg)) return "schema-validation";
@@ -109,34 +115,15 @@ function redactForGlobal(entry: AuditEntry): AuditEntry {
   return copy;
 }
 
-// Cheap gate: only walk the file when its size *might* exceed cap. avg
-// audit line ≈ 300 bytes; safety multiplier of 1.5× means we read only
-// when file size is plausibly over `cap` rows. Saves ~3MB of disk read per
-// MCP call once the file is established (Performance W1).
-const AVG_BYTES_PER_ENTRY = 300;
-
 /**
- * Append to a JSONL file but cap total entries at `cap`. When over, the
- * read-trim-rename branch runs under a proper-lockfile lock so two
- * concurrent audit() calls don't drop one another's entry at the cap
- * boundary (Challenger audit01).
+ * Append to a JSONL file but cap total entries at `cap`. H11: always under
+ * lock. The prior fast path skipped locking based on a `stat` size estimate,
+ * which let two concurrent audits both observe "under cap" and both append,
+ * predictably exceeding the cap. Audit is not latency-critical; the lock cost
+ * is negligible compared to the storage-bound guarantee.
  */
 async function appendCapped(file: string, entry: unknown, cap: number): Promise<void> {
   await ensureDir(file);
-  // Fast path: cheap stat to decide if rotation is even plausible.
-  let plausiblyOverCap = false;
-  try {
-    const st = await stat(file);
-    if (st.size > cap * AVG_BYTES_PER_ENTRY) plausiblyOverCap = true;
-  } catch {
-    /* file doesn't exist yet — definitely not over cap */
-  }
-  if (!plausiblyOverCap) {
-    await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
-    return;
-  }
-  // Slow path: lock + read-trim-rename. Append-then-truncate avoids
-  // dropping the new entry under contention.
   if (!(await fileExists(file))) {
     await writeFile(file, "", "utf8");
   }

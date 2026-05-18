@@ -12,7 +12,7 @@ when_to_load: |
   Diff includes files under app/, 'use client'/'use server' directives,
   loading.tsx, error.tsx, not-found.tsx, route.ts, layout.tsx, revalidate,
   cacheTag, cacheLife, parallel/intercepted routes, or middleware.
-agent_hints: [logic-reviewer, performance-reviewer, ui-consistency, api-contract]
+agent_hints: [logic-reviewer, performance, ui-consistency, api-contract]
 ---
 
 # Next.js App Router — Senior Stance

@@ -9,7 +9,7 @@ describe("pipeline_meta", () => {
     expect(m.protocol_version).toBe("2.0");
     expect(m.plugin_api_version).toBe(PLUGIN_API_VERSION);
     expect(m.plugin_api_version).toBe("1.0");
-    expect(m.schema_versions["pipeline-state"]).toBe("1.0");
+    expect(m.schema_versions["pipeline-state"]).toBe("1.1");
     expect(m.schema_versions["finding"]).toBe("1.0");
     expect(m.tools.length).toBeGreaterThanOrEqual(17);
     expect(m.tools).toContain("pipeline_run_task");

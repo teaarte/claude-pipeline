@@ -10,7 +10,7 @@ when_to_load: |
   perf regression is suspected, or a feature has explicit latency/throughput
   requirements. Preemptive load when CLAUDE.md or task mentions SLO, latency
   budget, "scale to N users", or similar.
-agent_hints: [performance-reviewer, logic-reviewer, challenger-reviewer]
+agent_hints: [performance, logic-reviewer, challenger-reviewer]
 ---
 
 # Optimization Strategy — Senior Stance

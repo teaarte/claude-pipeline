@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import { createRegistry } from "../../../src/driver/core/registry.js";
 import { runFSM, type SpawnRecorder } from "../../../src/driver/core/fsm.js";
 import { makeInitialDriverState } from "../../../src/driver/core/state.js";
-import { loadBuiltinPlugins } from "../../../src/driver/loaders/builtins.js";
+import { loadBundle } from "../../../src/driver/loaders/bundles.js";
 import { spawnAgent } from "../../../src/driver/core/shuttle.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -46,7 +46,7 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
       };
 
       const registry = createRegistry();
-      loadBuiltinPlugins(registry);
+      await loadBundle("code", registry);
       registry.spawn_provider = noopProvider;
 
       const state = makeInitialDriverState({
@@ -62,7 +62,7 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
 
       expect(response.status).toBe("spawn-agent");
       expect(captured.length).toBe(1);
-      // planner's default_model is "opus" (mcp/src/driver/builtin/agents/index.ts).
+      // planner's default_model is "opus" (mcp/src/driver/bundles/code/agents/index.ts).
       expect(captured[0]).toEqual({ agent: "planner", model: "opus" });
     } finally {
       await rm(project, { recursive: true, force: true });
@@ -73,7 +73,7 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
     const project = await mkdtemp(join(tmpdir(), "cp-q19-noinject-"));
     try {
       const registry = createRegistry();
-      loadBuiltinPlugins(registry);
+      await loadBundle("code", registry);
       registry.spawn_provider = {
         name: "noop",
         async spawn(req) {

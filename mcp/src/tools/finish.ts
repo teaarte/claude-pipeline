@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { stateFile, findingsFile, pipelineJsonl } from "../lib/paths.js";
-import { withStateLock, appendJsonl } from "../lib/state-io.js";
+import { stateFile, findingsFile, summaryFile, pipelineJsonl } from "../lib/paths.js";
+import { withStateLock, appendJsonl, writeText } from "../lib/state-io.js";
 import { runInvariants } from "../lib/invariants.js";
+import { buildSummary } from "../lib/summary.js";
 
 export const finishSchema = {
   project_dir: z.string(),
@@ -10,6 +11,14 @@ export const finishSchema = {
   task_short: z.string().optional().describe("Short task title for metrics row"),
   force: z.boolean().optional().describe("Force finish even with stale-spawn violations. Records pipeline_violation."),
 };
+
+/**
+ * Q48 (item 11): observability columns missing from pre-v2.2.5 metric rows.
+ * Surfaced from frontend-core 2026-05-17 where state had
+ * `pipeline_violation: "phase-force-final"` and audit had `force_used:true`
+ * but the metric row dropped both. Cross-project analysis can't answer
+ * "what % of runs force-bypass?" or "Gate 2 reject rate?" without these.
+ */
 
 function shortFromTaskId(taskId: string): { date: string; short: string } {
   // task_id pattern: t-YYYY-MM-DD-slug
@@ -31,6 +40,10 @@ export async function pipelineFinish(input: {
   return withStateLock(file, async (state) => {
     if (!state) throw new Error(`pipeline-state.json not found at ${file}`);
 
+    // Item 11: stamp the wall-clock end before invariants so the metric row
+    // can read it back consistently. Re-finish (idempotent) keeps the first
+    // stamp.
+    state.ended_at ??= new Date().toISOString();
     // Set verdict first so invariant INV_007 runs against the intended outcome.
     state.verdict = input.verdict;
 
@@ -83,6 +96,7 @@ export async function pipelineFinish(input: {
     );
     const acceptanceFirstPass = acceptanceFirst ? acceptanceFirst.verdict === "PASS" : false;
 
+    const reviewerCount = new Set(verdicts.map((v) => v.agent)).size;
     const row = {
       schema_version: "1.0",
       date,
@@ -94,9 +108,11 @@ export async function pipelineFinish(input: {
       stack: state.stack ?? null,
       plan_iters: planIters,
       gate1_revisions: phases.planning?.gate1_revisions ?? 0,
+      gate2_revisions: phases.implementation?.gate2_revisions ?? 0,
       impl_iters: implIters,
       blockers_found: state.blockers_found ?? 0,
       reviewers_with_blockers: reviewersWithBlockers,
+      reviewer_count: reviewerCount,
       reviewer_verdicts: verdicts.map((v) => ({
         agent: v.agent,
         phase: v.phase,
@@ -115,9 +131,19 @@ export async function pipelineFinish(input: {
       reviewer_misses_post_merge: 0,
       verdict: input.verdict,
       categories_seen: categoriesSeen,
+      // Q48 / Item 11: observability columns the row dropped pre-v2.2.5.
+      force_used: input.force === true || state.pipeline_violation != null,
+      pipeline_violation: state.pipeline_violation ?? null,
+      started_at: state.started_at,
+      ended_at: state.ended_at,
     };
 
     await appendJsonl(pipelineJsonl, row);
+
+    // Q55: rewrite pipeline-state-summary.md with the final verdict so
+    // post-run inspection isn't stuck reading a stale snapshot from the
+    // last set-phase-status call.
+    await writeText(summaryFile(input.project_dir), await buildSummary(state));
 
     return {
       state,

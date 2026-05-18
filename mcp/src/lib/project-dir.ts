@@ -13,7 +13,7 @@
  * for the smoke tests that mkdtemp() under $TMPDIR and need to write there.
  * Test harnesses set this; production must not.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, normalize, resolve, join, sep } from "node:path";
 
@@ -60,10 +60,23 @@ export async function assertProjectDirAllowed(projectDir: string): Promise<void>
     throw new Error(`project_dir contains a traversal segment '..': '${projectDir}'`);
   }
   const roots = await loadAllowedRoots();
+  // M16: realpath BEFORE comparing against allow-list. Without this a
+  // symlink (e.g. /tmp -> /private/tmp on macOS, or a user-planted
+  // /allowed -> /etc) bypasses the check. We compare both the resolved
+  // path AND its real-path against every allowed root (real-path'd too).
   const resolved = resolve(normalized);
+  const realResolved = await realpath(resolved).catch(() => resolved);
   for (const r of roots) {
     const root = resolve(r);
-    if (resolved === root || resolved.startsWith(root + sep)) return;
+    const realRoot = await realpath(root).catch(() => root);
+    if (
+      resolved === root ||
+      resolved.startsWith(root + sep) ||
+      realResolved === realRoot ||
+      realResolved.startsWith(realRoot + sep)
+    ) {
+      return;
+    }
   }
   throw new Error(
     `project_dir '${projectDir}' is not inside an allowed root (cwd, tmp, or settings.json:pipeline.allowed_project_roots). Set CLAUDE_PIPELINE_ALLOW_ANY_PROJECT_DIR=1 to bypass.`,

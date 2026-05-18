@@ -123,6 +123,13 @@ export interface AgentPlugin extends PluginMeta {
    * Example: ui-consistency only applies when UI files were touched.
    */
   applies_to?(state: DriverState): boolean;
+  /**
+   * Optional whitelist of external MCP tool names this agent is allowed to
+   * call. Each tool must be a member of some active MCPClientPlugin's
+   * `expose_tools`. v2.3 wires this through the agent prompt; v2.2.5 just
+   * carries the slot.
+   */
+  mcp_tools?: string[];
 }
 
 // ----- Flow ---------------------------------------------------------------
@@ -130,19 +137,39 @@ export interface AgentPlugin extends PluginMeta {
 export interface FlowPlugin extends PluginMeta {
   name: string;
   complexity: string; // "simple" | "medium" | "complex" | custom
+  /**
+   * Ordered phase names this flow declares. Code-bundle flows use the
+   * canonical CODE_PHASES; future bundles can declare custom orderings.
+   * The driver core treats this opaquely — it is the authoritative
+   * ordering for the active flow (FSM-runtime, pipeline_validate).
+   */
+  phases: string[];
   steps: string[]; // ordered StepPlugin names
 }
 
 // ----- Gate ---------------------------------------------------------------
 
+/**
+ * Structured user answer to a gate's ask-user prompt (Item 8 of v2.2.5).
+ * Replaces the previous free-text `answer: string` shape — gate decisions
+ * are binary (accept | reject) with an optional human-readable message
+ * carried through to feedback. No multilingual keyword classification at
+ * gates; the harness emits this shape directly.
+ */
+export interface UserAnswer {
+  decision: "accept" | "reject";
+  message?: string;
+}
+
+export interface GateDecision {
+  status: "approved" | "rejected";
+  feedback: string | null;
+}
+
 export interface GatePlugin extends PluginMeta {
   name: string;
   message(state: DriverState): string;
-  validate_response(answer: string): {
-    ok: boolean;
-    decision: "approved" | "rejected" | "changes_requested";
-    feedback?: string;
-  };
+  validate_response(input: UserAnswer): GateDecision;
 }
 
 // ----- Decision -----------------------------------------------------------
@@ -211,6 +238,13 @@ export interface AgentSpawnRequest {
    * without a template on disk.
    */
   template_path?: string;
+  /**
+   * Pre-resolved team-knowledge content (Item 7 of v2.2.5). Concatenated
+   * markdown from the project's `team_knowledge_refs[]` plus the bundle's
+   * baseline knowledge dir. Empty string when no refs configured. Spawn
+   * providers SHOULD inject this as its own section in the agent prompt.
+   */
+  team_knowledge?: string;
 }
 
 /**
@@ -221,7 +255,10 @@ export interface AgentSpawnRequest {
  *
  * Optional on the SpawnProviderPlugin contract — shuttle-based providers
  * that can't make synchronous out-of-band LLM calls leave it undefined;
- * decisions then fall back to their regex-only behaviour.
+ * decisions then return empty/default values (item 9 removed the regex
+ * fallback). The classifier-agent populates `state.decisions` upstream;
+ * decision plugins are pure getters until the v2.3 daemon ships a real
+ * query path.
  */
 export interface SpawnProviderQueryRequest {
   prompt: string;
@@ -234,6 +271,47 @@ export interface SpawnProviderPlugin extends PluginMeta {
   name: string;
   spawn(req: AgentSpawnRequest): Promise<StepResult>;
   query?(req: SpawnProviderQueryRequest): Promise<string>;
+}
+
+// ----- MCPClientPlugin (Item 6) -------------------------------------------
+
+/**
+ * Declaration of an external MCP server the pipeline should spawn and
+ * connect to as an MCP CLIENT. The pipeline itself is an MCP server; this
+ * contract lets a project plug in additional MCP servers (memory, search,
+ * github, etc.) and route their tools through to agents.
+ *
+ * Declared in `<project>/.claude/pipeline.config.json` under `mcp_clients[]`.
+ * Item 6 of v2.2.5 ships the contract + spawn-lifecycle manager + a mocked
+ * test demonstrating spawn → handshake → tool exposure. Live integration
+ * (claude-mem, etc.) is config-level addition after merge — no further code
+ * change required.
+ */
+export interface MCPClientPlugin extends PluginMeta {
+  /** Stable identifier; surfaces in audit + tool-routing. */
+  name: string;
+  /** argv to spawn (`["npx", "claude-mem", "mcp-server"]`, etc.). */
+  server_command: string[];
+  /** Optional env overrides for the spawned process. */
+  env?: Record<string, string>;
+  /**
+   * Which of the external server's tools to make available to agents.
+   * Tools advertised by the server but not in this list stay hidden.
+   */
+  expose_tools: string[];
+  /**
+   * Lifecycle scope:
+   *  - "task": spawn at task start, kill at pipeline_finish
+   *  - "team": keep alive across tasks (requires daemon mode; v2.3+)
+   *  - "global": keep alive across all projects (daemon-managed; v2.3+)
+   */
+  scope: "task" | "team" | "global";
+  /**
+   * Optional handshake health check. If the named tool isn't advertised
+   * within `timeout_ms`, the manager records the failure in audit and
+   * SKIPS this client — pipeline continues without it (graceful degrade).
+   */
+  health_check?: { tool: string; timeout_ms: number };
 }
 
 // ----- Registry ------------------------------------------------------------

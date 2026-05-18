@@ -11,7 +11,11 @@ let vocab: any = null;
 
 async function getAjv(): Promise<Ajv2020> {
   if (ajvInstance) return ajvInstance;
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  // L5: `strict: "log"` surfaces schema-authoring bugs (unknown keywords,
+  // type collisions) on stderr instead of swallowing them. Behaviour at
+  // validation time is unchanged. Revert to `false` only if log noise
+  // becomes a problem in practice.
+  const ajv = new Ajv2020({ allErrors: true, strict: "log" });
   addFormats(ajv);
   // Pre-load all schemas so $ref between them resolves.
   for (const name of [
@@ -20,8 +24,19 @@ async function getAjv(): Promise<Ajv2020> {
     "validator-output.schema.json",
     "pipeline-state.schema.json",
     "agent-feedback.schema.json",
+    "classifier-output.schema.json",
   ]) {
     const raw = await readFile(join(schemasDir, name), "utf8");
+    ajv.addSchema(JSON.parse(raw));
+  }
+  // Bundle extensions: per-bundle conditional constraints layered on top of
+  // the base pipeline-state schema. Registered under id
+  // "bundle-extensions/<bundle>.schema.json".
+  for (const name of ["code.schema.json"]) {
+    const raw = await readFile(
+      join(schemasDir, "bundle-extensions", name),
+      "utf8",
+    );
     ajv.addSchema(JSON.parse(raw));
   }
   ajvInstance = ajv;
@@ -53,6 +68,36 @@ export async function validate(schemaId: string, data: unknown): Promise<Validat
     }`,
   }));
   return { ok: false, errors };
+}
+
+/**
+ * Validates pipeline-state.json against the base schema AND the appropriate
+ * bundle extension. The base schema requires `bundle` — state without it
+ * fails at the base layer. Bundles without a registered extension file
+ * (synthetic test bundles, future bundles that don't restrict additional
+ * shape) pass extension validation cleanly.
+ */
+export async function validatePipelineState(state: any): Promise<ValidationResult> {
+  const base = await validate("pipeline-state.schema.json", state);
+  if (!base.ok) return base;
+
+  const bundle = state.bundle as string;
+  const extId = `bundle-extensions/${bundle}.schema.json`;
+  try {
+    const v = await getValidator(extId);
+    const ok = v(state);
+    if (ok) return { ok: true };
+    const errors = (v.errors ?? []).map((e) => ({
+      path: e.instancePath || "/",
+      message: `[${bundle}-extension] ${e.message ?? "invalid"}${
+        e.params && Object.keys(e.params).length ? ` (${JSON.stringify(e.params)})` : ""
+      }`,
+    }));
+    return { ok: false, errors };
+  } catch {
+    // No registered extension for this bundle — base validation suffices.
+    return { ok: true };
+  }
 }
 
 export async function getCategoryVocab(): Promise<any> {

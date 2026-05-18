@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bundle-extensions/code.schema.json",
+  "title": "Pipeline State — code bundle extension",
+  "description": "Additional required fields when state.bundle === 'code'. Applied on top of pipeline-state.schema.json by validatePipelineState.",
+  "type": "object",
+  "if": {
+    "properties": { "bundle": { "const": "code" } },
+    "required": ["bundle"]
+  },
+  "then": {
+    "required": ["tests_mode", "stack"]
+  }
+}

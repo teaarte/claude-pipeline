@@ -11,6 +11,7 @@ import {
 } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import { assertProjectDirAllowed } from "../lib/project-dir.js";
+import { readProjectBundleConfig } from "../driver/loaders/project-config.js";
 
 export const initSchema = {
   project_dir: z.string().describe("Absolute path to the project root (contains .claude/)"),
@@ -56,14 +57,17 @@ export async function pipelineInit(input: {
       );
     }
     const now = new Date().toISOString();
+    const projectConfig = await readProjectBundleConfig(input.project_dir);
     const state = {
       ...tpl,
+      bundle: projectConfig.bundle,
       task_id: input.task_id,
       task: input.task,
       complexity: input.complexity,
       tests_mode: input.tests_mode,
       stack: { ...tpl.stack, ...input.stack },
       started_at: now,
+      team_knowledge_refs: [...projectConfig.team_knowledge_refs],
     };
     await ensureEmptyJsonl(fjsonl);
     await writeText(summary, await buildSummary(state));

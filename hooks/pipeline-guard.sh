@@ -46,7 +46,9 @@ WRITE_OP_PATTERNS=(
   '(^|[^[:alnum:]_/.])(cp|mv|rm|truncate|install|chmod|chown|Remove-Item|Set-Content|Add-Content|Out-File)([^[:alnum:]_]|$)'
   '(^|[[:space:]])(gzip|gunzip|bzip2|xz|zstd)[[:space:]]'
   '(^|[[:space:]])find[[:space:]]+.*(-delete|-exec[[:space:]]+(rm|mv|cp|truncate))'
-  '(^|[[:space:]])(bash|sh|zsh)[[:space:]]+-c[[:space:]]'
+  # bash/sh/zsh -c is handled separately below — we still recognise the form
+  # but only flag as write-op if the body itself contains an inner mutator
+  # (H7). A bare `bash -c "cat foo"` was being denied as a write.
   '(^|[[:space:]])(pwsh|powershell)[[:space:]]+-(c|Command)[[:space:]]'
   '(^|[[:space:]])eval[[:space:]]'
   'python(3)?[[:space:]]+-c[[:space:]].*(unlink|remove|rmtree|os\.remove|os\.unlink|shutil\.rmtree|os\.system|subprocess\.|popen|Path\([^)]*\)\.(write_text|write_bytes|unlink)|open[[:space:]]*\([^)]*['\''"](w|a))'
@@ -197,6 +199,29 @@ case "$TOOL" in
         break
       fi
     done
+    # H7: bash/sh/zsh -c body inspection. Recognise the shell form, but only
+    # deny when the body itself contains an inner mutator. A `bash -c "cat …"`
+    # invocation is a read and must pass through.
+    if [ "$writeop" = "0" ] && echo "$CMD" | grep -qE '(^|[[:space:]])(bash|sh|zsh)[[:space:]]+-c[[:space:]]'; then
+      # Extract bodies (double-quoted, single-quoted, or single unquoted token).
+      bodies=$(echo "$CMD" | grep -oE '(bash|sh|zsh)[[:space:]]+-c[[:space:]]+("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)' \
+        | sed -E 's/^[[:space:]]*(bash|sh|zsh)[[:space:]]+-c[[:space:]]+//' \
+        | sed -E 's/^"(.*)"$/\1/' \
+        | sed -E "s/^'(.*)'\$/\\1/")
+      while IFS= read -r body; do
+        [ -z "$body" ] && continue
+        # Inner mutator list per H7 — anything else is a read.
+        if echo "$body" | grep -qE '(^|[^[:alnum:]_])(rm|mv|cp|truncate|eval)([[:space:]]|$)' \
+          || echo "$body" | grep -qE '(^|[^0-9])>{1,2}' \
+          || echo "$body" | grep -qE '(^|[[:space:]])dd[[:space:]]+.*\b(if|of)=' \
+          || echo "$body" | grep -qE '(^|[[:space:]])(perl|python3?|node)[[:space:]]+-(e|c)([[:space:]]|$)'; then
+          writeop=1
+          break
+        fi
+      done <<EOF
+$bodies
+EOF
+    fi
     [ "$writeop" = "0" ] && exit 0
     # Extract first protected path: absolute (leading /) OR relative
     # (.claude/ at start of token). For relative we prepend $PWD so the

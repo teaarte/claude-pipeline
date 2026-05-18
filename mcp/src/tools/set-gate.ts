@@ -32,6 +32,23 @@ export async function pipelineSetGate(input: {
     if (input.gate === "gate2" && input.feedback !== undefined) {
       state.gates.gate2_feedback = input.feedback;
     }
+    // Q47 + Q48 (item 11): persist gate revision counters on pipeline-state
+    // so the finish.ts metrics row can read them without crossing into
+    // driver-state. Each rejected gate bumps the corresponding counter on
+    // the gate's owning phase.
+    if (input.status === "rejected") {
+      if (input.gate === "gate1") {
+        state.phases = state.phases ?? {};
+        state.phases.planning = state.phases.planning ?? { status: "pending" };
+        state.phases.planning.gate1_revisions =
+          (state.phases.planning.gate1_revisions ?? 0) + 1;
+      } else if (input.gate === "gate2") {
+        state.phases = state.phases ?? {};
+        state.phases.implementation = state.phases.implementation ?? { status: "pending" };
+        state.phases.implementation.gate2_revisions =
+          (state.phases.implementation.gate2_revisions ?? 0) + 1;
+      }
+    }
 
     await writeText(summary, await buildSummary(state));
 

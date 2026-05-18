@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readJsonl } from "./state-io.js";
-import { validate } from "./schemas.js";
+import { validate, validatePipelineState } from "./schemas.js";
 
 export type Violation = {
   code: string;
@@ -31,8 +31,11 @@ async function readStaleSpawnTimeout(): Promise<number> {
 export async function runInvariants(state: any, findingsFile: string): Promise<Violation[]> {
   const violations: Violation[] = [];
 
-  // INV-pipeline-state-schema: state itself must validate
-  const stateCheck = await validate("pipeline-state.schema.json", state);
+  // INV-pipeline-state-schema: state must validate against base schema AND
+  // the bundle-specific extension (e.g. code bundle requires tests_mode +
+  // stack). Old `1.0` state files without `bundle` default to code via the
+  // extension's conditional `if` clause.
+  const stateCheck = await validatePipelineState(state);
   if (!stateCheck.ok) {
     violations.push({
       code: "INV_SCHEMA_STATE",
@@ -69,17 +72,19 @@ export async function runInvariants(state: any, findingsFile: string): Promise<V
         });
       }
     }
-    if (p.status === "skipped" && !p.skipped_reason && name !== "final") {
-      // 'final' phase doesn't carry skipped_reason in schema
-      if (name === "test_first" || name === "context") {
-        if (!p.skipped_reason && name === "test_first") {
-          violations.push({
-            code: "INV_003",
-            message: `phase '${name}' is skipped without skipped_reason`,
-          });
-        }
-        // context phase: skipped_reason is optional in current schema but recommended
-      }
+    // INV_003: test_first must carry a skipped_reason when status=skipped.
+    // Other phases tolerate missing reason (context: optional in schema;
+    // final: doesn't carry the field). M6 collapsed the nested conditionals
+    // that made the outer scope misleading.
+    if (
+      name === "test_first" &&
+      p.status === "skipped" &&
+      !p.skipped_reason
+    ) {
+      violations.push({
+        code: "INV_003",
+        message: `phase '${name}' is skipped without skipped_reason`,
+      });
     }
   }
 

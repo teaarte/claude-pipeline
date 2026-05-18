@@ -13,7 +13,7 @@ when_to_load: |
   middleware, logging of user data, or password handling. Diff in auth/,
   middleware/, routes/, controllers/, or new DB queries built from user input
   also qualifies.
-agent_hints: [security-reviewer, logic-reviewer, challenger-reviewer]
+agent_hints: [security, logic-reviewer, challenger-reviewer]
 ---
 
 # Backend Security — Senior Stance

@@ -6,11 +6,10 @@
   "type": "object",
   "required": [
     "schema_version",
+    "bundle",
     "task_id",
     "task",
     "complexity",
-    "tests_mode",
-    "stack",
     "started_at",
     "phases",
     "gates",
@@ -18,7 +17,11 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0" },
+    "schema_version": { "type": "string", "const": "1.1" },
+    "bundle": {
+      "type": "string",
+      "description": "Which bundle this state belongs to. Selects the matching bundle-extension schema in templates/schemas/bundle-extensions/<bundle>.schema.json."
+    },
     "task_id": {
       "type": "string",
       "pattern": "^t-\\d{4}-\\d{2}-\\d{2}-[a-z0-9]{4,}(?:-[a-f0-9]{4})?$",
@@ -41,6 +44,11 @@
       "additionalProperties": true
     },
     "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Item 11: set by pipeline_finish so the metrics row + post-hoc analysis can compute wall-clock duration."
+    },
     "refs_loaded": {
       "type": "array",
       "items": { "type": "string" },
@@ -50,9 +58,14 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "team_knowledge_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Project-scoped shared knowledge files injected into every agent prompt (item 7 of v2.2.5). Populated by pipeline_init from <project>/.claude/pipeline.config.json.team_knowledge_refs[]."
+    },
     "phases": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "context": { "$ref": "#/$defs/phase_status" },
         "planning": {
@@ -97,6 +110,7 @@
               "properties": {
                 "antipattern_candidates_count": { "type": "integer", "minimum": 0 },
                 "caller_context_sites_count": { "type": "integer", "minimum": 0 },
+                "gate2_revisions": { "type": "integer", "minimum": 0 },
                 "logic_vs_challenger_disagreement": { "type": "boolean", "default": false },
                 "plan_conformance": {
                   "type": ["string", "null"],
@@ -139,8 +153,7 @@
           "agent": { "type": "string" },
           "phase": {
             "type": "string",
-            "enum": ["context", "planning", "test_first", "implementation", "validation", "final"],
-            "description": "Pipeline phase this verdict came from (Q20). Lets the same agent appear in multiple phases without verdicts collapsing into an indistinguishable bag."
+            "description": "Pipeline phase this verdict came from (Q20). String-typed at the schema layer — runtime validates against the active flow's declared phases[]. Lets the same agent appear in multiple phases without verdicts collapsing into an indistinguishable bag."
           },
           "iteration": { "type": "integer", "minimum": 1 },
           "verdict": { "type": "string" },

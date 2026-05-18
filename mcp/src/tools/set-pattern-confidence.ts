@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { z } from "zod";
 import { agentFeedbackJsonl } from "../lib/paths.js";
-import { fileExists } from "../lib/state-io.js";
+import { fileExists, withFeedbackLock } from "../lib/state-io.js";
 
 export const setPatternConfidenceSchema = {
   feedback_id: z
@@ -27,29 +27,31 @@ export async function pipelineSetPatternConfidence(input: {
   if (!(await fileExists(agentFeedbackJsonl))) {
     throw new Error(`agent-feedback.jsonl not found at ${agentFeedbackJsonl}`);
   }
-  const raw = await readFile(agentFeedbackJsonl, "utf8");
-  const lines = raw.split("\n");
-  let updated = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    try {
-      const obj = JSON.parse(line);
-      if (obj.feedback_id === input.feedback_id) {
-        obj.manual_confidence = input.confidence;
-        lines[i] = JSON.stringify(obj);
-        updated = true;
-        break;
+  return withFeedbackLock(agentFeedbackJsonl, async () => {
+    const raw = await readFile(agentFeedbackJsonl, "utf8");
+    const lines = raw.split("\n");
+    let updated = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (obj.feedback_id === input.feedback_id) {
+          obj.manual_confidence = input.confidence;
+          lines[i] = JSON.stringify(obj);
+          updated = true;
+          break;
+        }
+      } catch {
+        /* skip malformed lines */
       }
-    } catch {
-      /* skip malformed lines */
     }
-  }
-  if (!updated) {
-    throw new Error(`feedback_id '${input.feedback_id}' not found in agent-feedback.jsonl`);
-  }
-  const tmp = `${agentFeedbackJsonl}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, lines.join("\n"), "utf8");
-  await rename(tmp, agentFeedbackJsonl);
-  return { updated: true, feedback_id: input.feedback_id, manual_confidence: input.confidence };
+    if (!updated) {
+      throw new Error(`feedback_id '${input.feedback_id}' not found in agent-feedback.jsonl`);
+    }
+    const tmp = `${agentFeedbackJsonl}.tmp.${process.pid}.${Date.now()}`;
+    await writeFile(tmp, lines.join("\n"), "utf8");
+    await rename(tmp, agentFeedbackJsonl);
+    return { updated: true, feedback_id: input.feedback_id, manual_confidence: input.confidence };
+  });
 }

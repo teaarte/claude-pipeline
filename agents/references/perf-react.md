@@ -10,9 +10,9 @@ summary: |
 when_to_load: |
   Task touches React/Next.js components, hooks, rendering perf, bundle size,
   image/font loading, or Next.js-specific perf concerns (revalidate, ISR,
-  Server vs Client components). Reviewer fan-out includes performance-reviewer
+  Server vs Client components). Reviewer fan-out includes performance
   or UI-consistency on a React/Next stack.
-agent_hints: [performance-reviewer, logic-reviewer, ui-consistency]
+agent_hints: [performance, logic-reviewer, ui-consistency]
 ---
 
 # Performance: React / Next.js

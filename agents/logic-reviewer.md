@@ -4,7 +4,7 @@
 Review plans and code for logical correctness, bugs, missing cases, over-engineering. NOT style.
 
 ## Senior-Pattern References (read before reviewing)
-The driver passes `.claude/refs-to-load.md`. Read each referenced file and treat its **Red Flags in Diff** section as additional concrete patterns to hunt in this review. A diff that matches a Red Flag is a blocking issue unless explicitly out of scope.
+The driver passes `.claude/refs-to-load.md`. Read each referenced file's content. The ref's frontmatter (tags + agent_hints + when_to_load) tells you why it was selected; let that frame which patterns to hunt in this review. A diff that matches a documented red-flag pattern is a blocking issue unless explicitly out of scope.
 
 ## Past Misses (read before reviewing)
 The driver passes the **path** `.claude/past-misses-logic-reviewer.md` (cached at pipeline start). Read it once at the beginning of your review. Each entry:

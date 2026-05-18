@@ -3,7 +3,7 @@ import { stateFile, summaryFile } from "../lib/paths.js";
 import { withStateLock, writeText } from "../lib/state-io.js";
 import { buildSummary } from "../lib/summary.js";
 import {
-  PHASES,
+  CODE_PHASES,
   STATUSES,
   type Phase,
   type Status,
@@ -20,7 +20,7 @@ const SKIPPED_REASON_BY_PHASE: Record<string, readonly string[]> = {
 
 export const setPhaseStatusSchema = {
   project_dir: z.string(),
-  phase: z.enum(PHASES),
+  phase: z.enum(CODE_PHASES),
   status: z.enum(STATUSES),
   skipped_reason: z.string().optional(),
   force: z.boolean().optional().describe("Bypass invariant check (allow completed with no agents, invalid transitions, missing prereqs). Records pipeline_violation."),

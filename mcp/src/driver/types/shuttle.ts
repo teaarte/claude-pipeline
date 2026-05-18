@@ -47,5 +47,10 @@ export type DriverResponse =
 export type ContinueTaskInput =
   | { driver_state_id: string; type: "agent-result"; agent_run_id: string; agent_output: string }
   | { driver_state_id: string; type: "agents-results"; results: { agent_run_id: string; agent_output: string }[] }
-  | { driver_state_id: string; type: "user-answer"; answer: string }
+  | {
+      driver_state_id: string;
+      type: "user-answer";
+      decision: "accept" | "reject";
+      message?: string;
+    }
   | { driver_state_id: string; type: "recovery"; choice: "abandon" | "force-close" | "retry" };

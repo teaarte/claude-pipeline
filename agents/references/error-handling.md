@@ -11,7 +11,7 @@ when_to_load: |
   or dead-letter queues. Diff including new external calls, new HTTP
   handlers, new background jobs, or any change to error-handling code also
   qualifies.
-agent_hints: [logic-reviewer, challenger-reviewer, security-reviewer]
+agent_hints: [logic-reviewer, challenger-reviewer, security]
 ---
 
 # Error Handling — Senior Stance

@@ -145,3 +145,36 @@ Phase **P2** (plugin marketplace) is split into its own file as it maps to v2.6 
 
 ---
 
+## Phase P-K — Knowledge-as-data (post-v2.6, v3+ territory)
+
+**Goal:** turn knowledge that today lives in filesystem artifacts into queryable, editable, versioned data.
+
+Today's refs catalog (`agents/references/*.md`), candidate lists (`templates/stack-candidates.yaml`), anti-pattern rules (per-project CLAUDE.md), and agent templates (`agents/*.md`) are filesystem artifacts. v2.6 marketplace adds plugin-as-npm-package; that's filesystem too.
+
+Long-term direction: this content moves to a **knowledge store** (SQLite locally; Postgres for hosted Team tier) so:
+
+- Editing a ref / rule in the Web UI applies to next `/task` without a release.
+- Per-project overrides without forking the repo.
+- Team-shared knowledge with versioning + curator-controlled promotion (extends `state.team_knowledge_refs` from v2.2.5 Item 7).
+- Cross-project pattern mining (categories of bugs that recur across projects → auto-emitted anti-pattern rules).
+
+### Implementation prerequisites (in order)
+
+1. `StateStorePlugin` from v2.3 generalizes to `KnowledgeStorePlugin`.
+2. Candidate lists migrate from YAML files (`templates/stack-candidates.yaml`) to DB rows — low-risk first step, schema is already structured.
+3. Refs catalog migrates: each ref becomes a row with frontmatter + content + version + author. Reviewer agents query by `agent_hints` + `when_to_load`.
+4. Anti-pattern rules migrate per-project: from CLAUDE.md sections to per-project rule rows + global rule library.
+5. Agent templates migrate last — they're the highest-risk migration since they're the model contract; prose changes there directly shift agent behaviour.
+
+### Migration shape
+
+Migration is **gradual** — each artifact type can move independently. Filesystem fallback retained throughout. A project without DB access stays fully functional on filesystem artifacts.
+
+### Trigger
+
+Not scheduled. Activates when (a) editing knowledge in UI becomes a felt need (probably after first hosted-tier customer asks "can I curate the refs?"), OR (b) Team tier shipping requires shared knowledge primitives.
+
+**Phase P-K effort:** open-ended; one artifact-type per release.
+
+---
+

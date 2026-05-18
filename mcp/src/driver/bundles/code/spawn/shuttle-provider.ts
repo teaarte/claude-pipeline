@@ -102,6 +102,23 @@ function buildPrompt(
   lines.push(`- driver_state_id: ${req.driver_state_id}`);
   lines.push(`- agent_run_id: ${req.agent_run_id}`);
   lines.push("");
+  // v2.2.6 (C6 / Item 6): Canonical identifiers section. Placed BEFORE the
+  // role template injection so agents see it as authoritative project
+  // context — not an afterthought trailing the task description.
+  // The defensive runtime check in record_agent_run rewrites mismatches +
+  // audits as `task_id-rewrite`, but a correct prompt is preferred over
+  // silent rewriting.
+  if (req.task_id) {
+    lines.push("## Canonical identifiers (MUST use these in your output JSON)");
+    lines.push("");
+    lines.push(`- \`task_id\`: ${req.task_id}`);
+    lines.push(`- \`driver_state_id\`: ${req.driver_state_id}`);
+    lines.push("");
+    lines.push(
+      "Your output JSON's `task_id` field MUST equal the canonical `task_id` above verbatim. Do NOT extract a task_id from the task description prose — semantic ids like `phase-0.7-step-1` break cross-task analytics.",
+    );
+    lines.push("");
+  }
   if (template) {
     lines.push("## Role template");
     lines.push("");

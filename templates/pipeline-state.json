@@ -66,5 +66,6 @@
   "tests_written": null,
   "blockers_found": 0,
   "verdict": null,
-  "pipeline_violation": null
+  "pipeline_violation": null,
+  "owner_id": null
 }

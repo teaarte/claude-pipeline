@@ -227,6 +227,78 @@ describe("pipeline_record_agent_run", () => {
     }
   });
 
+  // v2.2.6 C6 / Item 6: canonical task_id propagation.
+  it("rewrites mismatched task_id to canonical + audits task_id-rewrite", async () => {
+    const proj = await tempProject();
+    try {
+      await bootstrapToImpl(proj.dir);
+      // Reviewer output uses the "wrong" semantic task_id pulled from task
+      // description prose instead of the canonical id from spawn-context.
+      const semantic = "phase-0.7-step-1";
+      const canonical = "t-2026-05-13-test";
+      const out = reviewerOutput({
+        agent: "logic-reviewer",
+        verdict: "REQUEST_CHANGES",
+        findings: [
+          {
+            schema_version: "1.0",
+            id: "f-2026-05-13-aaaaaa",
+            agent: "logic-reviewer",
+            task_id: semantic, // wrong
+            iteration: 1,
+            file: "src/x.ts",
+            line_start: 1,
+            line_end: 2,
+            severity: "blocking",
+            category: "race-condition",
+            summary: "summary",
+            evidence_excerpt: "code",
+            suggested_fix: "fix",
+            status: "open",
+          },
+        ],
+      }).replace(`"task_id": "${canonical}"`, `"task_id": "${semantic}"`);
+
+      const r = await spawnReviewer(proj.dir, "implementation", "logic-reviewer", out);
+      expect(r.findings_written).toBe(1);
+
+      // Finding is persisted under the CANONICAL task_id.
+      const findingsRaw = await readFile(join(proj.dir, ".claude", "findings.jsonl"), "utf8");
+      const finding = JSON.parse(findingsRaw.split("\n").filter(Boolean)[0]);
+      expect(finding.task_id).toBe(canonical);
+
+      // Audit row recorded.
+      const { projectAuditFile } = await import("../../src/lib/audit.js");
+      const { readJsonl } = await import("../helpers/setup.js");
+      const auditRows: any[] = await readJsonl(projectAuditFile(proj.dir));
+      const rewrite = auditRows.find((row: any) => row.error_class === "task_id-rewrite");
+      expect(rewrite).toBeDefined();
+      const summary = rewrite.args_summary as Record<string, any>;
+      expect(summary.canonical_task_id).toBe(canonical);
+      expect(Array.isArray(summary.rewrites)).toBe(true);
+      const wheres = (summary.rewrites as Array<{ where: string }>).map((r) => r.where);
+      expect(wheres).toContain("header");
+      expect(wheres.some((w: string) => w.startsWith("finding:"))).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("does NOT audit task_id-rewrite when header + findings already carry the canonical id", async () => {
+    const proj = await tempProject();
+    try {
+      await bootstrapToImpl(proj.dir);
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput());
+      const { projectAuditFile } = await import("../../src/lib/audit.js");
+      const { readJsonl } = await import("../helpers/setup.js");
+      const rows: any[] = await readJsonl(projectAuditFile(proj.dir));
+      const rewrites = rows.filter((r: any) => r.error_class === "task_id-rewrite");
+      expect(rewrites).toHaveLength(0);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("rejects when agent_run_id does not match the output's agent (INV_012)", async () => {
     const proj = await tempProject();
     try {

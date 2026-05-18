@@ -1,19 +1,31 @@
 /**
- * Q17: stack detection for pipeline-state.json:stack. Inspects the project
- * root for the usual signals — CLAUDE.md "Validation Commands" section,
- * package.json, pyproject.toml, pubspec.yaml, Cargo.toml, go.mod — and
- * returns a populated Stack. Falls back to `{language: "unknown", ...}`
- * when no signal is found so the schema's `required: ["language"]` still
- * passes.
+ * v2.2.6 (C3): table-driven stack detection.
  *
- * Deliberately small: ~150 lines, regex-only, no glob library. Edge cases
- * we accept losing (monorepos with mixed stacks, partial package.json,
- * exotic Python tooling) are tracked separately as Q17b candidates if
- * real-task validation surfaces them.
+ * Replaces the previous per-language regex pyramid with two pure functions:
+ *
+ *   gatherStackSignals(projectDir)  — IO: reads project root + CLAUDE.md +
+ *     package.json; returns a structural signal struct.
+ *   resolveStack(signals, candidates) — pure: walks the candidate registry
+ *     (`templates/stack-candidates.yaml`) to pick language, package manager,
+ *     project type, and default commands. No per-language branches.
+ *
+ * Adding a new ecosystem = edit `stack-candidates.yaml`. This file does NOT
+ * enumerate any specific language. Behavior parity with the v2.2.5 detector
+ * is preserved for the existing test fixtures (Q17/Q26/Q50/Q51); new tests
+ * cover C# / Svelte / Elixir / Dart paths that the old detector couldn't
+ * see.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  loadStackCandidates,
+  type StackCandidates,
+  type ProjectType,
+  type LanguageCandidate,
+  type PackageManagerCandidate,
+  type ProjectTypeSignal,
+} from "../../../../lib/stack-candidates.js";
 
 export type DetectedStack = {
   language: string;
@@ -21,7 +33,19 @@ export type DetectedStack = {
   test_command: string | null;
   lint_command: string | null;
   build_command: string | null;
-  project_type: "frontend-app" | "backend" | "library" | "monorepo" | null;
+  project_type: ProjectType | null;
+};
+
+export type ClaudeMdCommands = {
+  test_command?: string;
+  lint_command?: string;
+  build_command?: string;
+};
+
+export type StackSignals = {
+  files_present: string[];
+  package_json: Record<string, any> | null;
+  claude_md_commands: ClaudeMdCommands | null;
 };
 
 const EMPTY: DetectedStack = {
@@ -41,26 +65,82 @@ async function readOptional(path: string): Promise<string | null> {
   }
 }
 
-async function fileExists(path: string): Promise<boolean> {
-  return (await readOptional(path)) !== null;
+async function listRootFiles(projectDir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(projectDir, { withFileTypes: true });
+    return entries.filter((e) => e.isFile() || e.isSymbolicLink()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+const VALIDATION_MARKER_OPEN = /<!--\s*validation-commands\s*-->/i;
+const VALIDATION_MARKER_CLOSE = /<!--\s*\/validation-commands\s*-->/i;
+
+/**
+ * v2.2.6 (C5): preferred marker-block convention. Parallel shape to the
+ * `<!-- antipattern -->` block from v2.2.5. Language-agnostic: works on
+ * CLAUDE.md authored in any language because parsing keys on the bullet
+ * prefix, not English headers.
+ *
+ *   <!-- validation-commands -->
+ *   - test: pnpm -r test
+ *   - lint: pnpm lint
+ *   - build: pnpm build
+ *   <!-- /validation-commands -->
+ *
+ * Accepts the same value-shape tolerance as the English-header parser:
+ * surrounding backticks/quotes stripped, trailing `# comment` trimmed.
+ */
+function parseValidationMarkerBlock(content: string): ClaudeMdCommands | null {
+  if (!VALIDATION_MARKER_OPEN.test(content)) return null;
+  const out: ClaudeMdCommands = {};
+  const lines = content.split("\n");
+  let inBlock = false;
+  for (const raw of lines) {
+    if (VALIDATION_MARKER_OPEN.test(raw)) {
+      inBlock = true;
+      continue;
+    }
+    if (VALIDATION_MARKER_CLOSE.test(raw)) {
+      inBlock = false;
+      continue;
+    }
+    if (!inBlock) continue;
+    const m = raw.match(/^\s*[-*]?\s*([A-Za-z_-]+)\s*:\s*(.+?)\s*$/);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const cmdKey: keyof ClaudeMdCommands | null =
+      key === "test"
+        ? "test_command"
+        : key === "lint"
+          ? "lint_command"
+          : key === "build"
+            ? "build_command"
+            : null;
+    if (!cmdKey || out[cmdKey]) continue;
+    const value = m[2]
+      .trim()
+      .replace(/^[`"'](.*)[`"']$/, "$1")
+      .replace(/\s*#.*$/, "")
+      .trim();
+    if (value) out[cmdKey] = value;
+  }
+  if (!out.test_command && !out.lint_command && !out.build_command) return null;
+  return out;
 }
 
 /**
- * Q26: parse "Validation Commands" labels from CLAUDE.md. Accepts every
- * combination of bullet / bold / backticks / quote-wrap we've seen in real
- * project docs:
- *
- *   - **Lint:** `pnpm lint`
- *   - **Lint**: pnpm lint
- *   Lint: pnpm -r test
- *   * Test: "pnpm vitest"
- *
- * Case-insensitive. Returns null when no label matched (caller falls
- * through to package.json / language defaults).
+ * Q26 / parseClaudeMd: extract validation commands. Tries the
+ * `<!-- validation-commands -->` marker block first (v2.2.6 preferred form,
+ * language-agnostic); falls back to the English "Validation Commands"
+ * header parser for unconverted projects.
  */
-function parseClaudeMd(content: string): Partial<DetectedStack> | null {
-  const out: Partial<DetectedStack> = {};
-  const labels: Array<[string, "test_command" | "lint_command" | "build_command"]> = [
+function parseClaudeMd(content: string): ClaudeMdCommands | null {
+  const markerHit = parseValidationMarkerBlock(content);
+  if (markerHit) return markerHit;
+  const out: ClaudeMdCommands = {};
+  const labels: Array<[string, keyof ClaudeMdCommands]> = [
     ["Test", "test_command"],
     ["Lint", "lint_command"],
     ["Build", "build_command"],
@@ -68,17 +148,11 @@ function parseClaudeMd(content: string): Partial<DetectedStack> | null {
   for (const raw of content.split("\n")) {
     let line = raw.trim();
     if (!line) continue;
-    // Normalise the line so every accepted form collapses to `Label: value`:
-    //   strip leading list marker
-    //   strip bold markers (so colon position inside vs outside ** doesn't matter)
     line = line.replace(/^[-*]\s+/, "").replace(/\*\*/g, "").trim();
     for (const [label, key] of labels) {
       if (out[key]) continue;
       const m = line.match(new RegExp(`^${label}\\s*:\\s*(.+?)\\s*$`, "i"));
       if (m && m[1]) {
-        // Strip one surrounding pair of backticks or quotes, then strip any
-        // trailing `# comment` (Q50: CLAUDE.md authors sometimes append a
-        // human-readable annotation after the command).
         const value = m[1]
           .trim()
           .replace(/^[`"'](.*)[`"']$/, "$1")
@@ -93,189 +167,205 @@ function parseClaudeMd(content: string): Partial<DetectedStack> | null {
   return out;
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * Q26: pnpm-workspace.yaml / lerna.json / nx.json / turbo.json at the root
- * mark this as a monorepo. Lifts the classification out of the
- * "library" default that the v2.1 Q17 detector emitted for every pnpm /
- * turbo root.
+ * Match a signal-file pattern against the project's root basenames.
+ * Patterns support `*` as a multi-char wildcard ("*.csproj", "tsconfig.*.json",
+ * "next.config.*"). Bare names match exactly.
  */
-async function isMonorepoRoot(projectDir: string): Promise<boolean> {
-  const markers = ["pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json"];
-  for (const m of markers) {
-    if (await fileExists(join(projectDir, m))) return true;
-  }
-  return false;
+function matchesPattern(pattern: string, basenames: string[]): boolean {
+  if (!pattern.includes("*")) return basenames.includes(pattern);
+  const parts = pattern.split("*").map(escapeRegex);
+  const re = new RegExp(`^${parts.join(".*")}$`);
+  return basenames.some((n) => re.test(n));
 }
 
-function scriptCommand(pm: string, script: string): string {
-  // pnpm + yarn forward unknown args to the script directly (`pnpm lint`).
-  // npm + bun require `run` for non-lifecycle scripts; we always use `run`
-  // so the same form works for test / lint / build uniformly.
-  if (pm === "pnpm" || pm === "yarn") return `${pm} ${script}`;
-  return `${pm} run ${script}`;
+function anyPatternMatches(patterns: string[], basenames: string[]): boolean {
+  return patterns.some((p) => matchesPattern(p, basenames));
 }
 
-function parsePackageJson(content: string, pm: string): Partial<DetectedStack> {
-  try {
-    const pkg = JSON.parse(content);
-    const scripts = pkg.scripts ?? {};
-    return {
-      test_command: scripts.test ? scriptCommand(pm, "test") : null,
-      lint_command: scripts.lint ? scriptCommand(pm, "lint") : null,
-      build_command: scripts.build ? scriptCommand(pm, "build") : null,
-    };
-  } catch {
-    return {};
-  }
+function packageJsonDeps(pkg: Record<string, any> | null): Set<string> {
+  if (!pkg) return new Set();
+  const merged: Record<string, unknown> = {
+    ...(pkg.dependencies ?? {}),
+    ...(pkg.devDependencies ?? {}),
+    ...(pkg.peerDependencies ?? {}),
+  };
+  return new Set(Object.keys(merged));
 }
 
-async function detectNodePackageManager(projectDir: string): Promise<string> {
-  // Q51: multi-signal pnpm detection. Lockfile + workspace marker +
-  // package.json `packageManager` field all valid signals — even if the
-  // lockfile is absent at pipeline_init time (fresh clone, etc.).
-  if (await fileExists(join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
-  if (await fileExists(join(projectDir, "pnpm-workspace.yaml"))) return "pnpm";
-  if (await fileExists(join(projectDir, "yarn.lock"))) return "yarn";
-  if (await fileExists(join(projectDir, "bun.lockb"))) return "bun";
-  const pkg = await readOptional(join(projectDir, "package.json"));
-  if (pkg) {
-    try {
-      const parsed = JSON.parse(pkg);
-      if (typeof parsed.packageManager === "string") {
-        const m = parsed.packageManager.match(/^(pnpm|yarn|bun|npm)\b/);
-        if (m) return m[1];
-      }
-    } catch {
-      // fall through to default
-    }
-  }
-  return "npm";
+function packageJsonScripts(pkg: Record<string, any> | null): Record<string, string> {
+  if (!pkg) return {};
+  const scripts = pkg.scripts;
+  return scripts && typeof scripts === "object" ? scripts : {};
 }
 
-async function detectFrontendVsBackend(projectDir: string, pkgJson?: any): Promise<DetectedStack["project_type"]> {
-  const frontendSignals = [
-    "next.config.js",
-    "next.config.ts",
-    "next.config.mjs",
-    "vite.config.js",
-    "vite.config.ts",
-    "vite.config.mjs",
-    "rsbuild.config.js",
-    "rsbuild.config.ts",
-    "angular.json",
-  ];
-  for (const s of frontendSignals) {
-    if (await fileExists(join(projectDir, s))) return "frontend-app";
-  }
-  if (pkgJson) {
-    const deps = { ...(pkgJson.dependencies ?? {}), ...(pkgJson.devDependencies ?? {}) };
-    if (deps.next || deps.vite || deps["@angular/core"] || deps["react-dom"]) {
-      return "frontend-app";
-    }
-    if (deps["@nestjs/core"] || deps.fastify || deps.express || deps["@hapi/hapi"]) {
-      return "backend";
-    }
-  }
-  return "library";
-}
-
-export async function detectStack(projectDir: string): Promise<DetectedStack> {
-  // CLAUDE.md wins for command overrides — but it doesn't carry language /
-  // package_manager / project_type, so we still inspect the ecosystem files.
-  const claudemd = await readOptional(join(projectDir, "CLAUDE.md"));
-  const claudeOverrides = claudemd ? parseClaudeMd(claudemd) ?? {} : {};
-
-  // package.json (Node / JS / TS) — most common first.
-  const pkgJsonRaw = await readOptional(join(projectDir, "package.json"));
+/**
+ * IO half: read CLAUDE.md, package.json, and the project root file list.
+ * Pure function `resolveStack` takes over from here.
+ */
+export async function gatherStackSignals(projectDir: string): Promise<StackSignals> {
+  const [files, claudemd, pkgJsonRaw] = await Promise.all([
+    listRootFiles(projectDir),
+    readOptional(join(projectDir, "CLAUDE.md")),
+    readOptional(join(projectDir, "package.json")),
+  ]);
+  let pkg: Record<string, any> | null = null;
   if (pkgJsonRaw) {
-    let pkg: any = null;
     try {
       pkg = JSON.parse(pkgJsonRaw);
     } catch {
       pkg = null;
     }
-    const tsConfigPresent = await fileExists(join(projectDir, "tsconfig.json"));
-    const language = tsConfigPresent || pkg?.devDependencies?.typescript ? "typescript" : "javascript";
-    const packageManager = await detectNodePackageManager(projectDir);
-    const fromPkg = parsePackageJson(pkgJsonRaw, packageManager);
-    // Q26: monorepo signal wins over the legacy "library" default but
-    // not over a positive frontend/backend classification (a Next.js
-    // app inside a Turborepo root is still a frontend-app).
-    const frontendOrBackend = await detectFrontendVsBackend(projectDir, pkg);
-    let project_type: DetectedStack["project_type"];
-    if (frontendOrBackend === "frontend-app" || frontendOrBackend === "backend") {
-      project_type = frontendOrBackend;
-    } else if (await isMonorepoRoot(projectDir)) {
-      project_type = "monorepo";
-    } else {
-      project_type = frontendOrBackend;
-    }
-    return {
-      language,
-      package_manager: packageManager,
-      test_command: claudeOverrides.test_command ?? fromPkg.test_command ?? null,
-      lint_command: claudeOverrides.lint_command ?? fromPkg.lint_command ?? null,
-      build_command: claudeOverrides.build_command ?? fromPkg.build_command ?? null,
-      project_type,
-    };
   }
-
-  // pyproject.toml (Python).
-  if (await fileExists(join(projectDir, "pyproject.toml"))) {
-    const packageMgr = (await fileExists(join(projectDir, "uv.lock")))
-      ? "uv"
-      : (await fileExists(join(projectDir, "poetry.lock")))
-      ? "poetry"
-      : "pip";
-    return {
-      language: "python",
-      package_manager: packageMgr,
-      test_command: claudeOverrides.test_command ?? "pytest",
-      lint_command: claudeOverrides.lint_command ?? "ruff check",
-      build_command: claudeOverrides.build_command ?? null,
-      project_type: "backend",
-    };
-  }
-
-  // pubspec.yaml (Dart / Flutter).
-  if (await fileExists(join(projectDir, "pubspec.yaml"))) {
-    return {
-      language: "dart",
-      package_manager: "pub",
-      test_command: claudeOverrides.test_command ?? "flutter test",
-      lint_command: claudeOverrides.lint_command ?? "dart analyze",
-      build_command: claudeOverrides.build_command ?? null,
-      project_type: "frontend-app",
-    };
-  }
-
-  // Cargo.toml (Rust).
-  if (await fileExists(join(projectDir, "Cargo.toml"))) {
-    return {
-      language: "rust",
-      package_manager: "cargo",
-      test_command: claudeOverrides.test_command ?? "cargo test",
-      lint_command: claudeOverrides.lint_command ?? "cargo clippy",
-      build_command: claudeOverrides.build_command ?? "cargo build",
-      project_type: "library",
-    };
-  }
-
-  // go.mod (Go).
-  if (await fileExists(join(projectDir, "go.mod"))) {
-    return {
-      language: "go",
-      package_manager: "go",
-      test_command: claudeOverrides.test_command ?? "go test ./...",
-      lint_command: claudeOverrides.lint_command ?? "go vet ./...",
-      build_command: claudeOverrides.build_command ?? "go build ./...",
-      project_type: "backend",
-    };
-  }
-
-  // No signal — return empty but with CLAUDE.md overrides if any.
+  const claudeCommands = claudemd ? parseClaudeMd(claudemd) : null;
   return {
-    ...EMPTY,
-    ...claudeOverrides,
+    files_present: files,
+    package_json: pkg,
+    claude_md_commands: claudeCommands,
   };
 }
+
+function pickLanguage(signals: StackSignals, candidates: StackCandidates): string {
+  for (const lang of candidates.languages) {
+    if (anyPatternMatches(lang.signal_files, signals.files_present)) {
+      return lang.name;
+    }
+  }
+  return "unknown";
+}
+
+function pickPackageManager(
+  language: string,
+  signals: StackSignals,
+  candidates: StackCandidates,
+): string | null {
+  const pmField =
+    typeof signals.package_json?.packageManager === "string"
+      ? (signals.package_json.packageManager as string)
+      : null;
+  for (const pm of candidates.package_managers) {
+    if (!pm.languages.includes(language)) continue;
+    if (anyPatternMatches(pm.signal_files, signals.files_present)) return pm.name;
+    if (pmField && pm.package_json_field_prefix && pmField.startsWith(pm.package_json_field_prefix)) {
+      return pm.name;
+    }
+  }
+  return null;
+}
+
+function projectTypeEntryFires(
+  entry: ProjectTypeSignal,
+  signals: StackSignals,
+  language: string,
+): boolean {
+  let hasCriterion = false;
+  if (entry.signal_files.length > 0) {
+    hasCriterion = true;
+    if (anyPatternMatches(entry.signal_files, signals.files_present)) return true;
+  }
+  if (entry.package_json_deps.length > 0) {
+    hasCriterion = true;
+    const deps = packageJsonDeps(signals.package_json);
+    if (entry.package_json_deps.some((d) => deps.has(d))) return true;
+  }
+  if (entry.languages && entry.languages.length > 0) {
+    hasCriterion = true;
+    if (entry.languages.includes(language)) return true;
+  }
+  return hasCriterion ? false : false; // empty entry never fires
+}
+
+function pickProjectType(
+  signals: StackSignals,
+  language: string,
+  candidates: StackCandidates,
+): ProjectType | null {
+  for (const entry of candidates.project_type_signals) {
+    if (projectTypeEntryFires(entry, signals, language)) return entry.type;
+  }
+  return null;
+}
+
+function pickCommand(
+  cmdName: "test" | "lint" | "build",
+  language: string,
+  pm: string | null,
+  signals: StackSignals,
+  candidates: StackCandidates,
+): string | null {
+  const overrideKey: keyof ClaudeMdCommands = `${cmdName}_command`;
+  const override = signals.claude_md_commands?.[overrideKey];
+  if (override) return override;
+  if (language === "unknown" || pm === null) return null;
+  const entry = candidates.default_commands.find(
+    (c) => c.language === language && c.package_manager === pm,
+  );
+  if (!entry) return null;
+  const defaultValue = entry[cmdName];
+  if (!defaultValue) return null;
+  // For Node ecosystems the default command runs `package.json.scripts.<cmd>`;
+  // emit only when that script is actually defined. Other ecosystems
+  // (rust/python/go/csharp/elixir/dart) have intrinsic default commands and
+  // are emitted unconditionally.
+  if (language === "typescript" || language === "javascript") {
+    const scripts = packageJsonScripts(signals.package_json);
+    if (!scripts[cmdName]) return null;
+  }
+  return defaultValue;
+}
+
+/**
+ * Pure resolver: takes raw signals + the YAML candidate registry, returns
+ * the resolved DetectedStack. No IO, no per-language branches.
+ */
+export function resolveStack(
+  signals: StackSignals,
+  candidates: StackCandidates,
+): DetectedStack {
+  const language = pickLanguage(signals, candidates);
+  if (language === "unknown") {
+    // No language signal — only CLAUDE.md overrides (if any) survive.
+    return {
+      ...EMPTY,
+      test_command: signals.claude_md_commands?.test_command ?? null,
+      lint_command: signals.claude_md_commands?.lint_command ?? null,
+      build_command: signals.claude_md_commands?.build_command ?? null,
+    };
+  }
+  const pm = pickPackageManager(language, signals, candidates);
+  const project_type = pickProjectType(signals, language, candidates);
+  return {
+    language,
+    package_manager: pm,
+    test_command: pickCommand("test", language, pm, signals, candidates),
+    lint_command: pickCommand("lint", language, pm, signals, candidates),
+    build_command: pickCommand("build", language, pm, signals, candidates),
+    project_type,
+  };
+}
+
+/**
+ * Convenience entry point used by `pipelineRunTask`. Loads the candidate
+ * registry once per process (cached in `stack-candidates.ts`) + gathers
+ * signals + resolves.
+ */
+export async function detectStack(projectDir: string): Promise<DetectedStack> {
+  const [signals, candidates] = await Promise.all([
+    gatherStackSignals(projectDir),
+    loadStackCandidates(),
+  ]);
+  return resolveStack(signals, candidates);
+}
+
+// Re-export commonly-used types so callers don't reach into stack-candidates.
+export type {
+  LanguageCandidate,
+  PackageManagerCandidate,
+  ProjectType,
+  ProjectTypeSignal,
+  StackCandidates,
+};

@@ -231,6 +231,16 @@ export interface AgentSpawnRequest {
    */
   driver_state_id: string;
   /**
+   * Canonical task_id (v2.2.6 Item 6 / C6). Spawn providers SHOULD inject
+   * this as part of a "Canonical identifiers" section in the agent prompt
+   * so agents copy the canonical id into their output JSON instead of
+   * extracting a semantic id from the task description prose. The defensive
+   * runtime check in record_agent_run rewrites mismatches to canonical and
+   * audits as `task_id-rewrite`, but a correct prompt is preferred over
+   * silent rewriting.
+   */
+  task_id?: string;
+  /**
    * The AgentPlugin's `template_path`. Spawn providers SHOULD read this and
    * embed its content into whatever they pass to the underlying harness so
    * the spawned agent sees its full role prompt. Optional because synthetic

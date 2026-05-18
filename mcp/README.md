@@ -238,3 +238,48 @@ pnpm smoke
 - `pipeline-state-summary.md` is rebuilt from the template after every mutating call (no manual edits required).
 - Validation uses `ajv/dist/2020.js` because schemas are draft 2020-12.
 - The server only parses the **first fenced ```json block** in agent output. Markdown narrative is ignored (per user choice — keeps the contract minimal).
+
+## Authoring `CLAUDE.md`
+
+`CLAUDE.md` is optional. When present, the pipeline reads two structured blocks. Both use HTML-comment markers so parsing is language-agnostic (works for projects authored in any natural language). English-keyword fallbacks remain for unconverted projects but are deprecated for new authoring.
+
+### Validation commands (v2.2.6 preferred)
+
+```markdown
+<!-- validation-commands -->
+- test: pnpm -r test
+- lint: pnpm lint
+- build: pnpm build
+<!-- /validation-commands -->
+```
+
+Keys (`test`, `lint`, `build`) are case-insensitive. Values can be wrapped in backticks or quotes; trailing `# comment` is stripped. The pipeline's deterministic stack detector picks defaults from `templates/stack-candidates.yaml`; this block lets a project override per-language defaults — e.g. `pnpm -r test` for a monorepo where the bare `pnpm test` default isn't right.
+
+**Deprecated fallback (v2.2.5 and earlier):**
+
+```markdown
+## Validation Commands
+
+- **Test:** `pnpm -r test`
+- **Lint:** `pnpm lint`
+- **Build:** `pnpm build`
+```
+
+Still parsed if no marker block is present. Will be removed once all in-tree projects migrate.
+
+### Anti-pattern rules (v2.2.5)
+
+```markdown
+<!-- antipattern -->
+- rule-id-1 — short description of the anti-pattern
+- rule-id-2 — another rule
+<!-- /antipattern -->
+```
+
+Consumed by `agents/classifier.md` which picks `antipattern_rules_applicable: [...]` from this list per task. Implementer / reviewers see the applicable rules in `.claude/antipattern-candidates.md`.
+
+**Deprecated fallback:** `## What NOT to do` / `## Don't` / `## Anti-Patterns` English-header section with bullets. Still parsed; will be removed in a future cleanup.
+
+### Why markers + not prose
+
+The pipeline used to regex over English section headers (`/what not to do|don'?t|anti[\s-]*patterns/i`). That broke for non-English projects (e.g. `## Что НЕ нужно делать`) and was sensitive to header variants. The marker convention is a Category 2 fix per the architectural principle in `specs/product-vision.md` — **restructure the input to eliminate classification entirely**.

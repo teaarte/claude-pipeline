@@ -362,6 +362,236 @@ describe("pipeline_finish", () => {
     }
   });
 
+  // v2.2.6 C7 / Q63: auto-close validation + final on clean success.
+  // Without this, every successful run carried `pipeline_violation:
+  // "phase-force-final"` in the metric row, destroying the signal value
+  // of force_used / pipeline_violation as a "something went wrong" marker.
+
+  it("Q63: acceptance:PASS auto-closes validation phase (no force needed)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+
+      // Record acceptance:PASS — should auto-close validation.
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.validation?.status).toBe("completed");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: acceptance:FAIL does NOT auto-close validation (stays in_progress)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+
+      // Record acceptance:FAIL — validation should stay in_progress.
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "FAIL" }));
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.validation?.status).toBe("in_progress");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: pipeline_finish auto-closes `final` on clean accepted verdict — no pipeline_violation", async () => {
+    const proj = await tempProject();
+    try {
+      // Mimic the frontend-core 2026-05-18 happy path: validation auto-closes
+      // (via the record-agent-run path above), then user runs /done →
+      // pipeline_finish auto-closes final without force.
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" })); // auto-closes validation
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+
+      // No explicit pipeline_set_phase_status for "final" — pipeline_finish does it.
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.verdict).toBe("accepted");
+      expect(fin.metrics_row.force_used).toBe(false);
+      expect(fin.metrics_row.pipeline_violation).toBeNull();
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.final?.status).toBe("completed");
+      expect(ps?.pipeline_violation).toBeFalsy();
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: Q54-style force path (force=true) STILL records pipeline_violation (genuine recovery preserved)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+      // Genuine Q54-style force on final (e.g. recovery from a violation
+      // upstream). pipeline_violation must persist into the metric row.
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "final",
+        status: "completed",
+        force: true,
+      });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.pipeline_violation).toMatch(/phase-force-final/);
+      expect(fin.metrics_row.force_used).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  // v2.2.6 C8 / Q64: cross-session ownership safety in pipeline_finish.
+  it("Q64: refuses pipeline_finish when owner_id != current session env var", async () => {
+    const proj = await tempProject();
+    const prevOwnerEnv = process.env.CLAUDE_PIPELINE_OWNER_ID;
+    try {
+      await pipelineInit({ ...initArgs(proj.dir), owner_id: "session-A" } as any);
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-B";
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "skipped", skipped_reason: "regression-only" as any });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "test_first", status: "skipped", skipped_reason: "regression-only" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "skipped", skipped_reason: "no-context-needed" as any });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "skipped", skipped_reason: "no-context-needed" as any });
+      await expect(
+        pipelineFinish({ project_dir: proj.dir, verdict: "accepted" }),
+      ).rejects.toThrow(/OWNER_MISMATCH.*session-A.*session-B/);
+    } finally {
+      if (prevOwnerEnv === undefined) {
+        delete process.env.CLAUDE_PIPELINE_OWNER_ID;
+      } else {
+        process.env.CLAUDE_PIPELINE_OWNER_ID = prevOwnerEnv;
+      }
+      await proj.cleanup();
+    }
+  });
+
+  it("Q64: pipeline_finish with force_cross_owner=true succeeds + stamps pipeline_violation: cross-owner-finalize", async () => {
+    const proj = await tempProject();
+    const prevOwnerEnv = process.env.CLAUDE_PIPELINE_OWNER_ID;
+    try {
+      // Build a clean fully-closed pipeline first (owner=A).
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-A";
+      await pipelineInit({ ...initArgs(proj.dir), owner_id: "session-A" } as any);
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "test_first", status: "skipped", skipped_reason: "regression-only" });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+
+      // Now pretend a different session finishes it with force_cross_owner.
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-B";
+      const fin = await pipelineFinish({
+        project_dir: proj.dir,
+        verdict: "accepted",
+        force_cross_owner: true,
+      });
+      expect(fin.metrics_row.pipeline_violation).toMatch(/cross-owner-finalize/);
+      expect(fin.metrics_row.force_used).toBe(true);
+    } finally {
+      if (prevOwnerEnv === undefined) {
+        delete process.env.CLAUDE_PIPELINE_OWNER_ID;
+      } else {
+        process.env.CLAUDE_PIPELINE_OWNER_ID = prevOwnerEnv;
+      }
+      await proj.cleanup();
+    }
+  });
+
+  it("Q64: pipeline_finish allows when owner_id is null (legacy/pre-C8 state)", async () => {
+    const proj = await tempProject();
+    const prevOwnerEnv = process.env.CLAUDE_PIPELINE_OWNER_ID;
+    try {
+      // Init WITHOUT owner_id (mimics a pre-C8 or no-env-vars-set scenario).
+      await pipelineInit(initArgs(proj.dir));
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-B"; // current session has owner
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "test_first", status: "skipped", skipped_reason: "regression-only" });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      // No mismatch detected → clean success row, no cross-owner-finalize.
+      expect(fin.metrics_row.pipeline_violation).toBeNull();
+    } finally {
+      if (prevOwnerEnv === undefined) {
+        delete process.env.CLAUDE_PIPELINE_OWNER_ID;
+      } else {
+        process.env.CLAUDE_PIPELINE_OWNER_ID = prevOwnerEnv;
+      }
+      await proj.cleanup();
+    }
+  });
+
   it("Q55: pipeline_finish rewrites pipeline-state-summary.md with the final verdict", async () => {
     const proj = await tempProject();
     try {

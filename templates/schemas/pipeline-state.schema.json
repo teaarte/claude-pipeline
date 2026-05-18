@@ -201,6 +201,10 @@
     "pipeline_violation": {
       "type": ["string", "null"],
       "description": "Set when pipeline integrity was breached (e.g. missing-state-file recovery)."
+    },
+    "owner_id": {
+      "type": ["string", "null"],
+      "description": "v2.2.6 C8 / Q64 — opaque, platform-agnostic identifier of the entity that started this task. Populated by pipeline_run_task from the first non-empty of: CLAUDE_PIPELINE_OWNER_ID, CLAUDE_SESSION_ID, SESSION_ID env vars. The Stop hook and pipeline_finish / pipeline_abandon compare against this to refuse cross-session finalization. Future transports (HTTP API, CLI, other LLM providers) set their own owner_id via env vars; pipeline core stays Claude-Code-agnostic."
     }
   },
   "$defs": {

@@ -62,6 +62,48 @@ describe("pipeline_abandon", () => {
       await proj.cleanup();
     }
   });
+
+  // v2.2.6 C8 / Q64: cross-session ownership safety on abandon.
+  it("Q64: refuses pipeline_abandon when owner_id != current session", async () => {
+    const proj = await tempProject();
+    const prevOwnerEnv = process.env.CLAUDE_PIPELINE_OWNER_ID;
+    try {
+      await pipelineInit({ ...initArgs(proj.dir), owner_id: "session-A" } as any);
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-B";
+      await expect(
+        pipelineAbandon({ project_dir: proj.dir, reason: "wrong window" }),
+      ).rejects.toThrow(/OWNER_MISMATCH.*session-A.*session-B/);
+    } finally {
+      if (prevOwnerEnv === undefined) {
+        delete process.env.CLAUDE_PIPELINE_OWNER_ID;
+      } else {
+        process.env.CLAUDE_PIPELINE_OWNER_ID = prevOwnerEnv;
+      }
+      await proj.cleanup();
+    }
+  });
+
+  it("Q64: pipeline_abandon with force_cross_owner=true succeeds", async () => {
+    const proj = await tempProject();
+    const prevOwnerEnv = process.env.CLAUDE_PIPELINE_OWNER_ID;
+    try {
+      await pipelineInit({ ...initArgs(proj.dir), owner_id: "session-A" } as any);
+      process.env.CLAUDE_PIPELINE_OWNER_ID = "session-B";
+      const r = await pipelineAbandon({
+        project_dir: proj.dir,
+        reason: "rebase mid-flight, force from other window",
+        force_cross_owner: true,
+      });
+      expect(r.moved_to).toMatch(/abandoned-/);
+    } finally {
+      if (prevOwnerEnv === undefined) {
+        delete process.env.CLAUDE_PIPELINE_OWNER_ID;
+      } else {
+        process.env.CLAUDE_PIPELINE_OWNER_ID = prevOwnerEnv;
+      }
+      await proj.cleanup();
+    }
+  });
 });
 
 describe("pipeline_cancel_spawn", () => {

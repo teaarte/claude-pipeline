@@ -5,13 +5,26 @@
 # never blocks twice in a row — once stop_hook_active=true, it falls back to
 # diagnostic stderr output so the user can still close the session.
 #
-# Reads cwd + stop_hook_active from Claude Code's hook payload.
+# v2.2.6 C8 / Q64: when Claude Code's session_id (from the stdin payload)
+# does NOT match `state.owner_id`, the hook stays silent — this stop belongs
+# to a DIFFERENT window than the one that started the task, so blocking
+# would be a false positive AND running /done from this window would
+# clobber the owner window's state.
+#
+# This is the ONLY place in the codebase that knows about Claude Code's
+# session_id specifically. The MCP server stores owner_id as an opaque
+# string sourced from a generic env-var chain; future transports (HTTP
+# daemon, CLI) set their own owner_id and have their own stop semantics.
+#
+# Reads cwd + stop_hook_active + session_id from Claude Code's hook payload.
 
 set -u
 
-# Hook receives JSON payload on stdin. We need cwd and stop_hook_active.
+# Hook receives JSON payload on stdin. We need cwd, stop_hook_active, and
+# (C8) session_id for the owner-comparison check.
 payload=""
 stop_hook_active="false"
+session_id=""
 if [ -t 0 ]; then
   cwd="${PWD:-.}"
 else
@@ -19,6 +32,7 @@ else
   cwd=$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)
   if [ -z "$cwd" ]; then cwd="${PWD:-.}"; fi
   stop_hook_active=$(printf '%s' "$payload" | jq -r '.stop_hook_active // false' 2>/dev/null)
+  session_id=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)
 fi
 
 state="$cwd/.claude/pipeline-state.json"
@@ -29,6 +43,17 @@ verdict=$(jq -r '.verdict // empty' "$state" 2>/dev/null)
 agents=$(jq -r '.agents_count // 0' "$state" 2>/dev/null)
 complexity=$(jq -r '.complexity // empty' "$state" 2>/dev/null)
 violation=$(jq -r '.pipeline_violation // empty' "$state" 2>/dev/null)
+owner_id=$(jq -r '.owner_id // empty' "$state" 2>/dev/null)
+
+# v2.2.6 C8 / Q64: cross-session early-out. If owner_id is recorded AND
+# the current session_id doesn't match, this window doesn't own the task.
+# Print an INFO line to stderr (user-visible) and exit 0 — don't block,
+# don't suggest /done (running it here would kill the owner window's
+# state). The owner window's stop hook will fire normally when it closes.
+if [ -n "$owner_id" ] && [ -n "$session_id" ] && [ "$owner_id" != "$session_id" ]; then
+  echo "[claude-pipeline] INFO: in-flight task in this project belongs to a different Claude Code session (owner=${owner_id:0:8}…). This window is free to stop. Do NOT run /done here — it would clobber the owner session's state." >&2
+  exit 0
+fi
 
 # Q36: Gate 2 decision tri-state. After user accepts at Gate 2,
 # pipeline_continue_task mirrors gates.gate2="approved" but verdict

@@ -3,6 +3,20 @@ import { stateFile, findingsFile, summaryFile, pipelineJsonl } from "../lib/path
 import { withStateLock, appendJsonl, writeText } from "../lib/state-io.js";
 import { runInvariants } from "../lib/invariants.js";
 import { buildSummary } from "../lib/summary.js";
+import { audit } from "../lib/audit.js";
+import {
+  currentOwnerId,
+  ownerCheck,
+  CROSS_OWNER_VIOLATION,
+  OWNER_MISMATCH_CODE,
+} from "../lib/owner.js";
+
+const PRIOR_PHASES_FOR_FINAL = [
+  "context",
+  "planning",
+  "implementation",
+  "validation",
+] as const;
 
 export const finishSchema = {
   project_dir: z.string(),
@@ -10,6 +24,12 @@ export const finishSchema = {
   project_short: z.string().optional().describe("Short project name for metrics row, e.g. 's3-panel'"),
   task_short: z.string().optional().describe("Short task title for metrics row"),
   force: z.boolean().optional().describe("Force finish even with stale-spawn violations. Records pipeline_violation."),
+  force_cross_owner: z
+    .boolean()
+    .optional()
+    .describe(
+      "v2.2.6 C8 / Q64 — bypass the owner_id mismatch check. Audited as pipeline_violation: 'cross-owner-finalize'. Use only when you intend to finalize a task started by a different session.",
+    ),
 };
 
 /**
@@ -33,6 +53,7 @@ export async function pipelineFinish(input: {
   project_short?: string;
   task_short?: string;
   force?: boolean;
+  force_cross_owner?: boolean;
 }): Promise<any> {
   const file = stateFile(input.project_dir);
   const fjsonl = findingsFile(input.project_dir);
@@ -40,12 +61,69 @@ export async function pipelineFinish(input: {
   return withStateLock(file, async (state) => {
     if (!state) throw new Error(`pipeline-state.json not found at ${file}`);
 
+    // v2.2.6 C8 / Q64: cross-session ownership check. Refuse to finalize
+    // a task started by a different session unless force_cross_owner=true
+    // (then audit as pipeline_violation: "cross-owner-finalize" so the
+    // metric row preserves the signal).
+    const ownerResult = ownerCheck(state.owner_id, currentOwnerId());
+    if (ownerResult.kind === "mismatch" && !input.force_cross_owner) {
+      const err = new Error(
+        `${OWNER_MISMATCH_CODE}: pipeline-state was started by owner '${ownerResult.expected}' but this session's owner is '${ownerResult.actual}'. ` +
+          `Pass {force_cross_owner: true} to override (audited as ${CROSS_OWNER_VIOLATION}).`,
+      );
+      (err as any).code = OWNER_MISMATCH_CODE;
+      throw err;
+    }
+    if (ownerResult.kind === "mismatch" && input.force_cross_owner) {
+      state.pipeline_violation = state.pipeline_violation
+        ? `${state.pipeline_violation}; ${CROSS_OWNER_VIOLATION}`
+        : CROSS_OWNER_VIOLATION;
+      await audit({
+        tool: "pipeline_finish",
+        args: {
+          force_cross_owner: true,
+          expected_owner: ownerResult.expected,
+          actual_owner: ownerResult.actual,
+        },
+        projectDir: input.project_dir,
+        verdict: "ok",
+      }).catch(() => undefined);
+    }
+
     // Item 11: stamp the wall-clock end before invariants so the metric row
     // can read it back consistently. Re-finish (idempotent) keeps the first
     // stamp.
     state.ended_at ??= new Date().toISOString();
     // Set verdict first so invariant INV_007 runs against the intended outcome.
     state.verdict = input.verdict;
+
+    // v2.2.6 C7 / Q63: auto-close `final` on clean accepted verdict.
+    // Without this, every successful run required force-setting `final` →
+    // metric row carried `pipeline_violation: "phase-force-final"` →
+    // analytics could no longer separate genuine recovery (Q54 gate-2
+    // reject-but-ship) from clean success. The force path stays intact
+    // for Q54: force=true here still records `pipeline_violation` AND
+    // input.force=true skips this auto-close entirely.
+    if (
+      input.verdict === "accepted" &&
+      !input.force &&
+      state.phases?.final?.status === "pending"
+    ) {
+      const allPriorClosed = PRIOR_PHASES_FOR_FINAL.every((name) => {
+        const s = state.phases?.[name]?.status;
+        return s === "completed" || s === "skipped";
+      });
+      if (allPriorClosed) {
+        state.phases.final.status = "completed";
+        await audit({
+          tool: "pipeline_finish",
+          args: { verdict: input.verdict },
+          projectDir: input.project_dir,
+          verdict: "ok",
+          error_class: "auto-close-final",
+        }).catch(() => undefined);
+      }
+    }
 
     const violations = await runInvariants(state, fjsonl);
     // Stale-spawn alone is bypassable with force=true. Any other violation is hard-blocked.

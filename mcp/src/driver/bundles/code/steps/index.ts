@@ -128,6 +128,7 @@ async function spawnOne(
     agent: agentName,
     agent_run_id,
     driver_state_id: state.driver_state_id,
+    task_id: state.task_id ?? undefined,
     phase,
     model,
     template_path: agent.template_path,

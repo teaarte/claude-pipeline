@@ -99,6 +99,17 @@ export async function pipelineRunTask(input: {
     // pipeline.jsonl metrics row all carry concrete language/commands
     // instead of `{language: "unknown", ...nulls}`.
     const stack = input.stack ?? (await detectStack(input.project_dir));
+    // v2.2.6 C8 / Q64: read owner identifier from the generic env-var
+    // chain. CLAUDE_PIPELINE_OWNER_ID is the explicit override; CC sets
+    // CLAUDE_SESSION_ID; a future daemon transport may set SESSION_ID.
+    // Pipeline core never reads CC-specific values directly — the
+    // integration layer (CC's MCP launcher, daemon HTTP request handler,
+    // CLI invoker) is what populates the env vars.
+    const ownerId =
+      process.env.CLAUDE_PIPELINE_OWNER_ID ||
+      process.env.CLAUDE_SESSION_ID ||
+      process.env.SESSION_ID ||
+      null;
     try {
       await pipelineInit({
         project_dir: input.project_dir,
@@ -107,6 +118,7 @@ export async function pipelineRunTask(input: {
         complexity,
         tests_mode: testsMode,
         stack,
+        owner_id: ownerId,
       });
     } catch (e: any) {
       // If pipeline-state already exists for a finished task, surface the

@@ -6,8 +6,12 @@ import { join } from "node:path";
 
 const HOOK = join(__dirname, "..", "..", "..", "hooks", "pipeline-stop.sh");
 
-function runHook(cwd: string, stop_hook_active = false) {
-  const payload = JSON.stringify({ cwd, stop_hook_active });
+function runHook(cwd: string, stop_hook_active = false, session_id?: string) {
+  const payload = JSON.stringify({
+    cwd,
+    stop_hook_active,
+    ...(session_id ? { session_id } : {}),
+  });
   return spawnSync("bash", [HOOK], {
     input: payload,
     encoding: "utf8",
@@ -190,5 +194,41 @@ describe("pipeline-stop hook — Q24", () => {
     const res = runHook(root);
     expect(res.stdout).toContain("Pipeline is in flight");
     expect(res.stdout).not.toContain("Task accepted at Gate 2");
+  });
+
+  // v2.2.6 C8 / Q64: cross-session safety — Stop hook in a NON-owner window
+  // must not block + must not suggest /done.
+  it("Q64: NON-owner session (different session_id) gets INFO line + clean exit, does NOT block", () => {
+    writePipelineState(root, {
+      verdict: null,
+      owner_id: "session-A-the-task-owner",
+    });
+    writeDriverState(root, { pending_user_answer: null });
+    const res = runHook(root, false, "session-B-different-window");
+    expect(res.status).toBe(0);
+    expect(res.stdout).toBe(""); // no decision-block JSON to stdout
+    expect(res.stderr).toContain("INFO");
+    expect(res.stderr).toContain("different Claude Code session");
+    expect(res.stderr).toContain("Do NOT run /done here");
+  });
+
+  it("Q64: owner session_id matches state.owner_id → existing block behavior preserved", () => {
+    writePipelineState(root, {
+      verdict: null,
+      owner_id: "session-A",
+    });
+    writeDriverState(root, { pending_user_answer: null });
+    const res = runHook(root, false, "session-A");
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('"decision": "block"');
+    expect(res.stdout).toContain("Pipeline is in flight");
+  });
+
+  it("Q64: state without owner_id (legacy) → existing block behavior preserved (no early-out)", () => {
+    writePipelineState(root, { verdict: null }); // no owner_id field
+    writeDriverState(root, { pending_user_answer: null });
+    const res = runHook(root, false, "session-B");
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('"decision": "block"');
   });
 });

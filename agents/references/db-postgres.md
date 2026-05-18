@@ -10,7 +10,7 @@ when_to_load: |
   SQLAlchemy models), migrations, raw queries, query builders, or DB
   connection setup. Diff including *.sql, schema changes, or query-shape
   changes qualifies.
-agent_hints: [logic-reviewer, performance-reviewer, challenger-reviewer]
+agent_hints: [logic-reviewer, performance, challenger-reviewer]
 ---
 
 # PostgreSQL — Senior Stance

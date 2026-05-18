@@ -1,4 +1,4 @@
-# Agent: E2E Test Agent
+# Agent: Playwright E2E Test Agent
 
 ## Role
 Write and run E2E / integration tests for user-facing flows. Detects platform and uses appropriate framework.

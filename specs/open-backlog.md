@@ -12,6 +12,7 @@ For closed items, see [`closed-q-items.md`](closed-q-items.md). For pipeline pha
 | Q53 | 🟢 LOW | open | **Stale `pending_spawns` in `driver-state.json` after Q52-recovery.** Downstream of Q52. Implementation phase clean in pipeline-state but driver-state retains the orphan ar-ids. Likely fixed for free once Q52 is atomic. | `mcp/src/driver/tools/continue-task.ts` (driver-state cleanup path). |
 | Q54 | 🟢 LOW | open | **Workflow gap: gate-2 reject-with-feedback but still accept.** User on frontend-core rejected gate-2 with revision feedback but decided to ship anyway. Path required `pipeline_set_phase_status final completed force=true` then `pipeline_finish verdict=accepted` — recorded as `pipeline_violation: "phase-force-final"`. Design question, not bug. **Possible fix:** dedicated answer `acknowledge-and-ship` for gate-2 that stores feedback for the next task but doesn't block finish. Defer until next time the pattern recurs. | gate-2 protocol + `pipeline_finish`. |
 | Q57 | 🟡 MEDIUM | **scheduled v2.2.5 Item 8** | **Structured gate-answer protocol.** Replace free-text `answer: string` with `{decision: "accept"\|"reject", message?: string}`. Mirror logic collapses from regex-classifier to one ternary. Multi-channel ready (CLI/Web UI/Telegram/API). Category 2 fix per architectural principle — eliminates classification instead of patching it with multilingual keywords. Closes Q49 placeholder (Russian "да" → rejected) without filing it as a separate bug. Skill markdown gains a 5-line parser to accept `1`/`2 <message>` from CLI. Backward-compat shim accepts old free-text for 2 weeks post-merge then removed. | `mcp/src/driver/builtin/gates/index.ts` + `commands/task.md` + `commands/done.md`. |
+| Q62 | 🟢 LOW | open | **Ref content enrichment phase.** v2.2.5-followups (M12) loosened the reviewer-prompt rule that required `**Red Flags in Diff**` / `**Anti-Patterns**` sections in every ref. ~12 refs under `agents/references/{e2e,perf,test,ui}-*.md` never had those sections, so the rule was silently dead. A future phase should decide whether structured sections, extended frontmatter, or per-stack ref expansion is the right shape, then re-enrich the bare refs accordingly. Not blocking — frontmatter (`tags`, `agent_hints`, `summary`, `when_to_load`) already signals relevance to reviewers. | `agents/references/`. |
 
 ## Deferred (no trigger to fix yet)
 
@@ -51,6 +52,6 @@ When real-task validation surfaces a new bug:
 - 🟡 MEDIUM — degrades correctness or observability silently
 - 🟢 LOW — cosmetic / UX friction / non-blocking
 
-Q-numbers monotonically increase (next: Q62). Numbers are stable across closures — once Q39 was filed, it stays Q39 even after fix.
+Q-numbers monotonically increase (next: Q63). Numbers are stable across closures — once Q39 was filed, it stays Q39 even after fix.
 
 **Note on Q49 / Q56:** Both reserved-then-superseded. Q49 was "gate user-answer English-only" placeholder — became Q57 (structured gate-answer) as a Category-2 fix per architectural principle. Q56 was reserved during a renumbering pass and never assigned. Both numbers remain unused (do not recycle).

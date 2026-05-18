@@ -18,7 +18,7 @@
     "refs_to_load": {
       "type": "array",
       "items": { "type": "string" },
-      "maxItems": 10,
+      "maxItems": 5,
       "description": "Senior-pattern references (filenames from agents/references/) to inject into agent prompts."
     },
     "security_needed": {

@@ -243,7 +243,10 @@ Bounded cost (~$0.0005-0.005 per call on haiku tier), bounded scope (it only pic
 - **Q44 — anti-pattern detection.** Rule text + diff → LLM picks rules with real violations. Replaces word-overlap noise.
 - **Q46 — task_short synthesis.** Task text → LLM generates semantic short identifier. Output goes into `state.task_short` (task_id stays hex-stable for DB referential integrity).
 - **Q58 — security_needed / ui_touched / api_touched (intent half).** Boolean classification of task intent. The *surface* half (does diff touch UI files?) stays deterministic regex on filenames — Category 1.
+- **Stack detection (v2.2.6 reclassification).** Originally classified as Category 1 here. Reclassified to Category 3 after the user spotted that "which language? which package manager? which test runner?" is a textbook classification problem (irreducibly free-form input + finite knowable candidate set). v2.2.6 ships table-driven candidates (`templates/stack-candidates.yaml`) consumed by classifier-agent; deterministic resolver is the fallback when classifier-agent isn't available. Adding a new ecosystem (C#, Svelte, Elixir, Dart, …) = edit YAML, no TypeScript change required. Non-Anthropic provider friendliness: structural signals + candidate lists work without English-prose parsing.
 - **Future:** `applies_to` predicates with legitimate fuzzy classification, `complexity` edge cases ("wide but shallow"), past-misses re-ranking by relevance, v2.6 curator dispatch.
+
+> **Audit obligation.** If you find another site currently classified as Category 1 ("deterministic") that's actually picking from a finite candidate set over irreducibly-free-form input (English prose, user-supplied filenames, fuzzy patterns) — file it. Stack-detect was the canonical example, but the same shape can hide anywhere code regex'es over human-authored text.
 
 **Shared mechanism** for all Category 3 sites: a single classifier-agent in the `context` phase that emits structured JSON consumed by all downstream decisions (refs picks, security_needed bool, task_short, etc.). One LLM call per task, cached in `state.decisions`. See "Infrastructure" below.
 
@@ -254,7 +257,6 @@ Stay with code for:
 - **State transitions** (FSM, INV_001-012): correctness > flexibility.
 - **Audit log** (every MCP call): structured, queryable, redactable. Deterministic.
 - **Plugin registration / loading**: deterministic.
-- **Stack detection** (Q17/Q26): CLAUDE.md parsing + package.json reading — deterministic interfaces. (Though edge cases like polyglot monorepos could benefit from LLM classification — borderline.)
 - **`pipeline_validate`** (12 invariants): correctness must be reproducible.
 
 The rule of thumb: **if you find yourself writing regex / keyword lists / tokenization → classification problem → LLM.** If you find yourself writing schema constraints / state machine transitions / structured emission → deterministic → code.

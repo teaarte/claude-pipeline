@@ -3,6 +3,14 @@ import { stateFile, findingsFile, summaryFile, pipelineJsonl } from "../lib/path
 import { withStateLock, appendJsonl, writeText } from "../lib/state-io.js";
 import { runInvariants } from "../lib/invariants.js";
 import { buildSummary } from "../lib/summary.js";
+import { audit } from "../lib/audit.js";
+
+const PRIOR_PHASES_FOR_FINAL = [
+  "context",
+  "planning",
+  "implementation",
+  "validation",
+] as const;
 
 export const finishSchema = {
   project_dir: z.string(),
@@ -46,6 +54,34 @@ export async function pipelineFinish(input: {
     state.ended_at ??= new Date().toISOString();
     // Set verdict first so invariant INV_007 runs against the intended outcome.
     state.verdict = input.verdict;
+
+    // v2.2.6 C7 / Q63: auto-close `final` on clean accepted verdict.
+    // Without this, every successful run required force-setting `final` →
+    // metric row carried `pipeline_violation: "phase-force-final"` →
+    // analytics could no longer separate genuine recovery (Q54 gate-2
+    // reject-but-ship) from clean success. The force path stays intact
+    // for Q54: force=true here still records `pipeline_violation` AND
+    // input.force=true skips this auto-close entirely.
+    if (
+      input.verdict === "accepted" &&
+      !input.force &&
+      state.phases?.final?.status === "pending"
+    ) {
+      const allPriorClosed = PRIOR_PHASES_FOR_FINAL.every((name) => {
+        const s = state.phases?.[name]?.status;
+        return s === "completed" || s === "skipped";
+      });
+      if (allPriorClosed) {
+        state.phases.final.status = "completed";
+        await audit({
+          tool: "pipeline_finish",
+          args: { verdict: input.verdict },
+          projectDir: input.project_dir,
+          verdict: "ok",
+          error_class: "auto-close-final",
+        }).catch(() => undefined);
+      }
+    }
 
     const violations = await runInvariants(state, fjsonl);
     // Stale-spawn alone is bypassable with force=true. Any other violation is hard-blocked.

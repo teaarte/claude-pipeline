@@ -220,6 +220,34 @@ export async function pipelineRecordAgentRun(input: {
     state.agents_count = (state.agents_count ?? 0) + 1;
     state.blockers_found = (state.blockers_found ?? 0) + blocking;
 
+    // v2.2.6 C7 / Q63: auto-close `validation` when the acceptance reviewer
+    // returns a clean PASS and no other spawns are still in flight. Without
+    // this, every successful run had `validation` stuck in `in_progress`
+    // → /done tripped INV_007 → user force-set `final` → metric row carried
+    // `pipeline_violation: "phase-force-final"` permanently. The Q54
+    // genuine-recovery force path stays intact (it goes through
+    // pipeline_set_phase_status with force=true, not this auto-close).
+    //
+    // Strict guard: only the exact string "PASS" triggers auto-close. A
+    // malformed verdict that string-equals "pass" or "PASSED" does NOT
+    // close validation — risk-register guard against masked failures.
+    if (
+      input.phase === "validation" &&
+      agent === "acceptance" &&
+      header.verdict === "PASS" &&
+      phase.status === "in_progress" &&
+      (!Array.isArray(phase.open_spawns) || phase.open_spawns.length === 0)
+    ) {
+      phase.status = "completed";
+      await audit({
+        tool: "pipeline_record_agent_run",
+        args: { phase: "validation", agent, agent_run_id: input.agent_run_id },
+        projectDir: input.project_dir,
+        verdict: "ok",
+        error_class: "auto-close-validation",
+      }).catch(() => undefined);
+    }
+
     // append findings AFTER state mutation prepared but BEFORE write — we want jsonl write to be best-effort
     // (state lock ensures sequential access; if findings append fails we still propagate by throwing)
     for (const f of writtenFindings) {

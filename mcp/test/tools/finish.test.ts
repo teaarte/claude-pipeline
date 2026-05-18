@@ -362,6 +362,142 @@ describe("pipeline_finish", () => {
     }
   });
 
+  // v2.2.6 C7 / Q63: auto-close validation + final on clean success.
+  // Without this, every successful run carried `pipeline_violation:
+  // "phase-force-final"` in the metric row, destroying the signal value
+  // of force_used / pipeline_violation as a "something went wrong" marker.
+
+  it("Q63: acceptance:PASS auto-closes validation phase (no force needed)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+
+      // Record acceptance:PASS — should auto-close validation.
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.validation?.status).toBe("completed");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: acceptance:FAIL does NOT auto-close validation (stays in_progress)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+
+      // Record acceptance:FAIL — validation should stay in_progress.
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "FAIL" }));
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.validation?.status).toBe("in_progress");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: pipeline_finish auto-closes `final` on clean accepted verdict — no pipeline_violation", async () => {
+    const proj = await tempProject();
+    try {
+      // Mimic the frontend-core 2026-05-18 happy path: validation auto-closes
+      // (via the record-agent-run path above), then user runs /done →
+      // pipeline_finish auto-closes final without force.
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" })); // auto-closes validation
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+
+      // No explicit pipeline_set_phase_status for "final" — pipeline_finish does it.
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.verdict).toBe("accepted");
+      expect(fin.metrics_row.force_used).toBe(false);
+      expect(fin.metrics_row.pipeline_violation).toBeNull();
+
+      const { readStateSafe } = await import("../../src/lib/state-io.js");
+      const ps = await readStateSafe(join(proj.dir, ".claude", "pipeline-state.json"));
+      expect(ps?.phases?.final?.status).toBe("completed");
+      expect(ps?.pipeline_violation).toBeFalsy();
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  it("Q63: Q54-style force path (force=true) STILL records pipeline_violation (genuine recovery preserved)", async () => {
+    const proj = await tempProject();
+    try {
+      await pipelineInit(initArgs(proj.dir));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "context", status: "completed" });
+      await spawnNonreview(proj.dir, "planning", "planner");
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "planning", status: "completed" });
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "test_first",
+        status: "skipped",
+        skipped_reason: "regression-only",
+      });
+      await spawnNonreview(proj.dir, "implementation", "implementer");
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
+      await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "PASS" }));
+      // Genuine Q54-style force on final (e.g. recovery from a violation
+      // upstream). pipeline_violation must persist into the metric row.
+      await pipelineSetPhaseStatus({
+        project_dir: proj.dir,
+        phase: "final",
+        status: "completed",
+        force: true,
+      });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate1", status: "approved" });
+      await pipelineSetGate({ project_dir: proj.dir, gate: "gate2", status: "approved" });
+      const fin = await pipelineFinish({ project_dir: proj.dir, verdict: "accepted" });
+      expect(fin.metrics_row.pipeline_violation).toMatch(/phase-force-final/);
+      expect(fin.metrics_row.force_used).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
   it("Q55: pipeline_finish rewrites pipeline-state-summary.md with the final verdict", async () => {
     const proj = await tempProject();
     try {

@@ -24,6 +24,7 @@ export type ErrorClass =
   | "team-knowledge-missing"   // Item 7: a team_knowledge_refs file failed to read
   | "team-knowledge-truncated" // Item 7: combined team-knowledge content hit the 50KB cap
   | "llm-classification-needed" // Item 9: classifier-agent failed/malformed — defaults applied
+  | "task_id-rewrite"          // v2.2.6 C6 / Item 6: agent emitted non-canonical task_id, rewritten to state.task_id
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

@@ -140,6 +140,49 @@ export async function pipelineRecordAgentRun(input: {
       );
     }
 
+    // v2.2.6 (C6 / Item 6): canonical task_id defensive rewrite.
+    // Reviewer / validator agents must emit findings under the canonical
+    // task_id from spawn-context's "Canonical identifiers" section. When
+    // an agent picks a semantic id from the task description prose
+    // instead (e.g. `phase-0.7-step-1` vs canonical
+    // `t-2026-05-18-implementphase07step`), every analytics query keyed
+    // on the canonical id misses the finding. Rewrite + audit so the
+    // record lands at the right key; the audit lets us measure the
+    // mismatch rate over time (risk register: >10% should surface a
+    // metric for investigation).
+    const canonicalTaskId =
+      typeof state.task_id === "string" && state.task_id.length > 0
+        ? (state.task_id as string)
+        : null;
+    if (canonicalTaskId) {
+      const rewrites: Array<{ where: string; from: unknown }> = [];
+      if (header.task_id && header.task_id !== canonicalTaskId) {
+        rewrites.push({ where: "header", from: header.task_id });
+        header.task_id = canonicalTaskId;
+      }
+      for (const f of writtenFindings) {
+        if (f.task_id && f.task_id !== canonicalTaskId) {
+          rewrites.push({ where: `finding:${f.id}`, from: f.task_id });
+          f.task_id = canonicalTaskId;
+        }
+      }
+      if (rewrites.length > 0) {
+        await audit({
+          tool: "pipeline_record_agent_run",
+          args: {
+            phase: input.phase,
+            agent,
+            agent_run_id: input.agent_run_id,
+            canonical_task_id: canonicalTaskId,
+            rewrites,
+          },
+          projectDir: input.project_dir,
+          verdict: "ok",
+          error_class: "task_id-rewrite",
+        }).catch(() => undefined);
+      }
+    }
+
     // ensure phase exists
     if (!state.phases?.[input.phase]) {
       throw new Error(`Unknown phase '${input.phase}' in pipeline-state.json`);

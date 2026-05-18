@@ -20,6 +20,7 @@ function makeReq(overrides: Partial<AgentSpawnRequest> = {}): AgentSpawnRequest 
       "Spawn agent: code-analyzer. Project: /tmp/x. Task: investigate Q16.",
     template_path: overrides.template_path,
     team_knowledge: overrides.team_knowledge,
+    task_id: overrides.task_id,
   };
 }
 
@@ -161,5 +162,58 @@ describe("shuttleSpawnProvider", () => {
     const prompt = r.response.claude_code_task.prompt;
     expect(prompt).toContain("injection-sql-or-nosql");
     expect(prompt).toContain("auth-bypass");
+  });
+
+  // v2.2.6 C6 / Item 6: spawn-context Canonical identifiers block.
+  it("C6: injects '## Canonical identifiers' section with task_id when provided", async () => {
+    const r = await shuttleSpawnProvider.spawn(
+      makeReq({
+        agent: "logic-reviewer",
+        task_id: "t-2026-05-18-implementphase07step",
+      }),
+    );
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    const prompt = r.response.claude_code_task.prompt;
+    expect(prompt).toContain("## Canonical identifiers");
+    expect(prompt).toContain("`task_id`: t-2026-05-18-implementphase07step");
+    expect(prompt).toContain("MUST equal the canonical");
+  });
+
+  it("C6: omits the Canonical identifiers section when task_id is absent (backward compat for synthetic tests)", async () => {
+    const r = await shuttleSpawnProvider.spawn(
+      makeReq({ agent: "code-analyzer", task_id: undefined }),
+    );
+    if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+      throw new Error("expected spawn-agent shuttle");
+    }
+    expect(r.response.claude_code_task.prompt).not.toContain("## Canonical identifiers");
+  });
+
+  it("C6: Canonical identifiers section appears BEFORE the role template (authoritative context)", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "cp-shuttle-c6-"));
+    try {
+      const tplFile = join(tmpDir, "role.md");
+      await writeFile(tplFile, "ROLE TEMPLATE BODY HERE", "utf8");
+      const r = await shuttleSpawnProvider.spawn(
+        makeReq({
+          agent: "logic-reviewer",
+          task_id: "t-2026-05-18-canonical",
+          template_path: tplFile,
+        }),
+      );
+      if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
+        throw new Error("expected spawn-agent shuttle");
+      }
+      const prompt = r.response.claude_code_task.prompt;
+      const canonicalIdx = prompt.indexOf("## Canonical identifiers");
+      const roleIdx = prompt.indexOf("## Role template");
+      expect(canonicalIdx).toBeGreaterThan(-1);
+      expect(roleIdx).toBeGreaterThan(-1);
+      expect(canonicalIdx).toBeLessThan(roleIdx);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   });
 });

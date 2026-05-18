@@ -47,7 +47,8 @@ export const continueTaskSchema = {
     z.object({
       driver_state_id: z.string(),
       type: z.literal("user-answer"),
-      answer: z.string(),
+      decision: z.enum(["accept", "reject"]),
+      message: z.string().optional(),
     }),
     z.object({
       driver_state_id: z.string(),

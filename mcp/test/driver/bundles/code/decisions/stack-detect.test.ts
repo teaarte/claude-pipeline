@@ -35,8 +35,8 @@ describe("Q17 — detectStack", () => {
       expect(stack.language).toBe("typescript");
       expect(stack.package_manager).toBe("pnpm");
       expect(stack.project_type).toBe("frontend-app");
-      expect(stack.test_command).toBe("npm run test");
-      expect(stack.build_command).toBe("npm run build");
+      expect(stack.test_command).toBe("pnpm test");
+      expect(stack.build_command).toBe("pnpm build");
     } finally {
       await cleanup();
     }
@@ -285,6 +285,60 @@ describe("Q17 — detectStack", () => {
       await writeFile(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n", "utf8");
       const stack = await detectStack(dir);
       expect(stack.package_manager).toBe("pnpm");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("H3: yarn-lock present → yarn-style commands (yarn test, not npm run test)", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "jest", lint: "eslint .", build: "tsc" } }),
+        "utf8",
+      );
+      await writeFile(join(dir, "yarn.lock"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.package_manager).toBe("yarn");
+      expect(stack.test_command).toBe("yarn test");
+      expect(stack.lint_command).toBe("yarn lint");
+      expect(stack.build_command).toBe("yarn build");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("H3: bun.lockb present → bun run test", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "bun test" } }),
+        "utf8",
+      );
+      await writeFile(join(dir, "bun.lockb"), "", "utf8");
+      const stack = await detectStack(dir);
+      expect(stack.package_manager).toBe("bun");
+      expect(stack.test_command).toBe("bun run test");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("H4: Python pyproject + CLAUDE.md Test override still classifies as backend", async () => {
+    const { dir, cleanup } = await tempDir();
+    try {
+      await writeFile(join(dir, "pyproject.toml"), `[tool.poetry]\nname = "x"\n`, "utf8");
+      await writeFile(
+        join(dir, "CLAUDE.md"),
+        "## Validation Commands\n- **Test:** `pytest -xvs tests/`\n",
+        "utf8",
+      );
+      const stack = await detectStack(dir);
+      expect(stack.language).toBe("python");
+      expect(stack.test_command).toBe("pytest -xvs tests/");
+      expect(stack.project_type).toBe("backend");
     } finally {
       await cleanup();
     }

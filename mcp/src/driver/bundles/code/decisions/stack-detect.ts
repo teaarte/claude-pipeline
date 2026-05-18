@@ -107,14 +107,22 @@ async function isMonorepoRoot(projectDir: string): Promise<boolean> {
   return false;
 }
 
-function parsePackageJson(content: string): Partial<DetectedStack> {
+function scriptCommand(pm: string, script: string): string {
+  // pnpm + yarn forward unknown args to the script directly (`pnpm lint`).
+  // npm + bun require `run` for non-lifecycle scripts; we always use `run`
+  // so the same form works for test / lint / build uniformly.
+  if (pm === "pnpm" || pm === "yarn") return `${pm} ${script}`;
+  return `${pm} run ${script}`;
+}
+
+function parsePackageJson(content: string, pm: string): Partial<DetectedStack> {
   try {
     const pkg = JSON.parse(content);
     const scripts = pkg.scripts ?? {};
     return {
-      test_command: scripts.test ? `npm run test` : null,
-      lint_command: scripts.lint ? `npm run lint` : null,
-      build_command: scripts.build ? `npm run build` : null,
+      test_command: scripts.test ? scriptCommand(pm, "test") : null,
+      lint_command: scripts.lint ? scriptCommand(pm, "lint") : null,
+      build_command: scripts.build ? scriptCommand(pm, "build") : null,
     };
   } catch {
     return {};
@@ -188,7 +196,8 @@ export async function detectStack(projectDir: string): Promise<DetectedStack> {
     }
     const tsConfigPresent = await fileExists(join(projectDir, "tsconfig.json"));
     const language = tsConfigPresent || pkg?.devDependencies?.typescript ? "typescript" : "javascript";
-    const fromPkg = parsePackageJson(pkgJsonRaw);
+    const packageManager = await detectNodePackageManager(projectDir);
+    const fromPkg = parsePackageJson(pkgJsonRaw, packageManager);
     // Q26: monorepo signal wins over the legacy "library" default but
     // not over a positive frontend/backend classification (a Next.js
     // app inside a Turborepo root is still a frontend-app).
@@ -203,7 +212,7 @@ export async function detectStack(projectDir: string): Promise<DetectedStack> {
     }
     return {
       language,
-      package_manager: await detectNodePackageManager(projectDir),
+      package_manager: packageManager,
       test_command: claudeOverrides.test_command ?? fromPkg.test_command ?? null,
       lint_command: claudeOverrides.lint_command ?? fromPkg.lint_command ?? null,
       build_command: claudeOverrides.build_command ?? fromPkg.build_command ?? null,
@@ -224,7 +233,7 @@ export async function detectStack(projectDir: string): Promise<DetectedStack> {
       test_command: claudeOverrides.test_command ?? "pytest",
       lint_command: claudeOverrides.lint_command ?? "ruff check",
       build_command: claudeOverrides.build_command ?? null,
-      project_type: claudeOverrides.test_command ? null : "backend",
+      project_type: "backend",
     };
   }
 

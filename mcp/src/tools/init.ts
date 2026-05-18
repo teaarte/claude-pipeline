@@ -32,6 +32,13 @@ export const initSchema = {
       project_type: z.enum(["frontend-app", "backend", "library", "monorepo"]).nullable().optional(),
     })
     .describe("Stack info — passes verbatim into pipeline-state.json"),
+  owner_id: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "v2.2.6 C8 / Q64 — opaque platform-agnostic owner identifier (e.g. Claude Code session_id). Stored on state for cross-session safety checks.",
+    ),
 };
 
 export async function pipelineInit(input: {
@@ -41,6 +48,7 @@ export async function pipelineInit(input: {
   complexity: "simple" | "medium" | "complex";
   tests_mode: "tdd" | "regression-only";
   stack: any;
+  owner_id?: string | null;
 }): Promise<any> {
   await assertProjectDirAllowed(input.project_dir);
   const file = stateFile(input.project_dir);
@@ -68,6 +76,7 @@ export async function pipelineInit(input: {
       stack: { ...tpl.stack, ...input.stack },
       started_at: now,
       team_knowledge_refs: [...projectConfig.team_knowledge_refs],
+      owner_id: input.owner_id ?? null,
     };
     await ensureEmptyJsonl(fjsonl);
     await writeText(summary, await buildSummary(state));

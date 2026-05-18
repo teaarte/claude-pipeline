@@ -4,6 +4,12 @@ import { withStateLock, appendJsonl, writeText } from "../lib/state-io.js";
 import { runInvariants } from "../lib/invariants.js";
 import { buildSummary } from "../lib/summary.js";
 import { audit } from "../lib/audit.js";
+import {
+  currentOwnerId,
+  ownerCheck,
+  CROSS_OWNER_VIOLATION,
+  OWNER_MISMATCH_CODE,
+} from "../lib/owner.js";
 
 const PRIOR_PHASES_FOR_FINAL = [
   "context",
@@ -18,6 +24,12 @@ export const finishSchema = {
   project_short: z.string().optional().describe("Short project name for metrics row, e.g. 's3-panel'"),
   task_short: z.string().optional().describe("Short task title for metrics row"),
   force: z.boolean().optional().describe("Force finish even with stale-spawn violations. Records pipeline_violation."),
+  force_cross_owner: z
+    .boolean()
+    .optional()
+    .describe(
+      "v2.2.6 C8 / Q64 — bypass the owner_id mismatch check. Audited as pipeline_violation: 'cross-owner-finalize'. Use only when you intend to finalize a task started by a different session.",
+    ),
 };
 
 /**
@@ -41,12 +53,42 @@ export async function pipelineFinish(input: {
   project_short?: string;
   task_short?: string;
   force?: boolean;
+  force_cross_owner?: boolean;
 }): Promise<any> {
   const file = stateFile(input.project_dir);
   const fjsonl = findingsFile(input.project_dir);
 
   return withStateLock(file, async (state) => {
     if (!state) throw new Error(`pipeline-state.json not found at ${file}`);
+
+    // v2.2.6 C8 / Q64: cross-session ownership check. Refuse to finalize
+    // a task started by a different session unless force_cross_owner=true
+    // (then audit as pipeline_violation: "cross-owner-finalize" so the
+    // metric row preserves the signal).
+    const ownerResult = ownerCheck(state.owner_id, currentOwnerId());
+    if (ownerResult.kind === "mismatch" && !input.force_cross_owner) {
+      const err = new Error(
+        `${OWNER_MISMATCH_CODE}: pipeline-state was started by owner '${ownerResult.expected}' but this session's owner is '${ownerResult.actual}'. ` +
+          `Pass {force_cross_owner: true} to override (audited as ${CROSS_OWNER_VIOLATION}).`,
+      );
+      (err as any).code = OWNER_MISMATCH_CODE;
+      throw err;
+    }
+    if (ownerResult.kind === "mismatch" && input.force_cross_owner) {
+      state.pipeline_violation = state.pipeline_violation
+        ? `${state.pipeline_violation}; ${CROSS_OWNER_VIOLATION}`
+        : CROSS_OWNER_VIOLATION;
+      await audit({
+        tool: "pipeline_finish",
+        args: {
+          force_cross_owner: true,
+          expected_owner: ownerResult.expected,
+          actual_owner: ownerResult.actual,
+        },
+        projectDir: input.project_dir,
+        verdict: "ok",
+      }).catch(() => undefined);
+    }
 
     // Item 11: stamp the wall-clock end before invariants so the metric row
     // can read it back consistently. Re-finish (idempotent) keeps the first

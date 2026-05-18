@@ -63,7 +63,7 @@ For pipeline phase plans, see [`phases/`](phases/).
 | Q42 | 🟡 MEDIUM | `39ff1a9` | `task_id` slug collision fix: hash-suffix `-[a-f0-9]{4}` when generated id matches recent metric row |
 | Q43 | 🟢 LOW | `cda5046` | `impl_iters` / `plan_iters` derive by `count(verdicts WHERE phase=X)` instead of `max(iteration)` |
 
-## v2.2.5-bundle-foundation (PR pending, branch `v2.2.5-bundle-foundation`)
+## v2.2.5-bundle-foundation (PR #4, merged `e3eb3d6`)
 
 | Q | Severity | Commit | What |
 |---|---|---|---|

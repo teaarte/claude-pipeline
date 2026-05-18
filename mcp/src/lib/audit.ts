@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, appendFile, rename, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, appendFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
 import { homeMetricsDir } from "./paths.js";
@@ -112,34 +112,15 @@ function redactForGlobal(entry: AuditEntry): AuditEntry {
   return copy;
 }
 
-// Cheap gate: only walk the file when its size *might* exceed cap. avg
-// audit line ≈ 300 bytes; safety multiplier of 1.5× means we read only
-// when file size is plausibly over `cap` rows. Saves ~3MB of disk read per
-// MCP call once the file is established (Performance W1).
-const AVG_BYTES_PER_ENTRY = 300;
-
 /**
- * Append to a JSONL file but cap total entries at `cap`. When over, the
- * read-trim-rename branch runs under a proper-lockfile lock so two
- * concurrent audit() calls don't drop one another's entry at the cap
- * boundary (Challenger audit01).
+ * Append to a JSONL file but cap total entries at `cap`. H11: always under
+ * lock. The prior fast path skipped locking based on a `stat` size estimate,
+ * which let two concurrent audits both observe "under cap" and both append,
+ * predictably exceeding the cap. Audit is not latency-critical; the lock cost
+ * is negligible compared to the storage-bound guarantee.
  */
 async function appendCapped(file: string, entry: unknown, cap: number): Promise<void> {
   await ensureDir(file);
-  // Fast path: cheap stat to decide if rotation is even plausible.
-  let plausiblyOverCap = false;
-  try {
-    const st = await stat(file);
-    if (st.size > cap * AVG_BYTES_PER_ENTRY) plausiblyOverCap = true;
-  } catch {
-    /* file doesn't exist yet — definitely not over cap */
-  }
-  if (!plausiblyOverCap) {
-    await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
-    return;
-  }
-  // Slow path: lock + read-trim-rename. Append-then-truncate avoids
-  // dropping the new entry under contention.
   if (!(await fileExists(file))) {
     await writeFile(file, "", "utf8");
   }

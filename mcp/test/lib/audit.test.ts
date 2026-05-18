@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import {
   audit,
   classifyErrorMessage,
@@ -171,7 +171,9 @@ describe("withAudit() wrapper", () => {
         // is set — but verdict is null at init time. Subsequent inits update
         // the same state file. That's fine — each call still writes audit.
         // Refresh state by deleting the file between iterations.
-        await writeFile(`${proj.dir}/.claude/pipeline-state.json`, "{}", "utf8");
+        // Reset between iterations — must delete (not write `{}`), because
+        // withStateLock now treats a pre-existing `{}` as CORRUPT_STATE (H12).
+        await rm(`${proj.dir}/.claude/pipeline-state.json`).catch(() => undefined);
       }
       const rows = await readJsonl(projectAuditFile(proj.dir));
       expect(rows.length).toBe(3);
@@ -276,6 +278,36 @@ describe("audit() — global cap", () => {
     await clearMetrics();
     await clearAuditFiles();
   });
+
+  it("H11: concurrent audits at cap boundary preserve both entries and stay at cap", async () => {
+    // Seed at cap - 1. Fire 2 concurrent audits. Both must be preserved
+    // and the file must end at exactly cap (one append + one trim path).
+    // The pre-fix fast path let both observers see "under cap" via stat and
+    // skip the lock, blowing past the cap.
+    const filler = "x".repeat(270);
+    const seedLines: string[] = [];
+    for (let i = 0; i < AUDIT_GLOBAL_CAP - 1; i++) {
+      seedLines.push(JSON.stringify({ schema_version: "1.0", seq: i, filler }));
+    }
+    await writeFile(globalAuditFile(), seedLines.join("\n") + "\n", "utf8");
+
+    await Promise.all([
+      audit({ tool: "pipeline_state_get", args: {}, projectDir: null, verdict: "ok" }),
+      audit({ tool: "pipeline_state_get", args: {}, projectDir: null, verdict: "ok" }),
+    ]);
+    const after = (await readFile(globalAuditFile(), "utf8"))
+      .split("\n")
+      .filter(Boolean);
+    expect(after.length).toBeLessThanOrEqual(AUDIT_GLOBAL_CAP);
+    const newAudits = after.filter((l) => {
+      try {
+        return JSON.parse(l).tool === "pipeline_state_get";
+      } catch {
+        return false;
+      }
+    });
+    expect(newAudits.length).toBe(2);
+  }, 20_000);
 
   it("FIFO-truncates global jsonl when > AUDIT_GLOBAL_CAP", async () => {
     // Pre-seed the global file with AUDIT_GLOBAL_CAP entries each padded out

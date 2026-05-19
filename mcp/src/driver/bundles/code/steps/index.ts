@@ -26,7 +26,7 @@ import type {
   UserAnswer,
 } from "../../../types/plugin.js";
 import { askUser, complete, spawnAgentsParallel } from "../../../core/shuttle.js";
-import { requireGate, requireDecision, requireSpawnProvider, requireAgent } from "../../../core/registry.js";
+import { requireGate, requireDecision, requireSpawnProvider, requireAgent, requireFlow, requireStep } from "../../../core/registry.js";
 import { resolveAgentModel } from "../agents/resolve-model.js";
 import { defaultConfig } from "../../../types/config.js";
 import { CODE_PHASES, type Phase } from "../../../../lib/phase-state-machine.js";
@@ -247,16 +247,66 @@ export async function mirrorGateDecision(
   }
 }
 
-function gateStep(name: string, gateName: string, phase: StepPlugin["phase"]): StepPlugin {
+/**
+ * Q74 (D13): clear scratch keys that would prevent impl + review steps from
+ * re-running on a gate-2 reject-revise walk-back. We keep `agent_output_*`
+ * entries (they're history) and only clear the `__spawn_issued_*` markers so
+ * spawnOne issues fresh spawns; same for the review fan-out batch marker.
+ * gate-2 decision + mirror flag are cleared so the second pass re-prompts the
+ * human after the new impl iteration.
+ */
+function clearImplScratchForRevise(state: DriverState): void {
+  for (const key of Object.keys(state.scratch)) {
+    if (key.startsWith("__spawn_issued_")) delete state.scratch[key];
+  }
+  delete state.scratch[REVIEW_ISSUED_KEY];
+  delete state.scratch["gate-2_decision"];
+  delete state.scratch["gate-2_mirrored"];
+}
+
+/**
+ * Q74 (D13): find the first step in the active flow whose StepPlugin.phase
+ * === "implementation". Used by gate-2 reject-revise to walk step_index back
+ * to the impl phase entry. Returns -1 if no impl-phase step exists in the
+ * flow (defensive — shouldn't happen for built-in code flows).
+ */
+function findFirstImplStepIndex(state: DriverState, registry: PluginRegistry): number {
+  const flow = requireFlow(registry, state.flow_name);
+  for (let i = 0; i < flow.steps.length; i++) {
+    const step = registry.steps.get(flow.steps[i]);
+    if (step && step.phase === "implementation") return i;
+  }
+  return -1;
+}
+
+type GateResumeFn = (
+  state: DriverState,
+  registry: PluginRegistry,
+  answer: UserAnswer,
+) => Promise<StepResult> | StepResult;
+
+function gateStep(
+  name: string,
+  gateName: string,
+  phase: StepPlugin["phase"],
+  onResume?: GateResumeFn,
+): StepPlugin {
   return {
     name,
     phase,
     async run(state, ctx) {
-      // Resume: if pipeline_continue_task already routed in a user-answer
-      // for this gate, advance — but first mirror the decision to canonical
-      // pipeline-state.gates (Q8).
-      if (state.scratch[`${gateName}_decision`] !== undefined) {
+      // Resume: if pipeline_continue_task routed in a user-answer for this
+      // gate, mirror the decision to canonical pipeline-state.gates (Q8),
+      // then dispatch on the optional gate-specific resume handler. Gates
+      // without a handler advance unconditionally (today's gate-0 / gate-1
+      // behavior); gate-2's handler routes accept / reject-revise /
+      // reject-abandon (Q74 / D13).
+      const answer = state.scratch[`${gateName}_decision`] as UserAnswer | undefined;
+      if (answer !== undefined) {
         await mirrorGateDecision(state, ctx.registry, gateName);
+        if (onResume) {
+          return onResume(state, ctx.registry, answer);
+        }
         return { type: "advance" };
       }
       // Close any prior phases (idempotent) before pausing for the human.
@@ -269,9 +319,52 @@ function gateStep(name: string, gateName: string, phase: StepPlugin["phase"]): S
   };
 }
 
+/**
+ * Q74 (D13): gate-2 resume routes the user's decision through three paths:
+ *
+ * - **accept** → set state.verdict = "accepted", advance to FINALIZE.
+ * - **reject + reject_intent: "abandon"** → set state.verdict = "rejected",
+ *   advance to FINALIZE. Metric row carries verdict="rejected".
+ * - **reject (default reject_intent = "revise")** → walk step_index back to
+ *   the implementation phase entry, clear impl-phase spawn-issued markers
+ *   and the gate-2 decision so the second pass re-prompts. Verdict stays
+ *   null until the user re-decides at gate-2.
+ *
+ * The walk-back pre-bumps to (implEntry - 1) because runFSM increments after
+ * an "advance" StepResult. Without the pre-bump, advance would land us at
+ * implEntry+1, skipping the entry step.
+ */
+async function gate2Resume(
+  state: DriverState,
+  registry: PluginRegistry,
+  answer: UserAnswer,
+): Promise<StepResult> {
+  if (answer.decision === "accept") {
+    state.verdict = "accepted";
+    return { type: "advance" };
+  }
+  // decision === "reject" from here on
+  const intent = answer.reject_intent ?? "revise";
+  if (intent === "abandon") {
+    state.verdict = "rejected";
+    return { type: "advance" };
+  }
+  // intent === "revise" — walk back to impl entry, re-run impl + review.
+  const implEntry = findFirstImplStepIndex(state, registry);
+  if (implEntry < 0) {
+    throw new Error(
+      "INV_inconsistent-finalize: cannot find an implementation-phase step in the active flow for gate-2 reject-revise",
+    );
+  }
+  clearImplScratchForRevise(state);
+  // Pre-bump: runFSM increments after "advance", so set to (implEntry - 1).
+  state.step_index = implEntry - 1;
+  return { type: "advance" };
+}
+
 const GATE_0_STEP = gateStep("gate-0", "gate-0", "context");
 const GATE_1_STEP = gateStep("gate-1", "gate-1", "planning");
-const GATE_2_STEP = gateStep("gate-2", "gate-2", "validation");
+const GATE_2_STEP = gateStep("gate-2", "gate-2", "validation", gate2Resume);
 
 const ENRICH: StepPlugin = {
   name: "enrich",
@@ -519,8 +612,18 @@ const FINALIZE: StepPlugin = {
   async run(state) {
     // Close every prior phase before declaring the task complete.
     await closePriorPhases(state, "final");
+    // Q74 (D13): never default verdict to "accepted" at FINALIZE. gate-2's
+    // resume handler is the only legitimate origin of state.verdict — accept
+    // sets it to "accepted", reject_intent=abandon sets it to "rejected",
+    // reject_intent=revise walks step_index back and never reaches FINALIZE.
+    // Reaching FINALIZE with verdict=null means the FSM is in an inconsistent
+    // state — throw instead of silently shipping with verdict="accepted".
+    if (state.verdict === null) {
+      throw new Error(
+        "INV_inconsistent-finalize: state.verdict is null at FINALIZE — gate-2 resume should have set it before the FSM reached this step",
+      );
+    }
     state.complete = true;
-    state.verdict = state.verdict ?? "accepted";
     return {
       type: "halt",
       response: complete(

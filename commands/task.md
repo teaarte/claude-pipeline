@@ -20,12 +20,13 @@ Call `mcp__claude-pipeline__pipeline_run_task({project_dir: <cwd>, task: "$ARGUM
 
 - **`spawn-agent`** → invoke the `Task` tool with `claude_code_task` (verbatim params). Pass the result to `mcp__claude-pipeline__pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agent-result", agent_run_id, agent_output}})`.
 - **`spawn-agents-parallel`** → invoke `Task` for each spawn in parallel. Bundle results: `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agents-results", results: [{agent_run_id, agent_output}, ...]}})`.
-- **`ask-user`** → display `message` verbatim, capture user reply, parse it via the rules below, then `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "user-answer", decision, message?}})`.
+- **`ask-user`** → display `message` verbatim, capture user reply, parse it via the rules below, then `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "user-answer", decision, reject_intent?, message?}})`.
 
-  **User-answer parsing (binary protocol — closes Q57):**
+  **User-answer parsing (closes Q57; gate-2 disambiguation closes Q74):**
   - `1` / `a` / `accept` (case-insensitive, first token) → `{decision: "accept"}`
-  - `2` / `r` / `reject [free-form text]` → `{decision: "reject", message: "<text>" or undefined}`
-  - Anything else (including ambiguous prose like `"maybe"` or non-English keywords) → ask the user to clarify with `1` or `2`. Do NOT auto-classify.
+  - `2` / `r` / `reject [free-form text]` → `{decision: "reject", reject_intent: "revise", message: "<text>" or undefined}` — at gate-2 this walks the FSM back to the implementation phase entry and re-runs reviewers; at gate-0/gate-1 the `reject_intent` is ignored.
+  - `abandon [free-form text]` (gate-2 only) → `{decision: "reject", reject_intent: "abandon", message: "<text>" or undefined}` — finalizes with `verdict: "rejected"`.
+  - Anything else (including ambiguous prose like `"maybe"` or non-English keywords) → ask the user to clarify with `1` / `2` / `abandon`. Do NOT auto-classify.
 
 - **`complete`** → display `summary`, suggest `/done`, stop.
 - **`error`** → display `message` and `recovery_options`, ask user to pick one, `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "recovery", choice}})`.

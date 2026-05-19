@@ -158,6 +158,12 @@ export interface FlowPlugin extends PluginMeta {
  */
 export interface UserAnswer {
   decision: "accept" | "reject";
+  /**
+   * Q74 (D13): gate-2 reject disambiguation. "revise" routes back to impl
+   * entry + re-runs reviewers; "abandon" finalizes with verdict="rejected".
+   * Default at gate-2 reject is "revise". Gate-0 + gate-1 ignore this field.
+   */
+  reject_intent?: "revise" | "abandon";
   message?: string;
 }
 

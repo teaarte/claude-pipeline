@@ -26,7 +26,6 @@ import { pipelineRecordNonreviewAgent } from "../../tools/record-nonreview-agent
 import { pipelineCancelSpawn } from "../../tools/cancel-spawn.js";
 import { pipelineAbandon } from "../../tools/abandon.js";
 import { mcpSpawnRecorder } from "./run-task.js";
-import { mirrorGateDecision } from "../bundles/code/steps/index.js";
 import type { ContinueTaskInput, DriverResponse } from "../types/shuttle.js";
 
 export const continueTaskSchema = {
@@ -48,6 +47,10 @@ export const continueTaskSchema = {
       driver_state_id: z.string(),
       type: z.literal("user-answer"),
       decision: z.enum(["accept", "reject"]),
+      // Q74 (D13): gate-2 reject disambiguation. "revise" walks FSM back to
+      // impl entry; "abandon" finalizes with verdict="rejected". Gate-0/gate-1
+      // ignore the field.
+      reject_intent: z.enum(["revise", "abandon"]).optional(),
       message: z.string().optional(),
     }),
     z.object({
@@ -164,19 +167,16 @@ export async function pipelineContinueTask(input: {
       const gateName = state.pending_user_answer.gate;
       state.scratch[`${gateName}_decision`] = {
         decision: evt.decision,
+        reject_intent: evt.reject_intent,
         message: evt.message,
       };
       state.pending_user_answer = null;
-      // Build a registry just for the gate plugin lookup. We do it again
-      // below for runFSM — registries are cheap to construct (no IO) and
-      // doing it here keeps the mirror call self-contained.
-      {
-        const r = createRegistry();
-        await loadBundle("code", r);
-        await loadProjectConfigIfPresent(r, input.project_dir);
-        await mirrorGateDecision(state, r, gateName);
-      }
-      state.step_index++;
+      // Q74 (D13): do NOT auto-bump step_index here. gateStep.run owns the
+      // resume decision (accept → verdict=accepted + advance; gate-2
+      // reject-revise → walk back to impl entry + advance; gate-2
+      // reject-abandon → verdict=rejected + advance to FINALIZE). Mirroring
+      // to pipeline-state.gates also happens inside gateStep.run on resume,
+      // so it's no longer needed here.
     } else if (evt.type === "recovery") {
       if (evt.choice === "abandon") {
         // Cancel any still-open spawns BEFORE moving pipeline-state out of

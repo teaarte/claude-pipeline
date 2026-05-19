@@ -51,6 +51,15 @@ export type ContinueTaskInput =
       driver_state_id: string;
       type: "user-answer";
       decision: "accept" | "reject";
+      /**
+       * Q74 (D13): meaningful only at gate-2 when decision === "reject".
+       * "revise" (default for `2`/reject keyword) → walk FSM back to the
+       * implementation phase entry and re-run reviewers. "abandon" → finalize
+       * with verdict="rejected". Ignored at gate-0/gate-1 (those reject paths
+       * stay simple). Skill parser keeps `2`/`reject` → reject_intent="revise"
+       * for backward consistency.
+       */
+      reject_intent?: "revise" | "abandon";
       message?: string;
     }
   | { driver_state_id: string; type: "recovery"; choice: "abandon" | "force-close" | "retry" };

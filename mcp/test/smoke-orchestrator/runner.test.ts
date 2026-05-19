@@ -136,8 +136,12 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
           continue;
         }
         if (response.status === "ask-user") {
+          // Q74 (D13): simulate user accept via the scratch[<gate>_decision]
+          // contract. gate-2 resume sets verdict="accepted"; gate-0/gate-1
+          // just advance. Do NOT pre-bump step_index — gateStep.run handles
+          // it on FSM re-entry.
           state.pending_user_answer = null;
-          state.step_index++;
+          state.scratch[`${response.gate}_decision`] = { decision: "accept" };
           continue;
         }
         if (response.status === "error") {

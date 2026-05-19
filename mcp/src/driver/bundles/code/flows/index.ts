@@ -38,7 +38,8 @@ const MEDIUM_FLOW: FlowPlugin = {
     "enrich",
     "context-verify",
     "plan",
-    "plan-grounding",
+    // D6 / Q67: MEDIUM merges plan-grounding into the plan-review fan-out
+    // (parallel spawnAgentsParallel of [plan-grounding-check, logic-reviewer]).
     "plan-review",
     "gate-1",
     "test-first",
@@ -70,7 +71,8 @@ const COMPLEX_FLOW: FlowPlugin = {
     "context-verify",
     "architect",
     "plan",
-    "plan-grounding",
+    // D6 / Q67: COMPLEX merges plan-grounding into the plan-review fan-out
+    // (parallel spawnAgentsParallel of [plan-grounding-check, logic-reviewer]).
     "plan-review",
     "gate-1",
     "test-first",

@@ -435,17 +435,98 @@ const PLAN_GROUNDING: StepPlugin = {
   name: "plan-grounding",
   phase: "planning",
   async run(state, ctx) {
-    if (state.decisions["complexity"] === "simple") return { type: "advance" };
+    // D6 / Q67: MEDIUM + COMPLEX flows merged plan-grounding into the
+    // PLAN_REVIEW fan-out for parallel execution. SIMPLE keeps the
+    // standalone step (only one agent runs at planning gate-1 in SIMPLE).
+    if (state.decisions["complexity"] !== "simple") return { type: "advance" };
     return spawnOne(state, ctx, "plan-grounding-check", "planning", "plan-grounding");
   },
 };
 
+const PLAN_REVIEW_AGENTS = ["plan-grounding-check", "logic-reviewer"] as const;
+const PLAN_REVIEW_ISSUED_KEY = "__plan_review_agents_issued";
+
+/**
+ * D6 / Q67: planning-phase reviewers fan out in parallel. Before D6:
+ * PLAN_GROUNDING and PLAN_REVIEW fired as two separate FSM steps → two
+ * shuttle round-trips, serialized LLM execution. After D6: MEDIUM +
+ * COMPLEX fans out [plan-grounding-check, logic-reviewer] via
+ * spawnAgentsParallel; SIMPLE keeps the standalone plan-grounding +
+ * plan-review path. Resume short-circuit mirrors the impl REVIEW pattern.
+ */
 const PLAN_REVIEW: StepPlugin = {
   name: "plan-review",
   phase: "planning",
   async run(state, ctx) {
-    if (state.decisions["complexity"] === "simple") return { type: "advance" };
-    return spawnOne(state, ctx, "logic-reviewer", "planning", "plan-review");
+    if (state.decisions["complexity"] === "simple") {
+      // SIMPLE: plan-grounding ran separately; PLAN_REVIEW emits a single
+      // logic-reviewer spawn (today's pre-D6 behavior).
+      return spawnOne(state, ctx, "logic-reviewer", "planning", "plan-review");
+    }
+    // Resume short-circuit. continue-task increments step_index once on
+    // agents-results; if the FSM re-enters this step with all results
+    // staged in scratch, advance.
+    const issuedIds = state.scratch[PLAN_REVIEW_ISSUED_KEY] as string[] | undefined;
+    if (issuedIds && issuedIds.length > 0) {
+      const allDone = issuedIds.every(
+        (id) => state.scratch[SPAWN_RESULT_KEY(id)] !== undefined,
+      );
+      if (allDone) {
+        delete state.scratch[PLAN_REVIEW_ISSUED_KEY];
+        return { type: "advance" };
+      }
+    }
+    const eligible: AgentPlugin[] = [];
+    for (const name of PLAN_REVIEW_AGENTS) {
+      const agent = ctx.registry.agents.get(name);
+      if (!agent) continue;
+      if (agent.applies_to && !agent.applies_to(state)) continue;
+      eligible.push(agent);
+    }
+    if (eligible.length === 0) return { type: "advance" };
+    if (eligible.length === 1) {
+      return spawnOne(state, ctx, eligible[0].name, "planning", "plan-review");
+    }
+    await closePriorPhases(state, "planning");
+    const provider = requireSpawnProvider(ctx.registry);
+    const config = (state.scratch.config as any) ?? defaultConfig;
+    const teamKnowledge = await loadTeamKnowledgeForSpawn(state);
+    const newIssuedIds: string[] = [];
+    const spawns: Array<{
+      agent_run_id: string;
+      agent: string;
+      spawn_request: SpawnRequest;
+    }> = [];
+    for (const agent of eligible) {
+      const model = resolveAgentModel(agent, "planning", config);
+      const agent_run_id = await ctx.beginSpawn(agent.name, "planning", model);
+      newIssuedIds.push(agent_run_id);
+      const result = await provider.spawn({
+        agent: agent.name,
+        agent_run_id,
+        driver_state_id: state.driver_state_id,
+        phase: "planning",
+        model,
+        template_path: agent.template_path,
+        prompt: `Spawn agent: ${agent.name}. Project: ${state.project_dir}. Task: ${state.task}.`,
+        team_knowledge: teamKnowledge,
+      });
+      if (result.type !== "shuttle" || result.response.status !== "spawn-agent") {
+        throw new Error(
+          `plan-review fan-out: spawn provider returned unexpected shape for ${agent.name}`,
+        );
+      }
+      spawns.push({
+        agent_run_id,
+        agent: agent.name,
+        spawn_request: result.response.spawn_request,
+      });
+    }
+    state.scratch[PLAN_REVIEW_ISSUED_KEY] = newIssuedIds;
+    return {
+      type: "shuttle",
+      response: spawnAgentsParallel(state.driver_state_id, spawns),
+    };
   },
 };
 

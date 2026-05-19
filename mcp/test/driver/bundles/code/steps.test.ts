@@ -33,6 +33,12 @@ describe("built-in steps — every run() is exercised", () => {
         state.decisions["tests_mode"] = "tdd";
         state.scratch.complexity = "complex";
         state.scratch.tests_mode = "tdd";
+        // Q74 (D13): FINALIZE throws INV_inconsistent-finalize when verdict
+        // is null. In production gate-2 resume sets it; for this isolated
+        // step-shape test we set it directly so the run() shape check holds.
+        if (step.name === "finalize") {
+          state.verdict = "accepted";
+        }
         const result = await runWith(state, step);
         expect(["advance", "shuttle", "halt"]).toContain(result.type);
       } finally {

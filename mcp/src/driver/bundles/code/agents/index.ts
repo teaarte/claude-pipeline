@@ -75,6 +75,16 @@ const STYLE_REVIEWER: AgentPlugin = {
   template_path: "agents/style-reviewer.md",
   output_schema: "reviewer",
   default_model: "haiku",
+  // D2: style review adds no value on type-only / docs-only / config-only
+  // diffs (no runtime emit; no executable surface to lint behavioral
+  // patterns on). Frontend-core 2026-05-18 case: 0 findings on a type-only
+  // TS diff. Skipping saves ~5K tokens/task on the wrong change_kind.
+  relevant_for_change_kinds: [
+    "logic",
+    "ui",
+    "perf-sensitive",
+    "security-sensitive",
+  ],
 };
 
 const SECURITY: AgentPlugin = {
@@ -86,6 +96,17 @@ const SECURITY: AgentPlugin = {
     const v = state.decisions["security_needed"];
     return v !== false; // default-on unless explicitly disabled
   },
+  // D2: gated by security_needed (applies_to) AND change_kind for the rare
+  // case where security_needed is null but change_kind explicitly says the
+  // task can't touch secrets. The applies_to predicate runs first; this is
+  // a secondary filter.
+  relevant_for_change_kinds: [
+    "logic",
+    "ui",
+    "security-sensitive",
+    "perf-sensitive",
+    "config-only",
+  ],
 };
 
 const PERFORMANCE: AgentPlugin = {
@@ -93,6 +114,15 @@ const PERFORMANCE: AgentPlugin = {
   template_path: "agents/performance.md",
   output_schema: "reviewer",
   default_model: "sonnet",
+  // D2: performance reviewer is wasted on type-only / docs-only diffs that
+  // can't affect runtime perf. Frontend-core 2026-05-18 case: 0 findings on
+  // a type-only TS diff. Skipping saves ~5K tokens/task on the wrong change_kind.
+  relevant_for_change_kinds: [
+    "logic",
+    "ui",
+    "perf-sensitive",
+    "security-sensitive",
+  ],
 };
 
 const TEST_AGENT: AgentPlugin = {

@@ -22,6 +22,9 @@ import { join } from "node:path";
 import type { HookPlugin, DriverState } from "../../../types/plugin.js";
 import { claudeDir } from "../../../../lib/paths.js";
 import { pipelineGetPastMisses } from "../../../../tools/get-past-misses.js";
+import { extractJsonHeader } from "../../../../lib/parse-json-header.js";
+import { validate } from "../../../../lib/schemas.js";
+import { audit } from "../../../../lib/audit.js";
 
 const exec = promisify(execFile);
 
@@ -375,6 +378,169 @@ const CALLER_CONTEXT_EXPAND: HookPlugin = {
   },
 };
 
+/**
+ * D1 / Q-classifier-auto-spawn: parse the classifier-agent's JSON output
+ * delivered via pipeline_continue_task and populate state.decisions with
+ * its LLM-derived classification. Pure getter decisions (refs-to-load,
+ * security-needed, antipattern-rules-applicable) consume these slots;
+ * without an upstream populating them they returned safe defaults and the
+ * refs catalog stayed dead. CLASSIFY_AGENT spawns; this hook parses.
+ *
+ * The parse-on-resume logic lives here (not inside CLASSIFY_AGENT.run)
+ * because continue-task auto-advances state.step_index after delivering
+ * the agent_output — the step's resume short-circuit would never fire.
+ *
+ * Failure mode: unparseable JSON OR schema-invalid output → keep existing
+ * defaults, audit `error_class: "llm-classification-needed"`, return. The
+ * FSM never blocks on a classifier hiccup.
+ */
+const EXTRACT_CLASSIFIER_OUTPUT: HookPlugin = {
+  name: "extract-classifier-output",
+  event: "after-agent-result",
+  async run(state, ctx) {
+    if (ctx.agent !== "classifier") return;
+    const output = ctx.agent_output ?? "";
+    if (output.length === 0) return;
+    const parsed = extractJsonHeader(output);
+    if (!parsed.ok) {
+      await audit({
+        tool: "pipeline_classify_agent",
+        args: { task_id: state.task_id, reason: parsed.reason },
+        projectDir: state.project_dir,
+        verdict: "ok",
+        error_class: "llm-classification-needed",
+      }).catch(() => undefined);
+      return;
+    }
+    const valid = await validate("classifier-output.schema.json", parsed.value);
+    if (!valid.ok) {
+      await audit({
+        tool: "pipeline_classify_agent",
+        args: {
+          task_id: state.task_id,
+          schema_errors: valid.errors
+            .slice(0, 3)
+            .map((e) => `${e.path}: ${e.message}`)
+            .join("; "),
+        },
+        projectDir: state.project_dir,
+        verdict: "ok",
+        error_class: "llm-classification-needed",
+      }).catch(() => undefined);
+      return;
+    }
+    const v = parsed.value as Record<string, unknown>;
+    if (typeof v.task_short === "string" && v.task_short.trim().length > 0) {
+      state.decisions["task_short"] = v.task_short.trim();
+    }
+    if (Array.isArray(v.refs_to_load)) {
+      state.decisions["refs_to_load"] = (v.refs_to_load as unknown[]).filter(
+        (r): r is string => typeof r === "string",
+      );
+    }
+    if (typeof v.security_needed === "boolean") {
+      state.decisions["security_needed"] = v.security_needed;
+    }
+    if (Array.isArray(v.antipattern_rules_applicable)) {
+      state.decisions["antipattern_rules_applicable"] = (v.antipattern_rules_applicable as unknown[]).filter(
+        (r): r is string => typeof r === "string",
+      );
+    }
+    if (v.stack && typeof v.stack === "object") {
+      state.decisions["stack"] = v.stack;
+    }
+    if (typeof v.change_kind === "string" || v.change_kind === null) {
+      state.decisions["change_kind"] = v.change_kind;
+    }
+  },
+};
+
+// Q-tech-debt / D3: signal phrases that mark a paragraph as a tech-debt /
+// out-of-scope observation in implementer prose. Real-task frontend-core
+// 2026-05-18 case: "Pre-existing prettier debt in repo (19 files): mostly
+// .md files plus a few pre-existing TS files; not a regression." Multiple
+// matches per paragraph are fine — the paragraph is captured once.
+const TECH_DEBT_SIGNAL_PHRASES: RegExp[] = [
+  /\bpre[-\s]?existing\b/i,
+  /\bout[-\s]?of[-\s]?scope\b/i,
+  /\bnot a regression\b/i,
+  /\bnoticed\b/i,
+  /\balso worth fixing\b/i,
+  /\bTODO:/i,
+  /\bFIXME:/i,
+];
+
+function paragraphHash(p: string): string {
+  // djb2-style 32-bit hash, hex. Stable across runs so re-firing the hook
+  // on the same paragraph is idempotent. The hash is embedded in the
+  // auto-captured marker so we can dedupe on subsequent passes without
+  // tokenising the markdown.
+  let h = 5381;
+  const norm = p.replace(/\s+/g, " ").trim();
+  for (let i = 0; i < norm.length; i++) {
+    h = ((h * 33) ^ norm.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * Q-tech-debt / D3: scan implementer prose for tech-debt / out-of-scope
+ * observations that should have been written to `.claude/issues-found.md`
+ * but weren't. Each matching paragraph is appended under an
+ * `<!-- auto-captured hash=... -->` marker so the next invocation can
+ * dedupe by hash. Implementer-only; other agents emit structured output
+ * via the reviewer/validator schema path and don't need this safety net.
+ */
+const EXTRACT_TECH_DEBT_FROM_PROSE: HookPlugin = {
+  name: "extract-tech-debt-from-prose",
+  event: "after-agent-result",
+  async run(state, ctx) {
+    if (ctx.agent !== "implementer") return;
+    const output = ctx.agent_output ?? "";
+    if (output.length === 0) return;
+    const paragraphs = output
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const matches = paragraphs.filter((p) =>
+      TECH_DEBT_SIGNAL_PHRASES.some((re) => re.test(p)),
+    );
+    if (matches.length === 0) return;
+    const dir = await ensureClaudeDir(state);
+    const out = join(dir, "issues-found.md");
+    let existing = "";
+    try {
+      existing = await readFile(out, "utf8");
+    } catch {
+      existing = "";
+    }
+    const existingHashes = new Set<string>();
+    const hashRe = /<!--\s*auto-captured\s+hash=([0-9a-f]+)\s*-->/gi;
+    let m: RegExpExecArray | null;
+    while ((m = hashRe.exec(existing)) !== null) {
+      existingHashes.add(m[1]);
+    }
+    const newBlocks: string[] = [];
+    for (const p of matches) {
+      const h = paragraphHash(p);
+      if (existingHashes.has(h)) continue;
+      existingHashes.add(h);
+      // Multi-line paragraphs indent continuation lines so the markdown
+      // bullet stays attached. The marker comment sits on its own line
+      // above the bullet for easy grep / dedupe.
+      const indented = p.replace(/\n/g, "\n  ");
+      newBlocks.push(`<!-- auto-captured hash=${h} -->\n- ${indented}`);
+    }
+    if (newBlocks.length === 0) return;
+    const header = existing.length === 0 ? "# issues-found.md\n\n" : "";
+    const sep = existing.length > 0 && !existing.endsWith("\n\n")
+      ? (existing.endsWith("\n") ? "\n" : "\n\n")
+      : "";
+    const next = header + existing + sep + newBlocks.join("\n\n") + "\n";
+    await writeFile(out, next, "utf8");
+  },
+};
+
 // INVARIANT (Q60): GIT_DIFF_SNAPSHOT must run first. ANTI_PATTERN_GREP and
 // CALLER_CONTEXT_EXPAND read `.claude/diff.txt` that GIT_DIFF_SNAPSHOT writes.
 // Reordering this array silently breaks downstream consumers (empty diff →
@@ -387,6 +553,8 @@ export const BUILTIN_HOOKS: HookPlugin[] = [
   LOAD_PAST_MISSES,
   ANTI_PATTERN_GREP,    // reads diff.txt
   CALLER_CONTEXT_EXPAND, // reads diff.txt
+  EXTRACT_CLASSIFIER_OUTPUT, // after-agent-result, classifier-only
+  EXTRACT_TECH_DEBT_FROM_PROSE, // after-agent-result, implementer-only
 ];
 
 // Exported for tests so they can stub git invocation without running it.
@@ -394,4 +562,7 @@ export const __internals = {
   extractAntiPatternRules,
   extractFunctionNamesFromDiff,
   findCallerSites,
+  paragraphHash,
+  TECH_DEBT_SIGNAL_PHRASES,
+  EXTRACT_TECH_DEBT_FROM_PROSE,
 };

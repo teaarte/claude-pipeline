@@ -9,7 +9,7 @@ import type { Phase } from "../../lib/phase-state-machine.js";
 import type {
   DriverResponse,
   ContinueTaskInput,
-  ClaudeCodeTaskSpec,
+  SpawnRequest,
 } from "./shuttle.js";
 
 export const PLUGIN_API_VERSION = "1.0";
@@ -124,6 +124,24 @@ export interface AgentPlugin extends PluginMeta {
    */
   applies_to?(state: DriverState): boolean;
   /**
+   * D2 (Q-change-kind-selectivity): change_kind values for which this agent
+   * is relevant. When omitted → relevant for ALL change_kinds (conservative
+   * default; matches today's "spawn everything" behavior). When set, the
+   * REVIEW step skips this agent if state.decisions.change_kind is set AND
+   * is NOT in the array. When change_kind is null/undefined (classifier
+   * didn't run or didn't classify), all relevant_for_change_kinds-gated
+   * agents still spawn — selectivity is opt-in optimization, never a
+   * silent skip.
+   *
+   * Domain: same enum as classifier-output.schema.json change_kind:
+   * "type-only" | "logic" | "ui" | "perf-sensitive" | "security-sensitive"
+   * | "config-only" | "docs-only".
+   *
+   * Skipped reviewers emit an audit row `reviewer-skipped` (error_class:
+   * "reviewer-skipped-change-kind") for visibility.
+   */
+  relevant_for_change_kinds?: string[];
+  /**
    * Optional whitelist of external MCP tool names this agent is allowed to
    * call. Each tool must be a member of some active MCPClientPlugin's
    * `expose_tools`. v2.3 wires this through the agent prompt; v2.2.5 just
@@ -157,7 +175,21 @@ export interface FlowPlugin extends PluginMeta {
  * gates; the harness emits this shape directly.
  */
 export interface UserAnswer {
-  decision: "accept" | "reject";
+  /**
+   * D8 (Q69): "auto-apply" is gate-1 specific. The harness emits it when
+   * the user types `1` / `a` / `auto-apply` at gate-1, telling the
+   * pipeline to treat the auto-derived "Suggested revision" block as a
+   * gate-1 reject message (replan with that feedback). Gate-0 / gate-2
+   * never emit "auto-apply" — gate-2 stays accept/reject with
+   * reject_intent disambiguation (Q74).
+   */
+  decision: "accept" | "reject" | "auto-apply";
+  /**
+   * Q74 (D13): gate-2 reject disambiguation. "revise" routes back to impl
+   * entry + re-runs reviewers; "abandon" finalizes with verdict="rejected".
+   * Default at gate-2 reject is "revise". Gate-0 + gate-1 ignore this field.
+   */
+  reject_intent?: "revise" | "abandon";
   message?: string;
 }
 
@@ -168,7 +200,12 @@ export interface GateDecision {
 
 export interface GatePlugin extends PluginMeta {
   name: string;
-  message(state: DriverState): string;
+  /**
+   * D8 (Q69): gate messages may be async — gate-1 reads findings.jsonl to
+   * build the auto-derived "Suggested revision" block. Pure-text gates
+   * (gate-0, gate-2) keep returning a synchronous string.
+   */
+  message(state: DriverState): string | Promise<string>;
   validate_response(input: UserAnswer): GateDecision;
 }
 
@@ -337,4 +374,4 @@ export interface PluginRegistry {
 }
 
 // Re-export shuttle types for convenient single-import.
-export type { DriverResponse, ContinueTaskInput, ClaudeCodeTaskSpec };
+export type { DriverResponse, ContinueTaskInput, SpawnRequest };

@@ -121,10 +121,21 @@ Verdict rules:
 - `PASS_WITH_WARNINGS` iff any warn finding.
 - `PASS` iff clean.
 
+### Verdict gate on impl-phase reviewer blockers (Q68 / D7)
+
+Before emitting `verdict: "PASS"` (or `"PASS_WITH_WARNINGS"`), you MUST cross-reference the implementation-phase reviewer findings:
+
+1. Look at `state.reviewer_verdicts[]` (provided in the spawn context). Filter to entries where `phase === "implementation"` AND `iteration === <max iteration in that array>` (the latest impl pass).
+2. If any of those reviewer entries has `blocking_issues > 0`, OR if `findings.jsonl` contains any line with `severity: "blocking"` + `agent` ∈ {impl-phase reviewers} + `status: "open"` at the latest iteration → **downgrade your verdict to `FAIL`**.
+3. The `summary_line` MUST enumerate the open blocker categories + file paths so the human can see which findings vetoed the pass at gate-2. Example: `FAIL: 3 open impl blockers (prettier x2 in src/runtime/*.ts, race-condition x1 in src/app.ts)`.
+4. Tool-call green (`pnpm test/lint/build`) is necessary but NOT sufficient for `PASS`. A clean tool exit while a reviewer's blocker is still open is the silent-ship-with-blockers anti-pattern this gate exists to stop.
+
+Even if you forget this rule, `INV_013` will fire at `pipeline_record_agent_run` / `pipeline_finish` time and reject the row. The prompt-side check is preferred so the verdict reflects reality before the row is written.
+
 ## Output constraints (hard validation)
 
 - `task_id` (header + every finding): MUST equal the canonical `task_id` from the spawn context's **"Canonical identifiers"** section. Do NOT extract a task_id from the task description prose — semantic ids like `phase-0.7-step-1` break cross-task analytics. The MCP server will rewrite mismatches and audit as `task_id-rewrite`, but emit correctly.
-- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `summary_line`: ≤ 150 chars (one-sentence summary — anything longer fails the schema and forces a retry)
 - `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
 - `findings[].summary`: ≤ 200 chars
 - `findings[].schema_version`: required, exact value `"1.0"`. The schema rejects findings missing this field.

@@ -43,10 +43,11 @@ function makeMockProvider(): SpawnProviderPlugin {
       return {
         type: "shuttle",
         response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-          subagent_type: "general-purpose",
+          runner_hint: "claude-code-task",
           description: req.agent,
           prompt: body,
           model: req.model,
+          extras: { subagent_type: "general-purpose" },
         }),
       };
     },
@@ -71,6 +72,9 @@ async function setupMediumState(projectDir: string) {
   state.scratch.complexity = "medium";
   state.decisions["complexity"] = "medium";
   state.decisions["tests_mode"] = "regression-only";
+  // D1: skip CLASSIFY_AGENT's classifier spawn — these tests focus on gate-0
+  // mirroring, not on the classifier's spawn/parse loop.
+  state.decisions["task_short"] = "gate-mirror";
   return state;
 }
 

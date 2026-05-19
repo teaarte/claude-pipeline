@@ -91,10 +91,11 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
           return {
             type: "shuttle",
             response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-              subagent_type: req.agent,
+              runner_hint: "claude-code-task",
               description: `Mock ${req.agent}`,
               prompt: body,
               model: req.model,
+              extras: { subagent_type: req.agent },
             }),
           };
         },
@@ -130,14 +131,18 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
         if (response.status === "spawn-agent") {
           const pending = state.pending_spawns[response.agent_run_id];
           expect(pending, `pending_spawn for ${response.agent_run_id} should exist`).toBeTruthy();
-          state.scratch[`agent_output_${response.agent_run_id}`] = response.claude_code_task.prompt;
+          state.scratch[`agent_output_${response.agent_run_id}`] = response.spawn_request.prompt;
           delete state.pending_spawns[response.agent_run_id];
           state.step_index++;
           continue;
         }
         if (response.status === "ask-user") {
+          // Q74 (D13): simulate user accept via the scratch[<gate>_decision]
+          // contract. gate-2 resume sets verdict="accepted"; gate-0/gate-1
+          // just advance. Do NOT pre-bump step_index — gateStep.run handles
+          // it on FSM re-entry.
           state.pending_user_answer = null;
-          state.step_index++;
+          state.scratch[`${response.gate}_decision`] = { decision: "accept" };
           continue;
         }
         if (response.status === "error") {
@@ -200,10 +205,11 @@ describe("smoke-orchestrator — simple-rename golden state", () => {
           return {
             type: "shuttle",
             response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-              subagent_type: req.agent,
+              runner_hint: "claude-code-task",
               description: "no",
               prompt: "no",
               model: req.model,
+              extras: { subagent_type: req.agent },
             }),
           };
         },

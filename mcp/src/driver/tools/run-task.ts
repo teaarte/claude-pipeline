@@ -15,7 +15,7 @@ import { createRegistry } from "../core/registry.js";
 import { runFSM, type SpawnRecorder } from "../core/fsm.js";
 import { makeInitialDriverState, withDriverStateLock } from "../core/state.js";
 import { loadBundle } from "../loaders/bundles.js";
-import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
+import { loadProjectConfigIfPresent, readProjectBundleConfig } from "../loaders/project-config.js";
 import { complexityDecision } from "../bundles/code/decisions/complexity.js";
 import { testsModeDecision } from "../bundles/code/decisions/tests-mode.js";
 import { detectStack } from "../bundles/code/decisions/stack-detect.js";
@@ -23,6 +23,7 @@ import { pipelineInit } from "../../tools/init.js";
 import { pipelineBeginAgent } from "../../tools/begin-agent.js";
 import { error as shuttleError } from "../core/shuttle.js";
 import { makeUniqueTaskId, TASK_ID_PATTERN } from "../../lib/ids.js";
+import { audit } from "../../lib/audit.js";
 import type { DriverResponse } from "../types/shuttle.js";
 
 /**
@@ -89,6 +90,9 @@ export async function pipelineRunTask(input: {
     const registry = createRegistry();
     await loadBundle("code", registry);
     const config = await loadProjectConfigIfPresent(registry, input.project_dir);
+    // D9 / Q70: load bundle-level project config so gate-1's auto-replan
+    // pre-ask hook can read auto_replan_on_blocking_max.
+    const bundleConfig = await readProjectBundleConfig(input.project_dir);
 
     // Bootstrap pipeline-state if it doesn't exist. This makes /done's
     // pipeline_finish work after a real driver run.
@@ -110,6 +114,20 @@ export async function pipelineRunTask(input: {
       process.env.CLAUDE_SESSION_ID ||
       process.env.SESSION_ID ||
       null;
+    // Q72 / D11: emit a one-time audit row when owner_id is unset so the
+    // gap surfaces in the metrics stream. Without this, the Q64 cross-session
+    // OWNER_MISMATCH check silently no-ops in real production (CC's stdio
+    // mcpServers env-forwarding gap). audit() is best-effort — never blocks
+    // pipeline_run_task on a missing owner.
+    if (ownerId === null) {
+      await audit({
+        tool: "pipeline_run_task",
+        args: { task_id: taskId },
+        projectDir: input.project_dir,
+        verdict: "ok",
+        error_class: "owner-id-unset",
+      }).catch(() => undefined);
+    }
     try {
       await pipelineInit({
         project_dir: input.project_dir,
@@ -134,6 +152,7 @@ export async function pipelineRunTask(input: {
     });
     state.task_id = taskId;
     state.scratch.config = config;
+    state.scratch.bundleConfig = bundleConfig;
     state.scratch.complexity = complexity;
     state.scratch.tests_mode = testsMode;
     state.decisions["complexity"] = complexity;

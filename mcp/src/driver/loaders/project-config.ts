@@ -20,13 +20,31 @@ export interface ProjectBundleConfig {
   bundle: string;
   mcp_clients: ReadonlyArray<unknown>;
   team_knowledge_refs: ReadonlyArray<string>;
+  /**
+   * D9 (Q70): cap on the auto-replan loop at planning gate-1. Default `0`
+   * (today's manual gate-1 every time). `1` or `2` opts in — when
+   * REQUEST_CHANGES fires at planning iter=N and N < max, the pipeline
+   * uses D8's auto-derived suggested-revision as a synthetic
+   * gate-1-reject and replans automatically (no human pause).
+   *
+   * Cap exists because real-task observation 2026-05-19 showed a
+   * reject-respawn-respawn confirmation-bias risk. Forcing manual review
+   * after N attempts keeps the human in the loop.
+   */
+  auto_replan_on_blocking_max: 0 | 1 | 2;
 }
 
 const DEFAULT_BUNDLE_CONFIG: ProjectBundleConfig = {
   bundle: "code",
   mcp_clients: [],
   team_knowledge_refs: [],
+  auto_replan_on_blocking_max: 0,
 };
+
+function pickAutoReplanCap(v: unknown): 0 | 1 | 2 {
+  if (v === 1 || v === 2) return v;
+  return 0;
+}
 
 export async function readProjectBundleConfig(
   projectDir: string,
@@ -41,6 +59,7 @@ export async function readProjectBundleConfig(
       team_knowledge_refs: Array.isArray(parsed.team_knowledge_refs)
         ? parsed.team_knowledge_refs.filter((r: unknown): r is string => typeof r === "string")
         : [],
+      auto_replan_on_blocking_max: pickAutoReplanCap(parsed.auto_replan_on_blocking_max),
     };
   } catch {
     return DEFAULT_BUNDLE_CONFIG;

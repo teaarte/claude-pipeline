@@ -7,6 +7,7 @@ import { AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
 
 const NONREVIEW_AGENTS = [
+  "classifier",
   "planner",
   "implementer",
   "architect",

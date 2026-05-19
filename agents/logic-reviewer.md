@@ -120,13 +120,13 @@ Template:
 Verdict rules:
 - `verdict = "REQUEST_CHANGES"` iff at least one finding has `severity = "blocking"`.
 - `verdict = "APPROVE"` otherwise (info/warn findings allowed).
-- `summary_line` ≤ 100 chars, useful at-a-glance.
+- `summary_line` ≤ 150 chars, useful at-a-glance.
 - Every finding MUST have a `category`. If no entry fits, set `"category": "other"` AND populate `proposed_new_category` — the MCP server routes that to `/agent-feedback` for vocab promotion.
 
 ## Output constraints (hard validation)
 
 - `task_id` (header + every finding): MUST equal the canonical `task_id` from the spawn context's **"Canonical identifiers"** section. Do NOT extract a task_id from the task description prose — semantic ids like `phase-0.7-step-1` break cross-task analytics. The MCP server will rewrite mismatches and audit as `task_id-rewrite`, but emit correctly.
-- `summary_line`: ≤ 100 chars (one-sentence summary — anything longer fails the schema and forces a retry)
+- `summary_line`: ≤ 150 chars (one-sentence summary — anything longer fails the schema and forces a retry)
 - `findings[].id`: must match `^f-\d{4}-\d{2}-\d{2}-[a-z0-9]{6}$` — today's date + 6 lowercase hex/alphanumeric chars, e.g. `f-2026-05-14-a3b9k7`
 - `findings[].summary`: ≤ 200 chars
 - `findings[].schema_version`: required, exact value `"1.0"`. The schema rejects findings missing this field.

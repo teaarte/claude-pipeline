@@ -34,10 +34,11 @@ function mockProvider(): SpawnProviderPlugin {
       return {
         type: "shuttle",
         response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-          subagent_type: "general-purpose",
+          runner_hint: "claude-code-task",
           description: `mock ${req.agent}`,
           prompt: "mock",
           model: req.model,
+          extras: { subagent_type: "general-purpose" },
         }),
       };
     },
@@ -286,10 +287,11 @@ describe("Q9: review step fan-out", () => {
           return {
             type: "shuttle",
             response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-              subagent_type: "general-purpose",
+              runner_hint: "claude-code-task",
               description: `capture ${req.agent}`,
               prompt: "capture",
               model: req.model,
+              extras: { subagent_type: "general-purpose" },
             }),
           };
         },

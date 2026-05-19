@@ -4,34 +4,32 @@
 
 import type {
   DriverResponse,
-  ClaudeCodeTaskSpec,
+  SpawnRequest,
 } from "../types/shuttle.js";
 
 export function spawnAgent(
   driver_state_id: string,
   agent_run_id: string,
   agent: string,
-  claude_code_task: ClaudeCodeTaskSpec,
+  spawn_request: SpawnRequest,
 ): DriverResponse {
   return {
     status: "spawn-agent",
     driver_state_id,
     agent_run_id,
     agent,
-    claude_code_task,
+    spawn_request,
   };
 }
 
 /**
- * Constructor for the parallel-spawn shuttle response. Reserved for v2.x —
- * no built-in step emits this yet (Logic L9), but the wire protocol +
- * continue-task `agents-results` branch are plumbed so a future step
- * (e.g. plan-review fanning out logic + challenger in parallel) can use
- * it without core changes. Don't strip; the cost is one constructor.
+ * Constructor for the parallel-spawn shuttle response. The impl REVIEW
+ * step (Q9) and the planning REVIEW step (Q67 / D6) both use it; D4
+ * carries SpawnRequest (runner-agnostic) inside each entry.
  */
 export function spawnAgentsParallel(
   driver_state_id: string,
-  spawns: { agent_run_id: string; agent: string; claude_code_task: ClaudeCodeTaskSpec }[],
+  spawns: { agent_run_id: string; agent: string; spawn_request: SpawnRequest }[],
 ): DriverResponse {
   return {
     status: "spawn-agents-parallel",

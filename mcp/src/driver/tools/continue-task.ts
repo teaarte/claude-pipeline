@@ -26,7 +26,7 @@ import { pipelineRecordNonreviewAgent } from "../../tools/record-nonreview-agent
 import { pipelineCancelSpawn } from "../../tools/cancel-spawn.js";
 import { pipelineAbandon } from "../../tools/abandon.js";
 import { mcpSpawnRecorder } from "./run-task.js";
-import { mirrorGateDecision } from "../bundles/code/steps/index.js";
+import { runHooks } from "../core/invoke-hooks.js";
 import type { ContinueTaskInput, DriverResponse } from "../types/shuttle.js";
 
 export const continueTaskSchema = {
@@ -47,7 +47,13 @@ export const continueTaskSchema = {
     z.object({
       driver_state_id: z.string(),
       type: z.literal("user-answer"),
-      decision: z.enum(["accept", "reject"]),
+      // D8 (Q69): "auto-apply" is gate-1 specific — re-spawns planner with
+      // the auto-derived Suggested revision block as gate-1-reject message.
+      decision: z.enum(["accept", "reject", "auto-apply"]),
+      // Q74 (D13): gate-2 reject disambiguation. "revise" walks FSM back to
+      // impl entry; "abandon" finalizes with verdict="rejected". Gate-0/gate-1
+      // ignore the field.
+      reject_intent: z.enum(["revise", "abandon"]).optional(),
       message: z.string().optional(),
     }),
     z.object({
@@ -59,6 +65,7 @@ export const continueTaskSchema = {
 };
 
 const NONREVIEW_AGENT_NAMES = new Set([
+  "classifier",
   "planner",
   "implementer",
   "architect",
@@ -113,6 +120,14 @@ export async function pipelineContinueTask(input: {
       );
     }
 
+    // Registry built once and reused across the per-event branches and the
+    // later runFSM call. D3 (Q-tech-debt) fires "after-agent-result" hooks
+    // from the agent-result / agents-results branches; the loaded registry
+    // is what those hooks dispatch through.
+    const registry = createRegistry();
+    await loadBundle("code", registry);
+    await loadProjectConfigIfPresent(registry, input.project_dir);
+
     const evt = input.input;
     if (evt.type === "agent-result") {
       const spawn = state.pending_spawns[evt.agent_run_id];
@@ -128,6 +143,10 @@ export async function pipelineContinueTask(input: {
         evt.agent_output,
       );
       delete state.pending_spawns[evt.agent_run_id];
+      await runHooks(registry, "after-agent-result", state, {
+        agent: spawn.agent,
+        agent_output: evt.agent_output,
+      });
       state.step_index++;
     } else if (evt.type === "agents-results") {
       // M9: validate every spawn exists FIRST, then persist each result.
@@ -152,9 +171,18 @@ export async function pipelineContinueTask(input: {
           r.agent_output,
         );
       }
+      const spawnedAgents: Array<{ agent: string; agent_output: string }> = [];
       for (const r of evt.results) {
+        const spawn = state.pending_spawns[r.agent_run_id]!;
+        spawnedAgents.push({ agent: spawn.agent, agent_output: r.agent_output });
         state.scratch[`agent_output_${r.agent_run_id}`] = r.agent_output;
         delete state.pending_spawns[r.agent_run_id];
+      }
+      for (const sp of spawnedAgents) {
+        await runHooks(registry, "after-agent-result", state, {
+          agent: sp.agent,
+          agent_output: sp.agent_output,
+        });
       }
       state.step_index++;
     } else if (evt.type === "user-answer") {
@@ -162,21 +190,44 @@ export async function pipelineContinueTask(input: {
         throw new Error("Driver was not waiting for a user answer");
       }
       const gateName = state.pending_user_answer.gate;
-      state.scratch[`${gateName}_decision`] = {
-        decision: evt.decision,
-        message: evt.message,
-      };
-      state.pending_user_answer = null;
-      // Build a registry just for the gate plugin lookup. We do it again
-      // below for runFSM — registries are cheap to construct (no IO) and
-      // doing it here keeps the mirror call self-contained.
-      {
-        const r = createRegistry();
-        await loadBundle("code", r);
-        await loadProjectConfigIfPresent(r, input.project_dir);
-        await mirrorGateDecision(state, r, gateName);
+      // D8 (Q69): "auto-apply" is gate-1 specific. Translate to a reject
+      // decision carrying the gate-1 message's stashed "Suggested revision"
+      // block as the feedback so the planner respawn (via INV_005 + the
+      // planner prompt) sees the revision text as the rejection reason.
+      // Non-gate-1 use of auto-apply is a protocol error.
+      if (evt.decision === "auto-apply") {
+        if (gateName !== "gate-1") {
+          throw new Error(
+            `decision='auto-apply' is gate-1 specific; harness sent it for ${gateName}`,
+          );
+        }
+        const revision = state.scratch["__gate_1_suggested_revision"] as
+          | string
+          | undefined;
+        if (!revision || revision.trim().length === 0) {
+          throw new Error(
+            "decision='auto-apply' but no suggested-revision block was stashed at gate-1 — call gate.message(state) first to derive it",
+          );
+        }
+        state.scratch[`${gateName}_decision`] = {
+          decision: "reject",
+          reject_intent: evt.reject_intent,
+          message: revision.trim(),
+        };
+      } else {
+        state.scratch[`${gateName}_decision`] = {
+          decision: evt.decision,
+          reject_intent: evt.reject_intent,
+          message: evt.message,
+        };
       }
-      state.step_index++;
+      state.pending_user_answer = null;
+      // Q74 (D13): do NOT auto-bump step_index here. gateStep.run owns the
+      // resume decision (accept → verdict=accepted + advance; gate-2
+      // reject-revise → walk back to impl entry + advance; gate-2
+      // reject-abandon → verdict=rejected + advance to FINALIZE). Mirroring
+      // to pipeline-state.gates also happens inside gateStep.run on resume,
+      // so it's no longer needed here.
     } else if (evt.type === "recovery") {
       if (evt.choice === "abandon") {
         // Cancel any still-open spawns BEFORE moving pipeline-state out of
@@ -213,10 +264,6 @@ export async function pipelineContinueTask(input: {
         }
       }
     }
-
-    const registry = createRegistry();
-    await loadBundle("code", registry);
-    await loadProjectConfigIfPresent(registry, input.project_dir);
 
     const { response } = await runFSM(state, registry, {
       spawnRecorder: mcpSpawnRecorder,

@@ -34,7 +34,7 @@
         "RED", "ERROR"
       ]
     },
-    "summary_line": { "type": "string", "maxLength": 100 },
+    "summary_line": { "type": "string", "maxLength": 150 },
     "findings": {
       "type": "array",
       "items": { "$ref": "finding.schema.json" }

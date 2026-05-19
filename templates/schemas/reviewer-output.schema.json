@@ -35,8 +35,8 @@
     },
     "summary_line": {
       "type": "string",
-      "maxLength": 100,
-      "description": "Human-readable one-liner. Shown in pipeline-state and dashboards."
+      "maxLength": 150,
+      "description": "Human-readable one-liner. Shown in pipeline-state and dashboards. Q73 / D12 raised the cap from 100→150 chars after real-task observations 2026-05-19 where legitimate single-line summaries on complex tasks exceeded 100."
     },
     "findings": {
       "type": "array",

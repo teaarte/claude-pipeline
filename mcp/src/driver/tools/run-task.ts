@@ -23,6 +23,7 @@ import { pipelineInit } from "../../tools/init.js";
 import { pipelineBeginAgent } from "../../tools/begin-agent.js";
 import { error as shuttleError } from "../core/shuttle.js";
 import { makeUniqueTaskId, TASK_ID_PATTERN } from "../../lib/ids.js";
+import { audit } from "../../lib/audit.js";
 import type { DriverResponse } from "../types/shuttle.js";
 
 /**
@@ -110,6 +111,20 @@ export async function pipelineRunTask(input: {
       process.env.CLAUDE_SESSION_ID ||
       process.env.SESSION_ID ||
       null;
+    // Q72 / D11: emit a one-time audit row when owner_id is unset so the
+    // gap surfaces in the metrics stream. Without this, the Q64 cross-session
+    // OWNER_MISMATCH check silently no-ops in real production (CC's stdio
+    // mcpServers env-forwarding gap). audit() is best-effort — never blocks
+    // pipeline_run_task on a missing owner.
+    if (ownerId === null) {
+      await audit({
+        tool: "pipeline_run_task",
+        args: { task_id: taskId },
+        projectDir: input.project_dir,
+        verdict: "ok",
+        error_class: "owner-id-unset",
+      }).catch(() => undefined);
+    }
     try {
       await pipelineInit({
         project_dir: input.project_dir,

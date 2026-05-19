@@ -107,7 +107,41 @@ claude mcp list
 |---|---|---|
 | `CLAUDE_PIPELINE_METRICS_DIR` | `~/.claude/metrics` | Directory for `pipeline.jsonl` + `agent-feedback.jsonl` cross-task metrics streams. |
 | `CLAUDE_PIPELINE_PROJECT_SUBDIR` (Q66 / D5) | `.claude` | Per-project working subdirectory. Holds `pipeline-state.json`, `findings.jsonl`, `plan.md`, etc. Override when running headless / via daemon / outside Claude Code, e.g. `CLAUDE_PIPELINE_PROJECT_SUBDIR=.pipeline` writes state to `<project>/.pipeline/`. No migration — projects either use the default OR explicitly opt into a different subdir from day one. |
-| `CLAUDE_PIPELINE_OWNER_ID` | unset | Stable identifier carried into pipeline-state for cross-session ownership tracking. Pair with CC's stdio-MCP env-forwarding so the MCP server process inherits the session's ownership context. |
+| `CLAUDE_PIPELINE_OWNER_ID` (Q72 / D11) | unset | Stable identifier carried into pipeline-state for cross-session ownership tracking. CC does NOT auto-forward its own `CLAUDE_SESSION_ID` into stdio-MCP children — when this env var is unset, `pipeline_run_task` emits a one-time `error_class: "owner-id-unset"` audit row, the Q64 cross-session OWNER_MISMATCH safety net no-ops, and only the Stop hook continues to enforce ownership. See "Owner-id propagation" below for the recommended Claude Code config. |
+
+### Owner-id propagation (Q72 / D11)
+
+Real-task observation 2026-05-19: `state.owner_id: null` in production
+even though Claude Code had a session id. Root cause — CC's
+`~/.claude.json` mcpServers entry has `"env": {}` by default and CC does
+NOT auto-forward `CLAUDE_SESSION_ID` to stdio child processes. The
+pipeline's cross-session safety check (Q64 OWNER_MISMATCH at
+`pipeline_finish` / `pipeline_abandon`) silently no-ops when owner_id
+stays null.
+
+Fix on the integration side — wire env-forwarding in your CC config:
+
+```jsonc
+// ~/.claude.json
+{
+  "mcpServers": {
+    "claude-pipeline": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["…/mcp/dist/server.js"],
+      "env": {
+        "CLAUDE_PIPELINE_OWNER_ID": "${CLAUDE_SESSION_ID}"
+      }
+    }
+  }
+}
+```
+
+If CC's env-substitution doesn't trigger on your version, use a wrapper
+shell that exports the variable before invoking node. The MCP server
+still functions without owner_id — only the cross-session safety net is
+inactive. A per-task `error_class: "owner-id-unset"` audit row makes the
+gap visible in `~/.claude/metrics/mcp-audit.jsonl`.
 
 ## Project bundle config (v2.2.5+)
 

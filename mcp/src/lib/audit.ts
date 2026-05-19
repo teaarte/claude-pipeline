@@ -28,6 +28,7 @@ export type ErrorClass =
   | "auto-close-validation"    // v2.2.6 C7 / Q63: acceptance:PASS + open_spawns=0 → validation auto-closed
   | "auto-close-final"         // v2.2.6 C7 / Q63: clean accepted verdict + prior phases closed → final auto-closed
   | "INV_013"                  // Q68 / D7: acceptance.verdict=PASS with open impl-phase blockers at the latest iter
+  | "owner-id-unset"           // Q72 / D11: pipeline_run_task ran with no resolvable owner_id env var
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

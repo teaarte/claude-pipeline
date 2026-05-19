@@ -542,11 +542,35 @@ const REVIEW: StepPlugin = {
         return { type: "advance" };
       }
     }
+    // D2: change_kind from classifier-output (when populated by D1's hook).
+    // null/undefined → spawn all relevant reviewers (today's behavior).
+    const changeKind = state.decisions["change_kind"];
+    const changeKindKnown = typeof changeKind === "string" && changeKind.length > 0;
     const eligible: AgentPlugin[] = [];
     for (const name of REVIEW_FANOUT_AGENTS) {
       const agent = ctx.registry.agents.get(name);
       if (!agent) continue;
       if (agent.applies_to && !agent.applies_to(state)) continue;
+      if (
+        changeKindKnown &&
+        Array.isArray(agent.relevant_for_change_kinds) &&
+        !agent.relevant_for_change_kinds.includes(changeKind as string)
+      ) {
+        // D2: audit the skip so post-hoc analysis can quantify token savings.
+        await audit({
+          tool: "pipeline_review_fanout",
+          args: {
+            task_id: state.task_id,
+            agent: agent.name,
+            change_kind: changeKind,
+            relevant_for_change_kinds: agent.relevant_for_change_kinds,
+          },
+          projectDir: state.project_dir,
+          verdict: "ok",
+          error_class: "reviewer-skipped-change-kind",
+        }).catch(() => undefined);
+        continue;
+      }
       eligible.push(agent);
     }
     if (eligible.length === 0) return { type: "advance" };

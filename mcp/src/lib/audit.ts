@@ -29,6 +29,7 @@ export type ErrorClass =
   | "auto-close-final"         // v2.2.6 C7 / Q63: clean accepted verdict + prior phases closed → final auto-closed
   | "impl-blockers"            // Q68 / D7: acceptance.verdict=PASS with open impl-phase blockers at the latest iter
   | "owner-id-unset"           // Q72 / D11: pipeline_run_task ran with no resolvable owner_id env var
+  | "reviewer-skipped-change-kind" // D2 / Q-change-kind: reviewer not relevant for state.decisions.change_kind
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

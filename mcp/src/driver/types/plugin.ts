@@ -124,6 +124,24 @@ export interface AgentPlugin extends PluginMeta {
    */
   applies_to?(state: DriverState): boolean;
   /**
+   * D2 (Q-change-kind-selectivity): change_kind values for which this agent
+   * is relevant. When omitted → relevant for ALL change_kinds (conservative
+   * default; matches today's "spawn everything" behavior). When set, the
+   * REVIEW step skips this agent if state.decisions.change_kind is set AND
+   * is NOT in the array. When change_kind is null/undefined (classifier
+   * didn't run or didn't classify), all relevant_for_change_kinds-gated
+   * agents still spawn — selectivity is opt-in optimization, never a
+   * silent skip.
+   *
+   * Domain: same enum as classifier-output.schema.json change_kind:
+   * "type-only" | "logic" | "ui" | "perf-sensitive" | "security-sensitive"
+   * | "config-only" | "docs-only".
+   *
+   * Skipped reviewers emit an audit row `reviewer-skipped` (error_class:
+   * "reviewer-skipped-change-kind") for visibility.
+   */
+  relevant_for_change_kinds?: string[];
+  /**
    * Optional whitelist of external MCP tool names this agent is allowed to
    * call. Each tool must be a member of some active MCPClientPlugin's
    * `expose_tools`. v2.3 wires this through the agent prompt; v2.2.5 just

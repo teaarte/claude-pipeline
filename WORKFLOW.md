@@ -2,7 +2,7 @@
 
 > Daily-usage patterns + command-choice flowchart. For overview + install, see [`README.md`](README.md). For positioning + UX vision, see [`specs/product-vision.md`](specs/product-vision.md) and [`specs/ui-vision.md`](specs/ui-vision.md). For the planned phases, see [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md).
 >
-> **Current state (v2.2.6):** review surface stable — non-simple flows fan out to 5 reviewers in implementation (logic + challenger + style + security + performance) gated by `applies_to` predicates. Pre-review infrastructure files (`diff.txt`, `caller-context.md`, `antipattern-candidates.md`, `past-misses-*.md`) emit on implementation entry. Bundle abstraction first-class (v2.2.5); stack-classifier candidate registry — adding new languages is a YAML edit (v2.2.6). Q63 auto-close validation/final on clean success; Q64 cross-session ownership safety. Canonical task_id propagation with defensive runtime rewrite. 10 real-task runs across s3-panel + wandr-be + frontend-core.
+> **Current state (v2.2.7):** classifier-agent auto-spawns in the context phase and populates LLM-derived decisions (`refs_to_load` / `security_needed` / `task_short` / `antipattern_rules_applicable` / `stack` / `change_kind`). Reviewer fan-out (logic + challenger + style + security + performance) now consults each reviewer's `relevant_for_change_kinds` — style + performance skip type-only / docs-only / config-only diffs (~10K tokens saved per task on the wrong shape). Planning-phase reviewers (plan-grounding + logic-reviewer) fan out in parallel for MEDIUM + COMPLEX flows (~30-60s saved/task). Gate-1 auto-derives a "Suggested revision" block from planning-phase reviewer findings — one keypress (`1/a/auto-apply`) replans with the auto-derived feedback. Opt-in capped auto-replan loop on REQUEST_CHANGES (`auto_replan_on_blocking_max: 0|1|2`). INV_013 refuses `acceptance: PASS` when impl-phase reviewers still have open blockers. Gate-2 reject distinguishes `revise` vs `abandon`; FINALIZE throws when verdict is null. Runner-agnostic `SpawnRequest` shape (`runner_hint`) unbinds pipeline core from Claude Code Task-tool names. `CLAUDE_PIPELINE_PROJECT_SUBDIR` env var lets non-CC users rename `.claude/`. Bundle abstraction first-class (v2.2.5); stack-classifier candidate registry (v2.2.6). 10 real-task runs across s3-panel + wandr-be + frontend-core.
 
 ## Choosing the Right Command
 
@@ -112,9 +112,9 @@ CLAUDE.md can override the deterministic defaults via the preferred marker conve
 <!-- /validation-commands -->
 ```
 
-The deprecated `## Validation Commands` English-header form still works as a fallback. The classifier-agent (v2.2.7) will eventually override the deterministic baseline with LLM picks when its output is available; until then the YAML resolver is authoritative.
+The deprecated `## Validation Commands` English-header form still works as a fallback. As of v2.2.7, the classifier-agent auto-spawns in the context phase and overrides the deterministic baseline with LLM picks when its `stack` block validates against `classifier-output.schema.json`; on validation failure the YAML resolver's deterministic pick stays authoritative (audit `error_class: "llm-classification-needed"`).
 
-**Senior-pattern references** in `agents/references/` self-describe via YAML frontmatter (`tags`, `agent_hints`, `summary`, `when_to_load`). The classifier-agent picks up to 5 relevant ones from the catalog; today they're populated via `state.decisions.refs_to_load`. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. The list lands in `.claude/refs-to-load.md`.
+**Senior-pattern references** in `agents/references/` self-describe via YAML frontmatter (`tags`, `agent_hints`, `summary`, `when_to_load`). The classifier-agent picks up to 5 relevant ones from the catalog at v2.2.7 auto-spawn; `state.decisions.refs_to_load` is populated by the `extract-classifier-output` after-agent-result hook. They cover architecture patterns, db/redis/caching, React 19, API design, concurrency, observability, error handling, security, optimization, Next.js App Router, and test strategy. The list lands in `.claude/refs-to-load.md`.
 
 ## Adding a New Platform
 
@@ -203,13 +203,13 @@ Every line loads on every message. Move reference tables to `docs/`.
 
 | Contract | What it controls | Where code-bundle plugins live |
 |----------|------------------|----------------------|
-| `StepPlugin` | One FSM step (classify, plan, review, finalize, …) | `bundles/code/steps/` (20) |
+| `StepPlugin` | One FSM step (classify, plan, review, finalize, classify-agent, …) | `bundles/code/steps/` (24) |
 | `AgentPlugin` | One LLM role wrapping an `agents/*.md` template | `bundles/code/agents/` (21) |
 | `FlowPlugin` | Ordered list of steps per complexity | `bundles/code/flows/` (3) |
 | `GatePlugin` | A human gate (gate-0/1/2 or custom) | `bundles/code/gates/` (3) |
 | `DecisionPlugin<T>` | Pure decision (complexity, tests_mode, stack-detect, …) | `bundles/code/decisions/` (8) |
-| `HookPlugin` | Cross-cutting side effect (past-misses load, anti-pattern grep, …) | `bundles/code/hooks/` (4) |
-| `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / Anthropic-SDK / Ollama later) | `bundles/code/spawn/` (1) |
+| `HookPlugin` | Cross-cutting side effect (past-misses load, anti-pattern grep, classifier-output parse, tech-debt auto-capture, …) | `bundles/code/hooks/` (6) |
+| `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / Anthropic-SDK / Ollama later — v2.2.7 D4's runner-agnostic `SpawnRequest` decouples this from any specific harness) | `bundles/code/spawn/` (1) |
 | `BundleManifest` | Bundle-level catalog of supported plugins + default flow + state-extension schema | `bundles/code/bundle.ts` |
 
 Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in `bundle.ts` `supported_agents`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. Adding a non-code bundle (content / research / VFX) = new directory under `bundles/`, mirror the `_template/` skeleton, set `state.bundle: <name>`. See [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) for the planned extension trajectory.
@@ -262,12 +262,12 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 ## See also
 
 - [`README.md`](README.md) — overview + install + architecture diagram + docs index
-- [`mcp/README.md`](mcp/README.md) — MCP tool reference (21 tools) + invariants INV_001-012
+- [`mcp/README.md`](mcp/README.md) — MCP tool reference (21 tools) + invariants INV_001-013
 - [`hooks/README.md`](hooks/README.md) — guard hook + Stop hook mechanics + bypass
 - [`specs/product-vision.md`](specs/product-vision.md) — "AI Team RTS" positioning, pricing tiers, commercial trajectory
 - [`specs/ui-vision.md`](specs/ui-vision.md) — UX architecture: agent builder → specialist → team → curator → channels (where we're going)
 - [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) — phase index (v2.3 daemon + Web UI is next)
 - [`specs/open-backlog.md`](specs/open-backlog.md) — currently open Q-items
-- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 46 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a / v2.2.5 + followups / v2.2.6)
+- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 56 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a / v2.2.5 + followups / v2.2.6 / v2.2.7)
 - [`validation-log.md`](validation-log.md) — validation workflow + cross-cutting observations
 - [`validation/closed-tasks/`](validation/closed-tasks/) — per-task validation entries (10 real-task runs across s3-panel + wandr-be + frontend-core)

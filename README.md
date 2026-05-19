@@ -2,7 +2,7 @@
 
 Multi-agent development pipeline for Claude Code. Form a team of specialized AI agents — planner, reviewers (logic + challenger + style + security + performance), test-writer, acceptance — and let them work through a task together with human gates at key decision points.
 
-**Current state:** **v2.2.6 shipped**. TypeScript plugin framework, **20 MCP tools**, 12 state invariants, **485 tests**, 5-reviewer fan-out active on non-simple flows. Bundle abstraction first-class (`Bundle` = code today, content/research/VFX in future). Stack-classifier candidate registry (`templates/stack-candidates.yaml`) — adding C#/Svelte/Elixir/Dart is a YAML edit, no TypeScript change. Audit trail + guard hook + cross-session recovery + schema-validated state. **10 real-task validation runs** to date (s3-panel + wandr-be + frontend-core).
+**Current state:** **v2.2.7 shipped**. TypeScript plugin framework, **21 MCP tools**, 13 state invariants (INV_001-013), **569 tests**, 5-reviewer fan-out active on non-simple flows. Classifier-agent auto-spawns in the context phase and populates LLM-derived decisions (`refs_to_load` / `security_needed` / `task_short` / `antipattern_rules_applicable` / `stack` / `change_kind`). Reviewer selectivity by `change_kind` skips style + performance on type-only / docs-only diffs. Runner-agnostic `SpawnRequest` shape (`runner_hint` field) unbinds pipeline core from Claude Code Task-tool names — direct prep for v2.3 daemon + Cursor / Codex adapters. Planning-phase reviewers fan out in parallel (~30-60s saved per medium/complex task). Gate-1 auto-derives "Suggested revision" from reviewer findings with one-keypress apply; opt-in capped auto-replan loop for blocking findings. INV_013 refuses `acceptance: PASS` when impl-phase reviewers still have open blockers. Gate-2 reject now distinguishes revise vs abandon; FINALIZE throws when `verdict` is null. **10 real-task validation runs** to date (s3-panel + wandr-be + frontend-core).
 
 ## Releases
 
@@ -14,8 +14,9 @@ Multi-agent development pipeline for Claude Code. Form a team of specialized AI 
 | [`v2.2a`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2a) | Review surface unlock — Q9 wiring fix + Q27/Q30/Q41/Q42/Q43 | 2026-05-14 |
 | [`v2.2.5`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.5) | Bundle abstraction first-class + classifier substrate + structured gate-answer + metric-row observability (Q40/Q41 partial/Q44/Q45/Q46/Q47/Q48/Q50/Q51/Q55/Q57/Q58/Q59/Q60/Q61) + post-review followups bundle | 2026-05-18 |
 | [`v2.2.6`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.6) | Stack-classifier candidate registry + classifier-output schema substrate + `<!-- validation-commands -->` marker + canonical task_id propagation + Q63 auto-close validation/final + Q64 cross-session ownership safety | 2026-05-18 |
+| [`v2.2.7`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.7) | Classifier auto-spawn + reviewer selectivity by `change_kind` + generic `SpawnRequest` (Q65) + configurable project subdir (Q66) + planning-phase parallel fan-out (Q67) + INV_013 acceptance gate (Q68) + auto-derived gate-1 feedback (Q69) + opt-in auto-replan (Q70) + gate-2 reject FSM fix (Q74 CRITICAL) + Q71/Q72/Q73/D3/D10 | 2026-05-19 |
 
-Roadmap: [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) → next is **v2.2.7** (classifier auto-spawn + reviewer selectivity by `change_kind` + portability foundations Q65/Q66), then v2.3 daemon + Web UI.
+Roadmap: [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) → next is **v2.3 daemon + Web UI** (`AnthropicSdkSpawnProvider` is direct beneficiary of v2.2.7 D4's runner-agnostic `SpawnRequest`).
 
 ## Quick start
 
@@ -86,26 +87,26 @@ See [`WORKFLOW.md`](WORKFLOW.md) for daily-use patterns.
 
 ### Agents (21 pipeline + 3 wrapper utilities)
 
-Reviewers/validators (output JSON header validated against schemas):
-- **logic-reviewer** + **challenger-reviewer** — independent perspectives on the same diff
-- **style-reviewer** — CLAUDE.md anti-patterns
+Reviewers/validators (output JSON header validated against schemas; v2.2.7 added `relevant_for_change_kinds?: string[]` to skip irrelevant reviewers on type-only / docs-only diffs):
+- **logic-reviewer** + **challenger-reviewer** — independent perspectives on the same diff (no change_kind filter — always relevant)
+- **style-reviewer** — CLAUDE.md anti-patterns (skipped on type-only / docs-only / config-only)
 - **security** — XSS, auth, injection, etc.
-- **performance** — hot paths, caching, query shape, render perf
+- **performance** — hot paths, caching, query shape, render perf (skipped on type-only / docs-only / config-only)
 - **plan-grounding-check** — verifies plan citations against actual code
 - **plan-conformance** — post-impl: drift, unfinished steps, AC coverage
-- **acceptance** — mechanical AC checks (lint/typecheck/test/build)
+- **acceptance** — mechanical AC checks (lint/typecheck/test/build); v2.2.7 INV_013 refuses PASS when impl-phase reviewers still have open blockers
 - **context-doc-verifier** — sanity-checks code-analyzer claims
 - **api-contract**, **playwright**, **ui-consistency** — domain-specific validators
 
 Non-review:
 - **planner**, **implementer**, **architect** — produce artifacts
-- **classifier** — context-phase agent: emits structured JSON (`refs_to_load`, `security_needed`, `task_short`, `antipattern_rules_applicable`, `stack`, `change_kind`). Auto-spawn lands in v2.2.7
+- **classifier** — context-phase agent: emits structured JSON (`refs_to_load`, `security_needed`, `task_short`, `antipattern_rules_applicable`, `stack`, `change_kind`). Auto-spawns in `CLASSIFY_AGENT` step (v2.2.7 D1); output parsed by the `extract-classifier-output` hook
 - **code-analyzer** — context-doc + analyzer-claims
 - **research**, **migration**, **dependency-auditor**, **test**
 
 Each agent is a markdown template in `agents/`. **25 senior-pattern reference files** in `agents/references/` (with YAML frontmatter for LLM-driven selection). 3 wrapper utilities (`test-all-agent`, `fe-test-all-agent`, `runtime-debug-agent`) live alongside but aren't AgentPlugins — they're CC sub-agent helpers invoked outside the pipeline FSM.
 
-### MCP tools (20)
+### MCP tools (21)
 
 State, spawn-record, driver, recovery, metrics, past-misses, meta. Full reference: [`mcp/README.md`](mcp/README.md).
 
@@ -128,7 +129,7 @@ Key tools:
                        ↓
 ┌────────────────────────────────────────────────────────┐
 │  MCP server  (TypeScript, stdio transport)             │
-│  ─ 21 tools, 12 invariants (INV_001-012)               │
+│  ─ 21 tools, 13 invariants (INV_001-013)               │
 │  ─ Plugin framework: 7 contracts (Step / Agent /       │
 │    Flow / Gate / Decision / Hook / SpawnProvider)      │
 │  ─ FSM driver (core has zero plugin-name references)   │
@@ -137,8 +138,8 @@ Key tools:
                        ↓
 ┌────────────────────────────────────────────────────────┐
 │  Code bundle plugins (mcp/src/driver/bundles/code/)    │
-│  agents (21) · steps (20) · flows (3) · gates (3)      │
-│  decisions (8) · hooks (4) · spawn provider (shuttle)  │
+│  agents (21) · steps (24) · flows (3) · gates (3)      │
+│  decisions (8) · hooks (6) · spawn provider (shuttle)  │
 │  Loaded via loaders/bundles.ts (loadBundle("code", …)) │
 └────────────────────────────────────────────────────────┘
                        ↓ shuttle response
@@ -165,17 +166,17 @@ Two state files per project under `<project>/.claude/`:
 |---|---|---|
 | [`README.md`](README.md) | This file — overview + install | First contact |
 | [`WORKFLOW.md`](WORKFLOW.md) | Daily usage patterns, command-choice flowchart | First `/task` |
-| [`mcp/README.md`](mcp/README.md) | MCP tool reference (21 tools) + invariants (INV_001-012) | When debugging state |
+| [`mcp/README.md`](mcp/README.md) | MCP tool reference (21 tools) + invariants (INV_001-013) | When debugging state |
 | [`hooks/README.md`](hooks/README.md) | Guard hook + Stop hook install + bypass mechanics | When customizing or escape-hatching |
 | [`specs/product-vision.md`](specs/product-vision.md) | Product positioning — "AI Team RTS", target users, pricing tiers, commercial trajectory | When thinking about the bigger picture |
 | [`specs/ui-vision.md`](specs/ui-vision.md) | 6-layer UX architecture: agent builder → specialist → team → curator → channels + console + 3 operating modes | When planning v2.3 daemon UX |
 | [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) | Phase index → links to phase plans | When picking next bundle |
 | [`specs/phases/`](specs/phases/) | Detailed plans per phase (v2.3 / v2.4 / v2.5 / v2.6 / far-future) | When executing a phase |
 | [`specs/open-backlog.md`](specs/open-backlog.md) | Currently open + deferred + code-polish Q-items | When picking next fix |
-| [`specs/closed-q-items.md`](specs/closed-q-items.md) | Historical record of 46 closed Q-items by bundle | When recurrence-checking |
+| [`specs/closed-q-items.md`](specs/closed-q-items.md) | Historical record of 56 closed Q-items by bundle (7 bundles) | When recurrence-checking |
 | [`validation-log.md`](validation-log.md) | Validation workflow + cross-cutting observations + closed-task index | When running real-task validation |
 | [`validation/closed-tasks/`](validation/closed-tasks/) | Per-task validation entries (10 files, growing) | When studying past runs |
-| [`specs/done/`](specs/done/) | Archived launcher prompts (v2.1, v2.2, v2.2a, v2.2.5, v2.2.6) | When learning the bundle pattern |
+| [`specs/done/`](specs/done/) | Archived launcher prompts (v2.1, v2.2, v2.2a, v2.2.5, v2.2.6, v2.2.7) | When learning the bundle pattern |
 
 ## Self-improvement loop
 
@@ -216,14 +217,14 @@ claude-pipeline/
 │   └── pipeline-state.json  initial state template (schema 1.1)
 ├── mcp/                     MCP server (TypeScript, stdio)
 │   ├── src/
-│   │   ├── tools/           20 MCP tool implementations
+│   │   ├── tools/           21 MCP tool implementations
 │   │   ├── lib/             schemas, ids, audit, parse-frontmatter, stack-candidates, owner, paths, …
 │   │   └── driver/          v2 plugin framework
-│   │       ├── types/       7 plugin contracts + bundle.ts
+│   │       ├── types/       7 plugin contracts + bundle.ts (incl. runner-agnostic SpawnRequest)
 │   │       ├── core/        FSM + registry + shuttle (zero plugin-name refs — grep-gated)
-│   │       ├── bundles/     code/ (21 agents · 20 steps · 3 flows · 3 gates · 8 decisions · 4 hooks · 1 spawn) + _template/ skeleton
+│   │       ├── bundles/     code/ (21 agents · 24 steps · 3 flows · 3 gates · 8 decisions · 6 hooks · 1 spawn) + _template/ skeleton
 │   │       └── loaders/     bundles.ts + project-config.ts
-│   ├── test/                485 tests across 60 files
+│   ├── test/                569 tests across 73 files
 │   └── README.md            tool reference + invariants + CLAUDE.md authoring conventions
 ├── hooks/
 │   ├── pipeline-guard.sh    PreToolUse — protects .claude/ state files (20+ evasion patterns)

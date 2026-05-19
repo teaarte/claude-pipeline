@@ -101,6 +101,14 @@ claude mcp list
 # claude-pipeline: node .../mcp/dist/server.js - ✓ Connected
 ```
 
+### Optional environment variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `CLAUDE_PIPELINE_METRICS_DIR` | `~/.claude/metrics` | Directory for `pipeline.jsonl` + `agent-feedback.jsonl` cross-task metrics streams. |
+| `CLAUDE_PIPELINE_PROJECT_SUBDIR` (Q66 / D5) | `.claude` | Per-project working subdirectory. Holds `pipeline-state.json`, `findings.jsonl`, `plan.md`, etc. Override when running headless / via daemon / outside Claude Code, e.g. `CLAUDE_PIPELINE_PROJECT_SUBDIR=.pipeline` writes state to `<project>/.pipeline/`. No migration — projects either use the default OR explicitly opt into a different subdir from day one. |
+| `CLAUDE_PIPELINE_OWNER_ID` | unset | Stable identifier carried into pipeline-state for cross-session ownership tracking. Pair with CC's stdio-MCP env-forwarding so the MCP server process inherits the session's ownership context. |
+
 ## Project bundle config (v2.2.5+)
 
 Each project may declare its bundle via

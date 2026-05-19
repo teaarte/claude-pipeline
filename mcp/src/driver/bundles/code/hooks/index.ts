@@ -22,6 +22,9 @@ import { join } from "node:path";
 import type { HookPlugin, DriverState } from "../../../types/plugin.js";
 import { claudeDir } from "../../../../lib/paths.js";
 import { pipelineGetPastMisses } from "../../../../tools/get-past-misses.js";
+import { extractJsonHeader } from "../../../../lib/parse-json-header.js";
+import { validate } from "../../../../lib/schemas.js";
+import { audit } from "../../../../lib/audit.js";
 
 const exec = promisify(execFile);
 
@@ -375,6 +378,83 @@ const CALLER_CONTEXT_EXPAND: HookPlugin = {
   },
 };
 
+/**
+ * D1 / Q-classifier-auto-spawn: parse the classifier-agent's JSON output
+ * delivered via pipeline_continue_task and populate state.decisions with
+ * its LLM-derived classification. Pure getter decisions (refs-to-load,
+ * security-needed, antipattern-rules-applicable) consume these slots;
+ * without an upstream populating them they returned safe defaults and the
+ * refs catalog stayed dead. CLASSIFY_AGENT spawns; this hook parses.
+ *
+ * The parse-on-resume logic lives here (not inside CLASSIFY_AGENT.run)
+ * because continue-task auto-advances state.step_index after delivering
+ * the agent_output — the step's resume short-circuit would never fire.
+ *
+ * Failure mode: unparseable JSON OR schema-invalid output → keep existing
+ * defaults, audit `error_class: "llm-classification-needed"`, return. The
+ * FSM never blocks on a classifier hiccup.
+ */
+const EXTRACT_CLASSIFIER_OUTPUT: HookPlugin = {
+  name: "extract-classifier-output",
+  event: "after-agent-result",
+  async run(state, ctx) {
+    if (ctx.agent !== "classifier") return;
+    const output = ctx.agent_output ?? "";
+    if (output.length === 0) return;
+    const parsed = extractJsonHeader(output);
+    if (!parsed.ok) {
+      await audit({
+        tool: "pipeline_classify_agent",
+        args: { task_id: state.task_id, reason: parsed.reason },
+        projectDir: state.project_dir,
+        verdict: "ok",
+        error_class: "llm-classification-needed",
+      }).catch(() => undefined);
+      return;
+    }
+    const valid = await validate("classifier-output.schema.json", parsed.value);
+    if (!valid.ok) {
+      await audit({
+        tool: "pipeline_classify_agent",
+        args: {
+          task_id: state.task_id,
+          schema_errors: valid.errors
+            .slice(0, 3)
+            .map((e) => `${e.path}: ${e.message}`)
+            .join("; "),
+        },
+        projectDir: state.project_dir,
+        verdict: "ok",
+        error_class: "llm-classification-needed",
+      }).catch(() => undefined);
+      return;
+    }
+    const v = parsed.value as Record<string, unknown>;
+    if (typeof v.task_short === "string" && v.task_short.trim().length > 0) {
+      state.decisions["task_short"] = v.task_short.trim();
+    }
+    if (Array.isArray(v.refs_to_load)) {
+      state.decisions["refs_to_load"] = (v.refs_to_load as unknown[]).filter(
+        (r): r is string => typeof r === "string",
+      );
+    }
+    if (typeof v.security_needed === "boolean") {
+      state.decisions["security_needed"] = v.security_needed;
+    }
+    if (Array.isArray(v.antipattern_rules_applicable)) {
+      state.decisions["antipattern_rules_applicable"] = (v.antipattern_rules_applicable as unknown[]).filter(
+        (r): r is string => typeof r === "string",
+      );
+    }
+    if (v.stack && typeof v.stack === "object") {
+      state.decisions["stack"] = v.stack;
+    }
+    if (typeof v.change_kind === "string" || v.change_kind === null) {
+      state.decisions["change_kind"] = v.change_kind;
+    }
+  },
+};
+
 // Q-tech-debt / D3: signal phrases that mark a paragraph as a tech-debt /
 // out-of-scope observation in implementer prose. Real-task frontend-core
 // 2026-05-18 case: "Pre-existing prettier debt in repo (19 files): mostly
@@ -473,6 +553,7 @@ export const BUILTIN_HOOKS: HookPlugin[] = [
   LOAD_PAST_MISSES,
   ANTI_PATTERN_GREP,    // reads diff.txt
   CALLER_CONTEXT_EXPAND, // reads diff.txt
+  EXTRACT_CLASSIFIER_OUTPUT, // after-agent-result, classifier-only
   EXTRACT_TECH_DEBT_FROM_PROSE, // after-agent-result, implementer-only
 ];
 

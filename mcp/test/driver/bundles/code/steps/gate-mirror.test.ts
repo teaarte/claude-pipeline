@@ -71,6 +71,9 @@ async function setupMediumState(projectDir: string) {
   state.scratch.complexity = "medium";
   state.decisions["complexity"] = "medium";
   state.decisions["tests_mode"] = "regression-only";
+  // D1: skip CLASSIFY_AGENT's classifier spawn — these tests focus on gate-0
+  // mirroring, not on the classifier's spawn/parse loop.
+  state.decisions["task_short"] = "gate-mirror";
   return state;
 }
 

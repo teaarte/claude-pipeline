@@ -57,6 +57,10 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
       state.scratch.complexity = "simple";
       state.decisions["complexity"] = "simple";
       state.decisions["tests_mode"] = "regression-only";
+      // D1: pre-populate task_short so CLASSIFY_AGENT short-circuits its
+      // spawn-and-parse; this test only cares about the first SUBSTANTIVE
+      // spawn (planner), not the classifier-agent spawn.
+      state.decisions["task_short"] = "rename-foo";
 
       const { response } = await runFSM(state, registry, { spawnRecorder: recorder });
 
@@ -97,6 +101,8 @@ describe("Q19 — SpawnRecorder threads resolved model", () => {
       state.scratch.complexity = "simple";
       state.decisions["complexity"] = "simple";
       state.decisions["tests_mode"] = "regression-only";
+      // D1: pre-populate task_short to skip CLASSIFY_AGENT's classifier spawn.
+      state.decisions["task_short"] = "noop";
 
       const { state: out, response } = await runFSM(state, registry);
       expect(response.status).toBe("spawn-agent");

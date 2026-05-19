@@ -10,6 +10,7 @@ const SIMPLE_FLOW: FlowPlugin = {
   steps: [
     "initialize",
     "classify",
+    "classify-agent",
     "plan",
     "plan-grounding",
     "gate-1",
@@ -32,6 +33,7 @@ const MEDIUM_FLOW: FlowPlugin = {
   steps: [
     "initialize",
     "classify",
+    "classify-agent",
     "gate-0",
     "enrich",
     "context-verify",
@@ -62,6 +64,7 @@ const COMPLEX_FLOW: FlowPlugin = {
   steps: [
     "initialize",
     "classify",
+    "classify-agent",
     "gate-0",
     "enrich",
     "context-verify",

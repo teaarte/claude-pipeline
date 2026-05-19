@@ -171,16 +171,13 @@ const INITIALIZE: StepPlugin = {
 };
 
 /**
- * Item 9 substrate (classifier-agent + schema + pickFromCandidates) is in
- * place; auto-spawning the classifier inside this step would break every
- * test that drives the FSM without a real LLM. That wiring lands when the
- * v2.3 daemon arrives — it has `query()` and can call pickFromCandidates
- * synchronously without the shuttle's spawn/pause/resume dance.
- *
- * For now, CLASSIFY runs the deterministic decisions (complexity,
- * tests_mode). Refs / security_needed / antipattern_rules_applicable are
- * read directly from `state.decisions` by their pure-getter decision
- * plugins — populated externally (test setup OR future classifier-step).
+ * CLASSIFY: deterministic decisions only (complexity, tests_mode). The
+ * LLM-driven classification cluster (refs_to_load, security_needed,
+ * antipattern_rules_applicable, task_short, stack, change_kind) is owned
+ * by CLASSIFY_AGENT — a separate context-phase step that spawns the
+ * classifier-agent and parses its JSON output. Splitting deterministic from
+ * LLM-derived classification keeps the deterministic decisions resilient to
+ * spawn failures (D1 falls back to safe defaults on classifier hiccups).
  */
 const CLASSIFY: StepPlugin = {
   name: "classify",
@@ -191,6 +188,40 @@ const CLASSIFY: StepPlugin = {
     state.decisions["complexity"] = complexity;
     state.decisions["tests_mode"] = tests_mode;
     return { type: "advance" };
+  },
+};
+
+/**
+ * D1 (Q-classifier-auto-spawn): spawn the classifier-agent in the context
+ * phase. The classifier's JSON output is parsed by the
+ * `extract-classifier-output` hook in `bundles/code/hooks/index.ts`
+ * (after-agent-result event, agent filter "classifier") because
+ * continue-task auto-advances step_index after delivering the agent_output
+ * — the step's resume short-circuit would never fire. The hook populates
+ * `state.decisions.{task_short, refs_to_load, security_needed,
+ * antipattern_rules_applicable, stack, change_kind}` after the spawn
+ * returns.
+ *
+ * Failure mode (handled in the hook): validation errors or unparseable
+ * JSON keep existing defaults intact and audit error_class:
+ * "llm-classification-needed". The FSM never blocks on a classifier hiccup.
+ *
+ * Skip path: tests that drive the FSM without a real classifier-LLM can
+ * pre-populate `state.decisions.task_short` (and any other slots they
+ * care about). CLASSIFY_AGENT detects the prefilled slot and advances
+ * without issuing a spawn.
+ */
+const CLASSIFY_AGENT: StepPlugin = {
+  name: "classify-agent",
+  phase: "context",
+  async run(state, ctx) {
+    if (
+      typeof state.decisions["task_short"] === "string" &&
+      (state.decisions["task_short"] as string).trim().length > 0
+    ) {
+      return { type: "advance" };
+    }
+    return spawnOne(state, ctx, "classifier", "context", "classify-agent");
   },
 };
 
@@ -638,6 +669,7 @@ const FINALIZE: StepPlugin = {
 export const BUILTIN_STEPS: StepPlugin[] = [
   INITIALIZE,
   CLASSIFY,
+  CLASSIFY_AGENT,
   GATE_0_STEP,
   GATE_1_STEP,
   GATE_2_STEP,

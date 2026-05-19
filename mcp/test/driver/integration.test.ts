@@ -13,18 +13,47 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
         task: "rename a single function",
         complexity_hint: "simple",
       });
-      // The first non-trivial step after initialize+classify is "plan", which
-      // spawns the planner.
+      // D1 / Q-classifier-auto-spawn: the first non-trivial spawn is now the
+      // classifier-agent (CLASSIFY_AGENT step in context phase). Delivering
+      // its result then advances to PLAN which spawns the planner.
       expect(res.status).toBe("spawn-agent");
       if (res.status === "spawn-agent") {
-        // The DriverResponse top-level `agent` field is the AgentPlugin name —
-        // the shuttle uses it to record which agent ran. The Task tool spec's
-        // subagent_type is independently pinned to "general-purpose" because
-        // that's the only catalog value Claude Code accepts (Q16 fix).
-        expect(res.agent).toBe("planner");
+        expect(res.agent).toBe("classifier");
         expect(res.claude_code_task.subagent_type).toBe("general-purpose");
-        expect(res.claude_code_task.prompt).toContain("planner");
-        expect(res.claude_code_task.model).toBe("opus");
+        expect(res.claude_code_task.prompt).toContain("classifier");
+        // Model resolves via defaultConfig.default_models_by_phase.context =
+        // "sonnet", overriding the classifier's haiku default at the phase
+        // layer (resolveAgentModel cascade).
+        expect(res.claude_code_task.model).toBe("sonnet");
+
+        const res2 = await pipelineContinueTask({
+          project_dir: proj.dir,
+          driver_state_id: res.driver_state_id,
+          input: {
+            driver_state_id: res.driver_state_id,
+            type: "agent-result",
+            agent_run_id: res.agent_run_id,
+            agent_output:
+              "```json\n" +
+              JSON.stringify({
+                schema_version: "1.1",
+                agent: "classifier",
+                task_id: null,
+                task_short: "rename-fn",
+                refs_to_load: [],
+                security_needed: false,
+                antipattern_rules_applicable: [],
+                stack: null,
+                change_kind: null,
+              }) +
+              "\n```\n",
+          },
+        });
+        expect(res2.status).toBe("spawn-agent");
+        if (res2.status === "spawn-agent") {
+          expect(res2.agent).toBe("planner");
+          expect(res2.claude_code_task.model).toBe("opus");
+        }
       }
     } finally {
       await proj.cleanup();
@@ -45,9 +74,8 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
       const stateBefore = await readDriverState(proj.dir);
       expect(stateBefore?.pending_spawns[r1.agent_run_id]).toBeTruthy();
 
-      // The next pause point depends on the SIMPLE flow shape. We just
-      // assert that resuming with the planner's result clears the pending
-      // spawn and that the driver returns *some* shuttle (or completes).
+      // D1: first spawn is the classifier; deliver a stub output then resume.
+      // The next pause should be the planner spawn (or any later shuttle).
       const r2 = await pipelineContinueTask({
         project_dir: proj.dir,
         driver_state_id: r1.driver_state_id,
@@ -55,7 +83,20 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
           driver_state_id: r1.driver_state_id,
           type: "agent-result",
           agent_run_id: r1.agent_run_id,
-          agent_output: "synthetic planner reply",
+          agent_output:
+            "```json\n" +
+            JSON.stringify({
+              schema_version: "1.1",
+              agent: "classifier",
+              task_id: null,
+              task_short: "rename-fn",
+              refs_to_load: [],
+              security_needed: false,
+              antipattern_rules_applicable: [],
+              stack: null,
+              change_kind: null,
+            }) +
+            "\n```\n",
         },
       });
       expect(["spawn-agent", "ask-user", "complete", "error"]).toContain(r2.status);
@@ -68,6 +109,7 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
 
   it("each agent-result advances step_index — successive spawns name DIFFERENT agents (regression for re-spawn loop)", async () => {
     const NONREVIEW = new Set([
+      "classifier",
       "planner",
       "implementer",
       "architect",
@@ -84,6 +126,25 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
       "performance",
     ]);
     function buildOutput(agent: string, taskId: string): string {
+      if (agent === "classifier") {
+        // D1: classifier output is parsed against classifier-output.schema.json
+        // — emit a valid stub so handleClassifierOutput populates state.decisions.
+        return (
+          "```json\n" +
+          JSON.stringify({
+            schema_version: "1.1",
+            agent: "classifier",
+            task_id: taskId,
+            task_short: "rename-fn",
+            refs_to_load: [],
+            security_needed: false,
+            antipattern_rules_applicable: [],
+            stack: null,
+            change_kind: null,
+          }) +
+          "\n```\n"
+        );
+      }
       if (NONREVIEW.has(agent)) {
         return `# ${agent} reply\n\nnarrative only — no JSON header parsed for nonreview agents.\n`;
       }

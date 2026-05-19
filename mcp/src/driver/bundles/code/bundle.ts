@@ -51,6 +51,7 @@ export const codeBundle: BundleManifest = {
   supported_steps: [
     "architect",
     "classify",
+    "classify-agent",
     "context-verify",
     "enrich",
     "final-checks",
@@ -78,6 +79,7 @@ export const codeBundle: BundleManifest = {
     "load-past-misses",
     "anti-pattern-grep",
     "caller-context-expand",
+    "extract-classifier-output",
     "extract-tech-debt-from-prose",
   ],
   supported_gates: ["gate-0", "gate-1", "gate-2"],

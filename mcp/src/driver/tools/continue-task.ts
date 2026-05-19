@@ -63,6 +63,7 @@ export const continueTaskSchema = {
 };
 
 const NONREVIEW_AGENT_NAMES = new Set([
+  "classifier",
   "planner",
   "implementer",
   "architect",

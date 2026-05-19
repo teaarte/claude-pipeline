@@ -197,5 +197,63 @@ export async function runInvariants(state: any, findingsFile: string): Promise<V
     }
   }
 
+  // INV_013 (Q68 / D7): acceptance verdict=PASS ⇒ no open severity:blocking
+  // findings emitted by impl-phase reviewers at the latest impl iteration.
+  // Real-task observation 2026-05-19: style-reviewer at iter=2 emitted 3
+  // prettier blockers, acceptance returned PASS because `pnpm test/lint`
+  // ran against project scope where the same files were excluded. Without
+  // this gate, the task would have shipped with blockers still open.
+  const inv013 = checkAcceptancePassWithoutImplBlockers(state);
+  if (inv013) violations.push(inv013);
+
   return violations;
+}
+
+/**
+ * Q68 / D7: returns an INV_013 violation when acceptance.verdict=PASS (or
+ * PASS_WITH_WARNINGS) coexists with non-zero blocking_issues from any
+ * impl-phase reviewer at the latest impl iteration. Returns null when the
+ * data is consistent or when acceptance hasn't run yet. Pure function over
+ * `state.reviewer_verdicts[]` — no IO. Shared between pipeline_finish's
+ * runInvariants pass and pipeline_record_agent_run post-record check so
+ * the violation is caught at both boundaries.
+ */
+export function checkAcceptancePassWithoutImplBlockers(state: any): Violation | null {
+  const verdicts: any[] = Array.isArray(state?.reviewer_verdicts)
+    ? state.reviewer_verdicts
+    : [];
+  const acceptance = verdicts.find(
+    (v) => v?.agent === "acceptance" && v?.phase === "validation",
+  );
+  if (!acceptance) return null;
+  if (acceptance.verdict !== "PASS" && acceptance.verdict !== "PASS_WITH_WARNINGS") {
+    return null;
+  }
+  const implEntries = verdicts.filter(
+    (v) => v?.phase === "implementation" && v?.agent !== "acceptance",
+  );
+  if (implEntries.length === 0) return null;
+  const latestImplIter = implEntries.reduce((max, v) => {
+    const it = typeof v?.iteration === "number" ? v.iteration : 1;
+    return it > max ? it : max;
+  }, 0);
+  const latestEntries = implEntries.filter((v) => {
+    const it = typeof v?.iteration === "number" ? v.iteration : 1;
+    return it === latestImplIter;
+  });
+  const offenders = latestEntries.filter(
+    (v) => typeof v?.blocking_issues === "number" && v.blocking_issues > 0,
+  );
+  if (offenders.length === 0) return null;
+  const sum = offenders.reduce((a, v) => a + (v.blocking_issues as number), 0);
+  return {
+    code: "INV_013",
+    message: `acceptance.verdict='${acceptance.verdict}' but ${sum} open blocking finding(s) from impl-phase reviewers at iteration=${latestImplIter}`,
+    detail: offenders.map((v) => ({
+      agent: v.agent,
+      iteration: v.iteration,
+      blocking_issues: v.blocking_issues,
+      categories_seen: v.categories_seen,
+    })),
+  };
 }

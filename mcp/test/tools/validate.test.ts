@@ -55,7 +55,9 @@ describe("pipeline_validate", () => {
         skipped_reason: "regression-only",
       });
       await spawnNonreview(proj.dir, "implementation", "implementer");
-      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput());
+      // Q68 / D7: a clean happy-walk has the impl reviewer APPROVE with no
+      // blockers so acceptance can PASS without INV_013 firing.
+      await spawnReviewer(proj.dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
       await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });

@@ -10,6 +10,7 @@ import { makeFindingId, AGENT_RUN_ID_PATTERN } from "../lib/ids.js";
 import { validate, isCategoryAllowed } from "../lib/schemas.js";
 import { audit } from "../lib/audit.js";
 import { buildSummary } from "../lib/summary.js";
+import { checkAcceptancePassWithoutImplBlockers } from "../lib/invariants.js";
 import { CODE_PHASES, assertPrereqSatisfied, type Phase } from "../lib/phase-state-machine.js";
 import { coerceIntegerOpt } from "../lib/coerce.js";
 import { consumeOpenSpawn } from "./begin-agent.js";
@@ -246,6 +247,27 @@ export async function pipelineRecordAgentRun(input: {
         verdict: "ok",
         error_class: "auto-close-validation",
       }).catch(() => undefined);
+    }
+
+    // INV_013 (Q68 / D7): when an acceptance verdict lands as PASS or
+    // PASS_WITH_WARNINGS, refuse the record if any impl-phase reviewer at
+    // the latest impl iteration still has open blocking_issues. This catches
+    // the silent ship-with-blockers anti-pattern at the earliest boundary —
+    // before findings.jsonl and pipeline-state are committed. pipeline_finish
+    // also runs the same check via runInvariants for a second line of defense.
+    if (input.phase === "validation" && agent === "acceptance") {
+      const inv013 = checkAcceptancePassWithoutImplBlockers(state);
+      if (inv013) {
+        await audit({
+          tool: "pipeline_record_agent_run",
+          args: { phase: input.phase, agent, agent_run_id: input.agent_run_id },
+          projectDir: input.project_dir,
+          verdict: "error",
+          error_class: "INV_013",
+          error: inv013.message,
+        }).catch(() => undefined);
+        throw new Error(`pipeline_record_agent_run refused: [INV_013] ${inv013.message}`);
+      }
     }
 
     // append findings AFTER state mutation prepared but BEFORE write — we want jsonl write to be best-effort

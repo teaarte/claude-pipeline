@@ -186,7 +186,11 @@ describe("branch-coverage extras", () => {
         }),
       );
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "implementation", status: "completed" });
-      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput());
+      // Q68 / D7: with two impl-phase blockers still open, acceptance must
+      // emit FAIL (not PASS) to be internally consistent. INV_013 would
+      // refuse PASS here. The test's intent is the metrics row's blocker
+      // + rejected verdict shape, so FAIL is the right baseline.
+      await spawnReviewer(proj.dir, "validation", "acceptance", validatorOutput({ verdict: "FAIL" }));
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "validation", status: "completed" });
       await pipelineSetPhaseStatus({ project_dir: proj.dir, phase: "final", status: "completed" });
       await pipelineSetGate({ project_dir: proj.dir, gate: "gate0", status: "approved" });

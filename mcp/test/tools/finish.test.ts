@@ -28,7 +28,9 @@ async function runFullPipeline(dir: string) {
     skipped_reason: "regression-only",
   });
   await spawnNonreview(dir, "implementation", "implementer");
-  await spawnReviewer(dir, "implementation", "logic-reviewer", reviewerOutput());
+  // Q68 / D7: happy-walk impl reviewer APPROVES with no blockers so the
+  // downstream acceptance PASS is consistent under INV_013.
+  await spawnReviewer(dir, "implementation", "logic-reviewer", reviewerOutput({ verdict: "APPROVE", findings: [] }));
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "implementation", status: "completed" });
   await spawnReviewer(dir, "validation", "acceptance", validatorOutput());
   await pipelineSetPhaseStatus({ project_dir: dir, phase: "validation", status: "completed" });

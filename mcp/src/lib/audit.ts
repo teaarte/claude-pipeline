@@ -27,6 +27,7 @@ export type ErrorClass =
   | "task_id-rewrite"          // v2.2.6 C6 / Item 6: agent emitted non-canonical task_id, rewritten to state.task_id
   | "auto-close-validation"    // v2.2.6 C7 / Q63: acceptance:PASS + open_spawns=0 → validation auto-closed
   | "auto-close-final"         // v2.2.6 C7 / Q63: clean accepted verdict + prior phases closed → final auto-closed
+  | "INV_013"                  // Q68 / D7: acceptance.verdict=PASS with open impl-phase blockers at the latest iter
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

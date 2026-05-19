@@ -175,7 +175,15 @@ export interface FlowPlugin extends PluginMeta {
  * gates; the harness emits this shape directly.
  */
 export interface UserAnswer {
-  decision: "accept" | "reject";
+  /**
+   * D8 (Q69): "auto-apply" is gate-1 specific. The harness emits it when
+   * the user types `1` / `a` / `auto-apply` at gate-1, telling the
+   * pipeline to treat the auto-derived "Suggested revision" block as a
+   * gate-1 reject message (replan with that feedback). Gate-0 / gate-2
+   * never emit "auto-apply" — gate-2 stays accept/reject with
+   * reject_intent disambiguation (Q74).
+   */
+  decision: "accept" | "reject" | "auto-apply";
   /**
    * Q74 (D13): gate-2 reject disambiguation. "revise" routes back to impl
    * entry + re-runs reviewers; "abandon" finalizes with verdict="rejected".
@@ -192,7 +200,12 @@ export interface GateDecision {
 
 export interface GatePlugin extends PluginMeta {
   name: string;
-  message(state: DriverState): string;
+  /**
+   * D8 (Q69): gate messages may be async — gate-1 reads findings.jsonl to
+   * build the auto-derived "Suggested revision" block. Pure-text gates
+   * (gate-0, gate-2) keep returning a synchronous string.
+   */
+  message(state: DriverState): string | Promise<string>;
   validate_response(input: UserAnswer): GateDecision;
 }
 

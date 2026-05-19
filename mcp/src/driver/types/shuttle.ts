@@ -78,7 +78,13 @@ export type ContinueTaskInput =
   | {
       driver_state_id: string;
       type: "user-answer";
-      decision: "accept" | "reject";
+      /**
+       * D8 (Q69): "auto-apply" is gate-1 specific. Tells the pipeline to
+       * treat the gate-1 message's auto-derived "Suggested revision" block
+       * as the reject feedback (replan with it). At gate-0 / gate-2 the
+       * harness uses accept/reject only.
+       */
+      decision: "accept" | "reject" | "auto-apply";
       /**
        * Q74 (D13): meaningful only at gate-2 when decision === "reject".
        * "revise" (default for `2`/reject keyword) → walk FSM back to the

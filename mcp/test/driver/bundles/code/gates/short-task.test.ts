@@ -75,7 +75,7 @@ describe("Q71 / D10 — gate message snapshot", () => {
     const huge = "Add a feature flag\n\n" + "x".repeat(10_000);
     const state = makeState(huge, { complexity: "medium" });
     const gate = requireGate(registry, "gate-0");
-    const msg = gate.message(state);
+    const msg = await Promise.resolve(gate.message(state));
     expect(msg.length).toBeLessThan(500);
     expect(msg).toContain("Add a feature flag");
     expect(msg).toContain("Reply 1/accept or 2/reject");
@@ -89,7 +89,7 @@ describe("Q71 / D10 — gate message snapshot", () => {
     const huge = "Refactor the cache layer\n\n" + "y".repeat(10_000);
     const state = makeState(huge);
     const gate = requireGate(registry, "gate-1");
-    const msg = gate.message(state);
+    const msg = await Promise.resolve(gate.message(state));
     expect(msg.length).toBeLessThan(500);
     expect(msg).toContain("Refactor the cache layer");
     expect(msg).not.toContain("y".repeat(200));

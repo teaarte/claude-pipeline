@@ -47,7 +47,9 @@ export const continueTaskSchema = {
     z.object({
       driver_state_id: z.string(),
       type: z.literal("user-answer"),
-      decision: z.enum(["accept", "reject"]),
+      // D8 (Q69): "auto-apply" is gate-1 specific — re-spawns planner with
+      // the auto-derived Suggested revision block as gate-1-reject message.
+      decision: z.enum(["accept", "reject", "auto-apply"]),
       // Q74 (D13): gate-2 reject disambiguation. "revise" walks FSM back to
       // impl entry; "abandon" finalizes with verdict="rejected". Gate-0/gate-1
       // ignore the field.
@@ -188,11 +190,37 @@ export async function pipelineContinueTask(input: {
         throw new Error("Driver was not waiting for a user answer");
       }
       const gateName = state.pending_user_answer.gate;
-      state.scratch[`${gateName}_decision`] = {
-        decision: evt.decision,
-        reject_intent: evt.reject_intent,
-        message: evt.message,
-      };
+      // D8 (Q69): "auto-apply" is gate-1 specific. Translate to a reject
+      // decision carrying the gate-1 message's stashed "Suggested revision"
+      // block as the feedback so the planner respawn (via INV_005 + the
+      // planner prompt) sees the revision text as the rejection reason.
+      // Non-gate-1 use of auto-apply is a protocol error.
+      if (evt.decision === "auto-apply") {
+        if (gateName !== "gate-1") {
+          throw new Error(
+            `decision='auto-apply' is gate-1 specific; harness sent it for ${gateName}`,
+          );
+        }
+        const revision = state.scratch["__gate_1_suggested_revision"] as
+          | string
+          | undefined;
+        if (!revision || revision.trim().length === 0) {
+          throw new Error(
+            "decision='auto-apply' but no suggested-revision block was stashed at gate-1 — call gate.message(state) first to derive it",
+          );
+        }
+        state.scratch[`${gateName}_decision`] = {
+          decision: "reject",
+          reject_intent: evt.reject_intent,
+          message: revision.trim(),
+        };
+      } else {
+        state.scratch[`${gateName}_decision`] = {
+          decision: evt.decision,
+          reject_intent: evt.reject_intent,
+          message: evt.message,
+        };
+      }
       state.pending_user_answer = null;
       // Q74 (D13): do NOT auto-bump step_index here. gateStep.run owns the
       // resume decision (accept → verdict=accepted + advance; gate-2

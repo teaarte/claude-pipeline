@@ -343,7 +343,7 @@ function gateStep(
       // Close any prior phases (idempotent) before pausing for the human.
       await closePriorPhases(state, phase);
       const gate = requireGate(ctx.registry, gateName);
-      const msg = gate.message(state);
+      const msg = await Promise.resolve(gate.message(state));
       state.pending_user_answer = { gate: gateName, message: msg };
       return { type: "shuttle", response: askUser(state.driver_state_id, gateName, msg) };
     },

@@ -375,6 +375,92 @@ const CALLER_CONTEXT_EXPAND: HookPlugin = {
   },
 };
 
+// Q-tech-debt / D3: signal phrases that mark a paragraph as a tech-debt /
+// out-of-scope observation in implementer prose. Real-task frontend-core
+// 2026-05-18 case: "Pre-existing prettier debt in repo (19 files): mostly
+// .md files plus a few pre-existing TS files; not a regression." Multiple
+// matches per paragraph are fine — the paragraph is captured once.
+const TECH_DEBT_SIGNAL_PHRASES: RegExp[] = [
+  /\bpre[-\s]?existing\b/i,
+  /\bout[-\s]?of[-\s]?scope\b/i,
+  /\bnot a regression\b/i,
+  /\bnoticed\b/i,
+  /\balso worth fixing\b/i,
+  /\bTODO:/i,
+  /\bFIXME:/i,
+];
+
+function paragraphHash(p: string): string {
+  // djb2-style 32-bit hash, hex. Stable across runs so re-firing the hook
+  // on the same paragraph is idempotent. The hash is embedded in the
+  // auto-captured marker so we can dedupe on subsequent passes without
+  // tokenising the markdown.
+  let h = 5381;
+  const norm = p.replace(/\s+/g, " ").trim();
+  for (let i = 0; i < norm.length; i++) {
+    h = ((h * 33) ^ norm.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * Q-tech-debt / D3: scan implementer prose for tech-debt / out-of-scope
+ * observations that should have been written to `.claude/issues-found.md`
+ * but weren't. Each matching paragraph is appended under an
+ * `<!-- auto-captured hash=... -->` marker so the next invocation can
+ * dedupe by hash. Implementer-only; other agents emit structured output
+ * via the reviewer/validator schema path and don't need this safety net.
+ */
+const EXTRACT_TECH_DEBT_FROM_PROSE: HookPlugin = {
+  name: "extract-tech-debt-from-prose",
+  event: "after-agent-result",
+  async run(state, ctx) {
+    if (ctx.agent !== "implementer") return;
+    const output = ctx.agent_output ?? "";
+    if (output.length === 0) return;
+    const paragraphs = output
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const matches = paragraphs.filter((p) =>
+      TECH_DEBT_SIGNAL_PHRASES.some((re) => re.test(p)),
+    );
+    if (matches.length === 0) return;
+    const dir = await ensureClaudeDir(state);
+    const out = join(dir, "issues-found.md");
+    let existing = "";
+    try {
+      existing = await readFile(out, "utf8");
+    } catch {
+      existing = "";
+    }
+    const existingHashes = new Set<string>();
+    const hashRe = /<!--\s*auto-captured\s+hash=([0-9a-f]+)\s*-->/gi;
+    let m: RegExpExecArray | null;
+    while ((m = hashRe.exec(existing)) !== null) {
+      existingHashes.add(m[1]);
+    }
+    const newBlocks: string[] = [];
+    for (const p of matches) {
+      const h = paragraphHash(p);
+      if (existingHashes.has(h)) continue;
+      existingHashes.add(h);
+      // Multi-line paragraphs indent continuation lines so the markdown
+      // bullet stays attached. The marker comment sits on its own line
+      // above the bullet for easy grep / dedupe.
+      const indented = p.replace(/\n/g, "\n  ");
+      newBlocks.push(`<!-- auto-captured hash=${h} -->\n- ${indented}`);
+    }
+    if (newBlocks.length === 0) return;
+    const header = existing.length === 0 ? "# issues-found.md\n\n" : "";
+    const sep = existing.length > 0 && !existing.endsWith("\n\n")
+      ? (existing.endsWith("\n") ? "\n" : "\n\n")
+      : "";
+    const next = header + existing + sep + newBlocks.join("\n\n") + "\n";
+    await writeFile(out, next, "utf8");
+  },
+};
+
 // INVARIANT (Q60): GIT_DIFF_SNAPSHOT must run first. ANTI_PATTERN_GREP and
 // CALLER_CONTEXT_EXPAND read `.claude/diff.txt` that GIT_DIFF_SNAPSHOT writes.
 // Reordering this array silently breaks downstream consumers (empty diff →
@@ -387,6 +473,7 @@ export const BUILTIN_HOOKS: HookPlugin[] = [
   LOAD_PAST_MISSES,
   ANTI_PATTERN_GREP,    // reads diff.txt
   CALLER_CONTEXT_EXPAND, // reads diff.txt
+  EXTRACT_TECH_DEBT_FROM_PROSE, // after-agent-result, implementer-only
 ];
 
 // Exported for tests so they can stub git invocation without running it.
@@ -394,4 +481,7 @@ export const __internals = {
   extractAntiPatternRules,
   extractFunctionNamesFromDiff,
   findCallerSites,
+  paragraphHash,
+  TECH_DEBT_SIGNAL_PHRASES,
+  EXTRACT_TECH_DEBT_FROM_PROSE,
 };

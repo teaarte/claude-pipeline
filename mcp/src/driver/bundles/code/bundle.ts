@@ -78,6 +78,7 @@ export const codeBundle: BundleManifest = {
     "load-past-misses",
     "anti-pattern-grep",
     "caller-context-expand",
+    "extract-tech-debt-from-prose",
   ],
   supported_gates: ["gate-0", "gate-1", "gate-2"],
   task_prompt_template_path: "mcp/src/driver/bundles/code/task-prompt.md",

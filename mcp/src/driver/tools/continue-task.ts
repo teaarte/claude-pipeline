@@ -26,6 +26,7 @@ import { pipelineRecordNonreviewAgent } from "../../tools/record-nonreview-agent
 import { pipelineCancelSpawn } from "../../tools/cancel-spawn.js";
 import { pipelineAbandon } from "../../tools/abandon.js";
 import { mcpSpawnRecorder } from "./run-task.js";
+import { runHooks } from "../core/invoke-hooks.js";
 import type { ContinueTaskInput, DriverResponse } from "../types/shuttle.js";
 
 export const continueTaskSchema = {
@@ -116,6 +117,14 @@ export async function pipelineContinueTask(input: {
       );
     }
 
+    // Registry built once and reused across the per-event branches and the
+    // later runFSM call. D3 (Q-tech-debt) fires "after-agent-result" hooks
+    // from the agent-result / agents-results branches; the loaded registry
+    // is what those hooks dispatch through.
+    const registry = createRegistry();
+    await loadBundle("code", registry);
+    await loadProjectConfigIfPresent(registry, input.project_dir);
+
     const evt = input.input;
     if (evt.type === "agent-result") {
       const spawn = state.pending_spawns[evt.agent_run_id];
@@ -131,6 +140,10 @@ export async function pipelineContinueTask(input: {
         evt.agent_output,
       );
       delete state.pending_spawns[evt.agent_run_id];
+      await runHooks(registry, "after-agent-result", state, {
+        agent: spawn.agent,
+        agent_output: evt.agent_output,
+      });
       state.step_index++;
     } else if (evt.type === "agents-results") {
       // M9: validate every spawn exists FIRST, then persist each result.
@@ -155,9 +168,18 @@ export async function pipelineContinueTask(input: {
           r.agent_output,
         );
       }
+      const spawnedAgents: Array<{ agent: string; agent_output: string }> = [];
       for (const r of evt.results) {
+        const spawn = state.pending_spawns[r.agent_run_id]!;
+        spawnedAgents.push({ agent: spawn.agent, agent_output: r.agent_output });
         state.scratch[`agent_output_${r.agent_run_id}`] = r.agent_output;
         delete state.pending_spawns[r.agent_run_id];
+      }
+      for (const sp of spawnedAgents) {
+        await runHooks(registry, "after-agent-result", state, {
+          agent: sp.agent,
+          agent_output: sp.agent_output,
+        });
       }
       state.step_index++;
     } else if (evt.type === "user-answer") {
@@ -213,10 +235,6 @@ export async function pipelineContinueTask(input: {
         }
       }
     }
-
-    const registry = createRegistry();
-    await loadBundle("code", registry);
-    await loadProjectConfigIfPresent(registry, input.project_dir);
 
     const { response } = await runFSM(state, registry, {
       spawnRecorder: mcpSpawnRecorder,

@@ -316,11 +316,24 @@ type GateResumeFn = (
   answer: UserAnswer,
 ) => Promise<StepResult> | StepResult;
 
+/**
+ * D9 (Q70): optional pre-ask hook. Runs BEFORE the gate emits its
+ * ask-user shuttle. If it returns a StepResult, that result short-circuits
+ * the askUser pause — used by gate-1's auto-replan loop to walk back to
+ * PLAN when blocking findings exist and the replan cap allows.
+ */
+type GatePreAskFn = (
+  state: DriverState,
+  ctx: StepContext,
+  gateName: string,
+) => Promise<StepResult | null> | StepResult | null;
+
 function gateStep(
   name: string,
   gateName: string,
   phase: StepPlugin["phase"],
   onResume?: GateResumeFn,
+  onPreAsk?: GatePreAskFn,
 ): StepPlugin {
   return {
     name,
@@ -339,6 +352,12 @@ function gateStep(
           return onResume(state, ctx.registry, answer);
         }
         return { type: "advance" };
+      }
+      // D9: pre-ask hook — gate-1 uses this to auto-replan when blocking
+      // findings exist and the replan cap allows.
+      if (onPreAsk) {
+        const r = await Promise.resolve(onPreAsk(state, ctx, gateName));
+        if (r !== null) return r;
       }
       // Close any prior phases (idempotent) before pausing for the human.
       await closePriorPhases(state, phase);
@@ -393,8 +412,80 @@ async function gate2Resume(
   return { type: "advance" };
 }
 
+const AUTO_REPLAN_COUNT_KEY = "__auto_replan_count";
+
+/**
+ * D9 (Q70): auto-replan loop at planning gate-1. Opt-in via
+ * pipeline.config.json `auto_replan_on_blocking_max: 0 | 1 | 2`. When
+ * blocking findings exist at planning AND the cap allows, walks step_index
+ * back to PLAN with the auto-derived suggested-revision as synthetic
+ * gate-1-reject feedback — no human pause.
+ *
+ * Why capped: real-task observation 2026-05-19 — gate-1 reject "add
+ * __mfRuntime seam for AC-8 integration test" prompted planner to add
+ * BootstrapOverrides DI seam which challenger-reviewer subsequently
+ * called over-engineered. Unlimited auto-replan would scale this
+ * confirmation-bias pattern. The cap forces human review after N attempts.
+ */
+async function gate1AutoReplanPreAsk(
+  state: DriverState,
+  ctx: StepContext,
+  gateName: string,
+): Promise<StepResult | null> {
+  const config = state.scratch.bundleConfig as
+    | { auto_replan_on_blocking_max?: 0 | 1 | 2 }
+    | undefined;
+  const cap = config?.auto_replan_on_blocking_max ?? 0;
+  if (cap === 0) return null;
+  // Render the gate-1 message now — it both populates the
+  // __gate_1_suggested_revision scratch slot AND lets us inspect whether
+  // any planning findings exist (revision string is non-empty when at
+  // least one open planning finding is present).
+  const gate = requireGate(ctx.registry, gateName);
+  await Promise.resolve(gate.message(state));
+  const revision = state.scratch["__gate_1_suggested_revision"] as string | undefined;
+  if (!revision || revision.trim().length === 0) return null;
+  // Only auto-replan on BLOCKING findings — the suggested-revision header
+  // shows severity (BLOCKING/WARN/INFO). Skip warn/info loops to avoid
+  // burning the cap on minor stylistic suggestions.
+  if (!/\(BLOCKING,/.test(revision)) return null;
+  const used = (state.scratch[AUTO_REPLAN_COUNT_KEY] as number | undefined) ?? 0;
+  if (used >= cap) return null;
+  state.scratch[AUTO_REPLAN_COUNT_KEY] = used + 1;
+  // Synthesize a reject decision so mirrorGateDecision (called when the
+  // FSM re-enters this step after the walk-back) updates pipeline-state.
+  // We DON'T set state.scratch["gate-1_decision"] here — we set step_index
+  // back to PLAN and let the impl flow loop. The revision text is already
+  // stashed; subsequent passes through plan-review will see updated
+  // findings.
+  await audit({
+    tool: "pipeline_auto_replan",
+    args: {
+      task_id: state.task_id,
+      attempt: used + 1,
+      cap,
+      feedback_excerpt: revision.split("\n").slice(0, 3).join(" | ").slice(0, 200),
+    },
+    projectDir: state.project_dir,
+    verdict: "ok",
+    error_class: "auto-replan",
+  }).catch(() => undefined);
+  // Walk back to PLAN step. Find the planner step in the active flow.
+  const flow = requireFlow(ctx.registry, state.flow_name);
+  const planIdx = flow.steps.indexOf("plan");
+  if (planIdx < 0) return null;
+  // Clear plan-review fan-out markers so the second pass re-spawns.
+  for (const key of Object.keys(state.scratch)) {
+    if (key.startsWith("__spawn_issued_")) delete state.scratch[key];
+  }
+  delete state.scratch[PLAN_REVIEW_ISSUED_KEY];
+  // Pre-bump: runFSM increments after "advance" so set to (planIdx - 1).
+  state.step_index = planIdx - 1;
+  return { type: "advance" };
+}
+
 const GATE_0_STEP = gateStep("gate-0", "gate-0", "context");
-const GATE_1_STEP = gateStep("gate-1", "gate-1", "planning");
+const GATE_1_STEP = gateStep("gate-1", "gate-1", "planning", undefined, gate1AutoReplanPreAsk);
 const GATE_2_STEP = gateStep("gate-2", "gate-2", "validation", gate2Resume);
 
 const ENRICH: StepPlugin = {

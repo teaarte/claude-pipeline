@@ -15,7 +15,7 @@ import { createRegistry } from "../core/registry.js";
 import { runFSM, type SpawnRecorder } from "../core/fsm.js";
 import { makeInitialDriverState, withDriverStateLock } from "../core/state.js";
 import { loadBundle } from "../loaders/bundles.js";
-import { loadProjectConfigIfPresent } from "../loaders/project-config.js";
+import { loadProjectConfigIfPresent, readProjectBundleConfig } from "../loaders/project-config.js";
 import { complexityDecision } from "../bundles/code/decisions/complexity.js";
 import { testsModeDecision } from "../bundles/code/decisions/tests-mode.js";
 import { detectStack } from "../bundles/code/decisions/stack-detect.js";
@@ -90,6 +90,9 @@ export async function pipelineRunTask(input: {
     const registry = createRegistry();
     await loadBundle("code", registry);
     const config = await loadProjectConfigIfPresent(registry, input.project_dir);
+    // D9 / Q70: load bundle-level project config so gate-1's auto-replan
+    // pre-ask hook can read auto_replan_on_blocking_max.
+    const bundleConfig = await readProjectBundleConfig(input.project_dir);
 
     // Bootstrap pipeline-state if it doesn't exist. This makes /done's
     // pipeline_finish work after a real driver run.
@@ -149,6 +152,7 @@ export async function pipelineRunTask(input: {
     });
     state.task_id = taskId;
     state.scratch.config = config;
+    state.scratch.bundleConfig = bundleConfig;
     state.scratch.complexity = complexity;
     state.scratch.tests_mode = testsMode;
     state.decisions["complexity"] = complexity;

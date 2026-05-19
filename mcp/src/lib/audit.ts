@@ -30,6 +30,7 @@ export type ErrorClass =
   | "impl-blockers"            // Q68 / D7: acceptance.verdict=PASS with open impl-phase blockers at the latest iter
   | "owner-id-unset"           // Q72 / D11: pipeline_run_task ran with no resolvable owner_id env var
   | "reviewer-skipped-change-kind" // D2 / Q-change-kind: reviewer not relevant for state.decisions.change_kind
+  | "auto-replan"              // D9 / Q70: opt-in auto-replan loop iteration at gate-1
   | "genuine-failure";         // anything we don't recognise — investigate
 
 export type AuditEntry = {

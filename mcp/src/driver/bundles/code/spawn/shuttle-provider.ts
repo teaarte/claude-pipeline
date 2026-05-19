@@ -18,6 +18,7 @@ import type {
 } from "../../../types/plugin.js";
 import { spawnAgent } from "../../../core/shuttle.js";
 import { pipelineRoot, schemasDir } from "../../../../lib/paths.js";
+import { audit } from "../../../../lib/audit.js";
 
 /**
  * Claude Code's `Task` tool only accepts a fixed set of subagent_type values
@@ -179,13 +180,33 @@ export const shuttleSpawnProvider: SpawnProviderPlugin = {
       loadCategoryVocab(),
     ]);
     const prompt = buildPrompt(req, template, vocab);
+    // D4 / Q65: emit a runner-agnostic SpawnRequest. runner_hint tells the
+    // harness HOW to invoke this spawn; CC-specific `subagent_type` lives
+    // under extras so non-CC harnesses (Cursor adapter, daemon SDK) can
+    // skip the field cleanly when translating.
+    const runner_hint = "claude-code-task";
+    // D4: audit every spawn with runner_hint so post-hoc analysis can track
+    // adapter routing (CC vs SDK vs Cursor). Best-effort — never blocks
+    // the spawn on an audit-write failure.
+    await audit({
+      tool: "pipeline_spawn",
+      args: {
+        task_id: req.task_id ?? null,
+        agent: req.agent,
+        phase: req.phase,
+        runner_hint,
+      },
+      projectDir: undefined,
+      verdict: "ok",
+    }).catch(() => undefined);
     return {
       type: "shuttle",
       response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-        subagent_type: CC_GENERIC_SUBAGENT_TYPE,
+        runner_hint,
         description: `Run ${req.agent}`,
         prompt,
         model: req.model,
+        extras: { subagent_type: CC_GENERIC_SUBAGENT_TYPE },
       }),
     };
   },

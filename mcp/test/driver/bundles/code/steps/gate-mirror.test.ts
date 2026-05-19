@@ -43,10 +43,11 @@ function makeMockProvider(): SpawnProviderPlugin {
       return {
         type: "shuttle",
         response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-          subagent_type: "general-purpose",
+          runner_hint: "claude-code-task",
           description: req.agent,
           prompt: body,
           model: req.model,
+          extras: { subagent_type: "general-purpose" },
         }),
       };
     },

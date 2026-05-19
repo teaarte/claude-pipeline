@@ -18,8 +18,8 @@ mcp_protocol_required: "^2.0"
 
 Call `mcp__claude-pipeline__pipeline_run_task({project_dir: <cwd>, task: "$ARGUMENTS"})`, then loop:
 
-- **`spawn-agent`** → invoke the `Task` tool with `claude_code_task` (verbatim params). Pass the result to `mcp__claude-pipeline__pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agent-result", agent_run_id, agent_output}})`.
-- **`spawn-agents-parallel`** → invoke `Task` for each spawn in parallel. Bundle results: `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agents-results", results: [{agent_run_id, agent_output}, ...]}})`.
+- **`spawn-agent`** → read `spawn_request.runner_hint`. When `"claude-code-task"`, invoke the Claude Code `Task` tool with `{subagent_type: spawn_request.extras.subagent_type, description: spawn_request.description, prompt: spawn_request.prompt, model: spawn_request.model}`. Pass the result to `mcp__claude-pipeline__pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agent-result", agent_run_id, agent_output}})`. Other runner_hint values belong to non-CC harnesses (daemon SDK, Cursor adapter, etc.); a non-CC skill markdown owns that translation.
+- **`spawn-agents-parallel`** → for each spawn, follow the spawn-agent translation above (read `spawn_request.runner_hint` → invoke the right harness primitive). Bundle results: `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "agents-results", results: [{agent_run_id, agent_output}, ...]}})`.
 - **`ask-user`** → display `message` verbatim, capture user reply, parse it via the rules below, then `pipeline_continue_task({project_dir, driver_state_id, input: {driver_state_id, type: "user-answer", decision, reject_intent?, message?}})`.
 
   **User-answer parsing (closes Q57; gate-2 disambiguation closes Q74):**

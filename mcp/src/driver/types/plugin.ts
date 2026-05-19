@@ -9,7 +9,7 @@ import type { Phase } from "../../lib/phase-state-machine.js";
 import type {
   DriverResponse,
   ContinueTaskInput,
-  ClaudeCodeTaskSpec,
+  SpawnRequest,
 } from "./shuttle.js";
 
 export const PLUGIN_API_VERSION = "1.0";
@@ -361,4 +361,4 @@ export interface PluginRegistry {
 }
 
 // Re-export shuttle types for convenient single-import.
-export type { DriverResponse, ContinueTaskInput, ClaudeCodeTaskSpec };
+export type { DriverResponse, ContinueTaskInput, SpawnRequest };

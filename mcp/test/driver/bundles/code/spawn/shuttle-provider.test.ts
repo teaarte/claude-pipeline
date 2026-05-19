@@ -33,7 +33,7 @@ describe("shuttleSpawnProvider", () => {
       if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
         throw new Error("expected spawn-agent shuttle");
       }
-      expect(r.response.claude_code_task.subagent_type).toBe("general-purpose");
+      expect((r.response.spawn_request.extras as any)?.subagent_type).toBe("general-purpose");
       // The Task tool's accepted catalog — must always be one of these.
       const accepted = [
         "general-purpose",
@@ -45,7 +45,7 @@ describe("shuttleSpawnProvider", () => {
         "statusline-setup",
         "claude-code-guide",
       ];
-      expect(accepted).toContain(r.response.claude_code_task.subagent_type);
+      expect(accepted).toContain((r.response.spawn_request.extras as any)?.subagent_type);
     }
   });
 
@@ -62,7 +62,7 @@ describe("shuttleSpawnProvider", () => {
       if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
         throw new Error("expected spawn-agent shuttle");
       }
-      const prompt = r.response.claude_code_task.prompt;
+      const prompt = r.response.spawn_request.prompt;
       expect(prompt).toContain("test-spec-agent");
       expect(prompt).toContain(templateBody);
       // Spawn context (the upstream prompt) is preserved too.
@@ -77,7 +77,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    const desc = r.response.claude_code_task.description;
+    const desc = r.response.spawn_request.description;
     expect(desc.length).toBeGreaterThan(0);
     expect(desc.length).toBeLessThanOrEqual(80);
     expect(desc).toContain("planner");
@@ -88,8 +88,8 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    expect(r.response.claude_code_task.subagent_type).toBe("general-purpose");
-    expect(r.response.claude_code_task.prompt).toContain("challenger-reviewer");
+    expect((r.response.spawn_request.extras as any)?.subagent_type).toBe("general-purpose");
+    expect(r.response.spawn_request.prompt).toContain("challenger-reviewer");
   });
 
   it("emits a recognisable marker when template_path cannot be read (does not throw)", async () => {
@@ -99,8 +99,8 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    expect(r.response.claude_code_task.prompt).toMatch(/template read failed/);
-    expect(r.response.claude_code_task.subagent_type).toBe("general-purpose");
+    expect(r.response.spawn_request.prompt).toMatch(/template read failed/);
+    expect((r.response.spawn_request.extras as any)?.subagent_type).toBe("general-purpose");
   });
 
   it("Q18: embeds vocab inline for an agent with a vocab entry (logic-reviewer)", async () => {
@@ -109,7 +109,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    const prompt = r.response.claude_code_task.prompt;
+    const prompt = r.response.spawn_request.prompt;
     expect(prompt).toContain("## Allowed `category` values");
     expect(prompt).toContain("race-condition");
     expect(prompt).toContain("off-by-one");
@@ -123,7 +123,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    expect(r.response.claude_code_task.prompt).not.toContain("## Allowed `category` values");
+    expect(r.response.spawn_request.prompt).not.toContain("## Allowed `category` values");
   });
 
   it("item 7: injects team_knowledge into prompt under '## Team knowledge' section", async () => {
@@ -137,7 +137,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    const prompt = r.response.claude_code_task.prompt;
+    const prompt = r.response.spawn_request.prompt;
     expect(prompt).toContain("## Team knowledge");
     expect(prompt).toContain("Use semicolons");
     expect(prompt).toContain("kb/conventions.md");
@@ -150,7 +150,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    expect(r.response.claude_code_task.prompt).not.toContain("## Team knowledge");
+    expect(r.response.spawn_request.prompt).not.toContain("## Team knowledge");
   });
 
   it("Q18: security agent prompt carries security-specific vocab", async () => {
@@ -159,7 +159,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    const prompt = r.response.claude_code_task.prompt;
+    const prompt = r.response.spawn_request.prompt;
     expect(prompt).toContain("injection-sql-or-nosql");
     expect(prompt).toContain("auth-bypass");
   });
@@ -175,7 +175,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    const prompt = r.response.claude_code_task.prompt;
+    const prompt = r.response.spawn_request.prompt;
     expect(prompt).toContain("## Canonical identifiers");
     expect(prompt).toContain("`task_id`: t-2026-05-18-implementphase07step");
     expect(prompt).toContain("MUST equal the canonical");
@@ -188,7 +188,7 @@ describe("shuttleSpawnProvider", () => {
     if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
       throw new Error("expected spawn-agent shuttle");
     }
-    expect(r.response.claude_code_task.prompt).not.toContain("## Canonical identifiers");
+    expect(r.response.spawn_request.prompt).not.toContain("## Canonical identifiers");
   });
 
   it("C6: Canonical identifiers section appears BEFORE the role template (authoritative context)", async () => {
@@ -206,7 +206,7 @@ describe("shuttleSpawnProvider", () => {
       if (r.type !== "shuttle" || r.response.status !== "spawn-agent") {
         throw new Error("expected spawn-agent shuttle");
       }
-      const prompt = r.response.claude_code_task.prompt;
+      const prompt = r.response.spawn_request.prompt;
       const canonicalIdx = prompt.indexOf("## Canonical identifiers");
       const roleIdx = prompt.indexOf("## Role template");
       expect(canonicalIdx).toBeGreaterThan(-1);

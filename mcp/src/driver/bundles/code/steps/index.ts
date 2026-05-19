@@ -22,7 +22,7 @@ import type {
   DriverState,
   StepContext,
   AgentPlugin,
-  ClaudeCodeTaskSpec,
+  SpawnRequest,
   UserAnswer,
 } from "../../../types/plugin.js";
 import { askUser, complete, spawnAgentsParallel } from "../../../core/shuttle.js";
@@ -585,7 +585,7 @@ const REVIEW: StepPlugin = {
     const spawns: Array<{
       agent_run_id: string;
       agent: string;
-      claude_code_task: ClaudeCodeTaskSpec;
+      spawn_request: SpawnRequest;
     }> = [];
     for (const agent of eligible) {
       const model = resolveAgentModel(agent, "implementation", config);
@@ -609,7 +609,7 @@ const REVIEW: StepPlugin = {
       spawns.push({
         agent_run_id,
         agent: agent.name,
-        claude_code_task: result.response.claude_code_task,
+        spawn_request: result.response.spawn_request,
       });
     }
     state.scratch[REVIEW_ISSUED_KEY] = newIssuedIds;

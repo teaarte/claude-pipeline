@@ -19,12 +19,17 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
       expect(res.status).toBe("spawn-agent");
       if (res.status === "spawn-agent") {
         expect(res.agent).toBe("classifier");
-        expect(res.claude_code_task.subagent_type).toBe("general-purpose");
-        expect(res.claude_code_task.prompt).toContain("classifier");
+        // D4 / Q65: runner-agnostic shuttle response shape. The CC-specific
+        // subagent_type lives under extras now.
+        expect(res.spawn_request.runner_hint).toBe("claude-code-task");
+        expect((res.spawn_request.extras as any)?.subagent_type).toBe(
+          "general-purpose",
+        );
+        expect(res.spawn_request.prompt).toContain("classifier");
         // Model resolves via defaultConfig.default_models_by_phase.context =
         // "sonnet", overriding the classifier's haiku default at the phase
         // layer (resolveAgentModel cascade).
-        expect(res.claude_code_task.model).toBe("sonnet");
+        expect(res.spawn_request.model).toBe("sonnet");
 
         const res2 = await pipelineContinueTask({
           project_dir: proj.dir,
@@ -52,7 +57,7 @@ describe("driver/tools — pipeline_run_task + pipeline_continue_task", () => {
         expect(res2.status).toBe("spawn-agent");
         if (res2.status === "spawn-agent") {
           expect(res2.agent).toBe("planner");
-          expect(res2.claude_code_task.model).toBe("opus");
+          expect(res2.spawn_request.model).toBe("opus");
         }
       }
     } finally {

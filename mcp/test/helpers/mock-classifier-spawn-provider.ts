@@ -86,10 +86,11 @@ export function mockClassifierSpawnProvider(
         return {
           type: "shuttle",
           response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-            subagent_type: "general-purpose",
+            runner_hint: "claude-code-task",
             description: `mock-classifier ${req.agent}`,
             prompt: stubBody,
             model: req.model,
+            extras: { subagent_type: "general-purpose" },
           }),
         };
       }
@@ -97,10 +98,11 @@ export function mockClassifierSpawnProvider(
       return {
         type: "shuttle",
         response: spawnAgent(req.driver_state_id, req.agent_run_id, req.agent, {
-          subagent_type: "general-purpose",
+          runner_hint: "claude-code-task",
           description: `mock-stub ${req.agent}`,
           prompt: `mock ${req.agent}`,
           model: req.model,
+          extras: { subagent_type: "general-purpose" },
         }),
       };
     },

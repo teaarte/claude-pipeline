@@ -1,14 +1,42 @@
 /**
  * Shuttle protocol — the structured message format between the driver and
- * Claude Code (or any other harness). The driver emits one DriverResponse
- * per pause point; the shuttle hands the result back via ContinueTaskInput.
+ * its harness (Claude Code, future daemon HTTP API, Cursor MCP integration,
+ * etc.). The driver emits one DriverResponse per pause point; the harness
+ * hands the result back via ContinueTaskInput.
+ *
+ * D4 / Q65: the spawn shape is runner-agnostic. `SpawnRequest.runner_hint`
+ * tells the harness HOW to invoke (which native primitive maps to this
+ * spawn); CC-specific fields like `subagent_type` live under `extras`. A
+ * non-CC harness (Cursor adapter, daemon SDK, future Codex/Gemini CLI
+ * adapter) translates the same SpawnRequest to its own native shape via a
+ * different runner_hint branch in the skill markdown / adapter.
  */
 
-export type ClaudeCodeTaskSpec = {
-  subagent_type: string;
+export type SpawnRequest = {
+  /**
+   * Identifies the harness primitive that should execute this spawn. The
+   * pipeline core never branches on this — the consuming harness (skill
+   * markdown, daemon adapter, Cursor MCP integration) reads it to pick the
+   * right translation. v2.x ships "claude-code-task"; v2.3.4's
+   * AnthropicSdkSpawnProvider will return "anthropic-sdk"; future Cursor /
+   * Codex adapters declare their own.
+   */
+  runner_hint: "claude-code-task" | "anthropic-sdk" | "openai-sdk" | "ollama" | string;
   description: string;
   prompt: string;
-  model?: "haiku" | "sonnet" | "opus";
+  /**
+   * Provider-specific model identifier. Tier abstraction (haiku/sonnet/opus
+   * vs. provider-native ids) is the v2.5 routing layer's concern; pipeline
+   * core stays neutral.
+   */
+  model?: string;
+  /**
+   * Runner-specific extras pass through opaquely. CC-specific
+   * `subagent_type` (the Task-tool field) lives here when
+   * runner_hint === "claude-code-task". Other adapters define their own
+   * extras shape.
+   */
+  extras?: Record<string, unknown>;
 };
 
 export type DriverResponse =
@@ -17,12 +45,12 @@ export type DriverResponse =
       driver_state_id: string;
       agent_run_id: string;
       agent: string;
-      claude_code_task: ClaudeCodeTaskSpec;
+      spawn_request: SpawnRequest;
     }
   | {
       status: "spawn-agents-parallel";
       driver_state_id: string;
-      spawns: { agent_run_id: string; agent: string; claude_code_task: ClaudeCodeTaskSpec }[];
+      spawns: { agent_run_id: string; agent: string; spawn_request: SpawnRequest }[];
     }
   | {
       status: "ask-user";

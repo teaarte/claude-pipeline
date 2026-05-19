@@ -193,6 +193,32 @@ async function main() {
       "record_agent_run with unknown agent_run_id",
     );
 
+    section("record reviewer iteration 2 (APPROVE — blockers fixed)");
+    // D7 / Q68 / INV_013 makes acceptance:PASS refuse to land when the
+    // latest impl-phase reviewer iteration still has open blockers. The
+    // realistic real-task flow is: iter 1 flags blocking → implementer
+    // fixes → iter 2 APPROVE. Smoke models that here so the downstream
+    // acceptance:PASS proceeds cleanly.
+    const reviewerOutputIter2 = `\`\`\`json
+{
+  "schema_version": "1.0",
+  "agent": "logic-reviewer",
+  "task_id": "t-2026-05-13-smoke",
+  "iteration": 2,
+  "verdict": "APPROVE",
+  "summary_line": "blockers from iteration 1 addressed",
+  "findings": [],
+  "past_misses_applied": 0,
+  "past_miss_matches": [],
+  "ref_rules_consulted": []
+}
+\`\`\`
+
+# Logic Review — Iteration 2
+`;
+    await spawnReviewer(project, "implementation", "logic-reviewer", reviewerOutputIter2);
+    ok("recorded logic-reviewer iter 2 APPROVE");
+
     section("complete implementation");
     await pipelineSetPhaseStatus({
       project_dir: project,

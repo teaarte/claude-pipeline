@@ -263,7 +263,7 @@ export async function pipelineRecordAgentRun(input: {
           args: { phase: input.phase, agent, agent_run_id: input.agent_run_id },
           projectDir: input.project_dir,
           verdict: "error",
-          error_class: "INV_013",
+          error_class: "impl-blockers",
           error: inv013.message,
         }).catch(() => undefined);
         throw new Error(`pipeline_record_agent_run refused: [INV_013] ${inv013.message}`);

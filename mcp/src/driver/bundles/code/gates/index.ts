@@ -1,4 +1,4 @@
-import type { GatePlugin, UserAnswer, GateDecision } from "../../../types/plugin.js";
+import type { DriverState, GatePlugin, UserAnswer, GateDecision } from "../../../types/plugin.js";
 
 function parseDecision(input: UserAnswer): GateDecision {
   return {
@@ -7,13 +7,37 @@ function parseDecision(input: UserAnswer): GateDecision {
   };
 }
 
+/**
+ * Q71 / D10: render a short, scrollable task summary for gate prompts.
+ * Real-task observation 2026-05-19: gate-0 and gate-1 message bodies
+ * contained the full 10 KB task description verbatim, forcing the human
+ * to scroll past their own input to reach the `Reply 1/accept...` prompt.
+ *
+ * Resolution order (first non-empty wins):
+ *   1. state.task_short — populated by the classifier-agent (D1 future).
+ *   2. First non-empty line of state.task truncated to 80 chars.
+ *   3. "(empty task)" guard so the prompt is never blank.
+ *
+ * Gate-2 message stays constant (no task echo) so it's untouched.
+ */
+export function shortTask(state: DriverState): string {
+  const short = state.decisions["task_short"];
+  if (typeof short === "string" && short.trim().length > 0) {
+    return short.trim();
+  }
+  const firstLine = state.task.split("\n").find((l) => l.trim().length > 0)?.trim();
+  if (!firstLine) return "(empty task)";
+  if (firstLine.length <= 80) return firstLine;
+  return firstLine.slice(0, 77) + "...";
+}
+
 const GATE_0: GatePlugin = {
   name: "gate-0",
   message(state) {
     const complexity = state.decisions["complexity"] ?? "unknown";
     return [
       `Classified as ${String(complexity).toUpperCase()}.`,
-      `Task: ${state.task}`,
+      `Task: ${shortTask(state)}`,
       `Reply 1/accept or 2/reject <message>.`,
     ].join("\n");
   },
@@ -24,7 +48,7 @@ const GATE_1: GatePlugin = {
   name: "gate-1",
   message(state) {
     return [
-      `Plan ready for ${state.task}.`,
+      `Plan ready for ${shortTask(state)}.`,
       `Review .claude/plan.md.`,
       `Reply 1/accept or 2/reject <message>.`,
     ].join("\n");

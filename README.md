@@ -1,5 +1,7 @@
 # Claude Pipeline
 
+> ⚠️ **This repository is archived.** The idea evolved into **Loom**, where active development now continues. What remains here is a historical snapshot of Claude Pipeline (v2.2.7) — it is no longer maintained.
+
 Multi-agent development pipeline for Claude Code. Form a team of specialized AI agents — planner, reviewers (logic + challenger + style + security + performance), test-writer, acceptance — and let them work through a task together with human gates at key decision points.
 
 **Current state:** **v2.2.7 shipped**. TypeScript plugin framework, **21 MCP tools**, 13 state invariants (INV_001-013), **569 tests**, 5-reviewer fan-out active on non-simple flows. Classifier-agent auto-spawns in the context phase and populates LLM-derived decisions (`refs_to_load` / `security_needed` / `task_short` / `antipattern_rules_applicable` / `stack` / `change_kind`). Reviewer selectivity by `change_kind` skips style + performance on type-only / docs-only diffs. Runner-agnostic `SpawnRequest` shape (`runner_hint` field) unbinds pipeline core from Claude Code Task-tool names — direct prep for v2.3 daemon + Cursor / Codex adapters. Planning-phase reviewers fan out in parallel (~30-60s saved per medium/complex task). Gate-1 auto-derives "Suggested revision" from reviewer findings with one-keypress apply; opt-in capped auto-replan loop for blocking findings. INV_013 refuses `acceptance: PASS` when impl-phase reviewers still have open blockers. Gate-2 reject now distinguishes revise vs abandon; FINALIZE throws when `verdict` is null. **10 real-task validation runs** to date (s3-panel + wandr-be + frontend-core).
@@ -15,8 +17,6 @@ Multi-agent development pipeline for Claude Code. Form a team of specialized AI 
 | [`v2.2.5`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.5) | Bundle abstraction first-class + classifier substrate + structured gate-answer + metric-row observability (Q40/Q41 partial/Q44/Q45/Q46/Q47/Q48/Q50/Q51/Q55/Q57/Q58/Q59/Q60/Q61) + post-review followups bundle | 2026-05-18 |
 | [`v2.2.6`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.6) | Stack-classifier candidate registry + classifier-output schema substrate + `<!-- validation-commands -->` marker + canonical task_id propagation + Q63 auto-close validation/final + Q64 cross-session ownership safety | 2026-05-18 |
 | [`v2.2.7`](https://github.com/teaarte/claude-pipeline/releases/tag/v2.2.7) | Classifier auto-spawn + reviewer selectivity by `change_kind` + generic `SpawnRequest` (Q65) + configurable project subdir (Q66) + planning-phase parallel fan-out (Q67) + INV_013 acceptance gate (Q68) + auto-derived gate-1 feedback (Q69) + opt-in auto-replan (Q70) + gate-2 reject FSM fix (Q74 CRITICAL) + Q71/Q72/Q73/D3/D10 | 2026-05-19 |
-
-Roadmap: [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) → next is **v2.3 daemon + Web UI** (`AnthropicSdkSpawnProvider` is direct beneficiary of v2.2.7 D4's runner-agnostic `SpawnRequest`).
 
 ## Quick start
 
@@ -168,15 +168,8 @@ Two state files per project under `<project>/.claude/`:
 | [`WORKFLOW.md`](WORKFLOW.md) | Daily usage patterns, command-choice flowchart | First `/task` |
 | [`mcp/README.md`](mcp/README.md) | MCP tool reference (21 tools) + invariants (INV_001-013) | When debugging state |
 | [`hooks/README.md`](hooks/README.md) | Guard hook + Stop hook install + bypass mechanics | When customizing or escape-hatching |
-| [`specs/product-vision.md`](specs/product-vision.md) | Product positioning — "AI Team RTS", target users, pricing tiers, commercial trajectory | When thinking about the bigger picture |
-| [`specs/ui-vision.md`](specs/ui-vision.md) | 6-layer UX architecture: agent builder → specialist → team → curator → channels + console + 3 operating modes | When planning v2.3 daemon UX |
-| [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) | Phase index → links to phase plans | When picking next bundle |
-| [`specs/phases/`](specs/phases/) | Detailed plans per phase (v2.3 / v2.4 / v2.5 / v2.6 / far-future) | When executing a phase |
-| [`specs/open-backlog.md`](specs/open-backlog.md) | Currently open + deferred + code-polish Q-items | When picking next fix |
-| [`specs/closed-q-items.md`](specs/closed-q-items.md) | Historical record of 56 closed Q-items by bundle (7 bundles) | When recurrence-checking |
 | [`validation-log.md`](validation-log.md) | Validation workflow + cross-cutting observations + closed-task index | When running real-task validation |
 | [`validation/closed-tasks/`](validation/closed-tasks/) | Per-task validation entries (10 files, growing) | When studying past runs |
-| [`specs/done/`](specs/done/) | Archived launcher prompts (v2.1, v2.2, v2.2a, v2.2.5, v2.2.6, v2.2.7) | When learning the bundle pattern |
 
 ## Self-improvement loop
 
@@ -199,7 +192,7 @@ Canonical table in `commands/task.md`. Simplified view:
 | code-analyzer, security, performance | sonnet | **opus** |
 | acceptance, plan-conformance, plan-grounding-check, style | **haiku** | sonnet |
 
-Multi-provider routing (cost-aware) is v2.5 territory — see [`specs/phases/v2.5-multiprovider.md`](specs/phases/v2.5-multiprovider.md). Until then, default per-agent.
+Multi-provider routing (cost-aware) was planned v2.5 territory. Until then, default per-agent.
 
 ## File structure
 
@@ -231,14 +224,6 @@ claude-pipeline/
 │   ├── pipeline-stop.sh     Stop — tri-state (in-flight / gate-paused / accept-pending)
 │   └── README.md            install + bypass mechanics
 ├── metrics/                 (per-machine; copied to ~/.claude/metrics on install)
-├── specs/
-│   ├── product-vision.md          positioning + commercial trajectory
-│   ├── ui-vision.md               UX architecture (6 layers + 3 modes)
-│   ├── v3-productization-roadmap.md  phase index
-│   ├── open-backlog.md            active Q-items
-│   ├── closed-q-items.md          historical Q-items by bundle
-│   ├── phases/                    detailed per-phase plans
-│   └── done/                      archived launcher prompts
 ├── validation/
 │   └── closed-tasks/        per-task entries (newest-first)
 ├── tests/
@@ -257,7 +242,7 @@ Adding a new ecosystem (C# / Svelte / Crystal / …) — just edit `templates/st
 
 Core is **never** touched. `grep -rEi "planner|implementer|logic-reviewer|gate-[012]|simple-flow|medium-flow|complex-flow" mcp/src/driver/core/` returns zero matches — enforced as a per-commit gate.
 
-Plugin framework supports 7 contracts. Adding a new LLM provider = new `SpawnProviderPlugin` (Anthropic SDK direct, Ollama, OpenAI, etc.). Adding a new task trigger source (Jira/Slack/etc.) = new `TriggerSourcePlugin` (planned for v2.6, see [`specs/ui-vision.md`](specs/ui-vision.md)).
+Plugin framework supports 7 contracts. Adding a new LLM provider = new `SpawnProviderPlugin` (Anthropic SDK direct, Ollama, OpenAI, etc.). Adding a new task trigger source (Jira/Slack/etc.) = new `TriggerSourcePlugin` (was planned for v2.6).
 
 **Domain bundles** (content / research / VFX) are first-class as of v2.2.5 — Q40 closed. Create a new bundle under `mcp/src/driver/bundles/<name>/` mirroring `_template/` + `bundles/code/`. State carries `state.bundle: <name>`; the bundle's `bundle.ts` manifest enumerates supported plugins.
 

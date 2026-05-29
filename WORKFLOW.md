@@ -1,6 +1,8 @@
 # Workflow Guide
 
-> Daily-usage patterns + command-choice flowchart. For overview + install, see [`README.md`](README.md). For positioning + UX vision, see [`specs/product-vision.md`](specs/product-vision.md) and [`specs/ui-vision.md`](specs/ui-vision.md). For the planned phases, see [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md).
+> ⚠️ **This repository is archived.** The idea evolved into **Loom**, where active development now continues. What remains here is a historical snapshot of Claude Pipeline (v2.2.7) — it is no longer maintained.
+>
+> Daily-usage patterns + command-choice flowchart. For overview + install, see [`README.md`](README.md).
 >
 > **Current state (v2.2.7):** classifier-agent auto-spawns in the context phase and populates LLM-derived decisions (`refs_to_load` / `security_needed` / `task_short` / `antipattern_rules_applicable` / `stack` / `change_kind`). Reviewer fan-out (logic + challenger + style + security + performance) now consults each reviewer's `relevant_for_change_kinds` — style + performance skip type-only / docs-only / config-only diffs (~10K tokens saved per task on the wrong shape). Planning-phase reviewers (plan-grounding + logic-reviewer) fan out in parallel for MEDIUM + COMPLEX flows (~30-60s saved/task). Gate-1 auto-derives a "Suggested revision" block from planning-phase reviewer findings — one keypress (`1/a/auto-apply`) replans with the auto-derived feedback. Opt-in capped auto-replan loop on REQUEST_CHANGES (`auto_replan_on_blocking_max: 0|1|2`). INV_013 refuses `acceptance: PASS` when impl-phase reviewers still have open blockers. Gate-2 reject distinguishes `revise` vs `abandon`; FINALIZE throws when verdict is null. Runner-agnostic `SpawnRequest` shape (`runner_hint`) unbinds pipeline core from Claude Code Task-tool names. `CLAUDE_PIPELINE_PROJECT_SUBDIR` env var lets non-CC users rename `.claude/`. Bundle abstraction first-class (v2.2.5); stack-classifier candidate registry (v2.2.6). 10 real-task runs across s3-panel + wandr-be + frontend-core.
 
@@ -212,7 +214,7 @@ Every line loads on every message. Move reference tables to `docs/`.
 | `SpawnProviderPlugin` | Agent spawn mechanism (Shuttle today; SDK / Anthropic-SDK / Ollama later — v2.2.7 D4's runner-agnostic `SpawnRequest` decouples this from any specific harness) | `bundles/code/spawn/` (1) |
 | `BundleManifest` | Bundle-level catalog of supported plugins + default flow + state-extension schema | `bundles/code/bundle.ts` |
 
-Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in `bundle.ts` `supported_agents`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. Adding a non-code bundle (content / research / VFX) = new directory under `bundles/`, mirror the `_template/` skeleton, set `state.bundle: <name>`. See [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) for the planned extension trajectory.
+Core driver in `driver/core/` references these types only — never specific plugin names. Adding a new reviewer = new `AgentPlugin` + 1 line in `bundle.ts` `supported_agents`, **zero changes** to core. Adding a different LLM provider = new `SpawnProviderPlugin`, swap in registry. Adding a non-code bundle (content / research / VFX) = new directory under `bundles/`, mirror the `_template/` skeleton, set `state.bundle: <name>`.
 
 ## How Issues Flow
 
@@ -264,10 +266,5 @@ No TODO comments in code. Issues live in structured streams, not scattered acros
 - [`README.md`](README.md) — overview + install + architecture diagram + docs index
 - [`mcp/README.md`](mcp/README.md) — MCP tool reference (21 tools) + invariants INV_001-013
 - [`hooks/README.md`](hooks/README.md) — guard hook + Stop hook mechanics + bypass
-- [`specs/product-vision.md`](specs/product-vision.md) — "AI Team RTS" positioning, pricing tiers, commercial trajectory
-- [`specs/ui-vision.md`](specs/ui-vision.md) — UX architecture: agent builder → specialist → team → curator → channels (where we're going)
-- [`specs/v3-productization-roadmap.md`](specs/v3-productization-roadmap.md) — phase index (v2.3 daemon + Web UI is next)
-- [`specs/open-backlog.md`](specs/open-backlog.md) — currently open Q-items
-- [`specs/closed-q-items.md`](specs/closed-q-items.md) — 56 closed Q-items grouped by bundle (v2.1-hotfix / v2.1-polish / v2.2-clear / v2.2a / v2.2.5 + followups / v2.2.6 / v2.2.7)
 - [`validation-log.md`](validation-log.md) — validation workflow + cross-cutting observations
 - [`validation/closed-tasks/`](validation/closed-tasks/) — per-task validation entries (10 real-task runs across s3-panel + wandr-be + frontend-core)
